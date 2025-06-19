@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+    input, select { padding: 5px; margin: 5px; }
+    .stats { display: flex; gap: 20px; margin: 20px 0; }
+    .stat-box { padding: 15px; border: 1px solid #ddd; }
+    .hidden { display: none; }
+    .notification { 
+      position: fixed; top: 10px; right: 10px; 
+      padding: 10px; border-radius: 5px; color: white; 
+    }
+    .success { background-color: green; }
+    .error { background-color: red; }
+    .info { background-color: blue; }
+  </style>
+
+  <script src="static/js/dashboard.js"></script>
+</head>
+<body>
+  <h1>Attendance Dashboard</h1>
+  
+  <!-- Statistics -->
+  <div class="stats">
+    <div class="stat-box">
+      <strong id="total-attendances">0</strong><br>
+      Total Check-ins
+    </div>
+    <div class="stat-box">
+      <strong id="total-denied">0</strong><br>
+      Failed Attempts
+    </div>
+    <div class="stat-box">
+      <strong id="unique-devices">0</strong><br>
+      Unique Devices
+    </div>
+    <div class="stat-box">
+      <strong id="recent-activity">0</strong><br>
+      Last Hour
+    </div>
+  </div>
+
+  <!-- QR Code Generation -->
+  <div>
+    <h2>QR Code Generator</h2>
+    <button id="generate-btn">Generate New QR Code</button>
+    <div id="qr-status">Click to generate a QR code</div>
+    <img id="qr-img" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIFFSIENvZGU8L3RleHQ+PC9zdmc+" alt="QR Code" width="200" height="200" style="border: 1px solid #ddd;"/>
+  </div>
+
+  <!-- Settings -->
+  <div>
+    <h2>Security Settings</h2>
+    <label>Max Uses Per Device: <input id="max-uses" type="number" min="1" max="10" value="1"></label><br>
+    <label>Time Window (Hours): <input id="time-window" type="number" min="1" max="168" value="24"></label><br>
+    <label><input id="enable-blocking" type="checkbox" checked> Enable Device Blocking</label><br>
+    <button id="save-settings">Save Settings</button>
+  </div>
+
+  <!-- Successful Check-ins -->
+  <div>
+    <h2>Successful Check-ins</h2>
+    <button id="refresh-data">Refresh Data</button>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Name</th>
+          <th>Course</th>
+          <th>Year</th>
+          <th>Device</th>
+          <th>Token</th>
+        </tr>
+      </thead>
+      <tbody id="attendances">
+        <tr>
+          <td colspan="6">Loading attendance data...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Failed Attempts -->
+  <div>
+    <h2>Failed Check-in Attempts</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Name</th>
+          <th>Course</th>
+          <th>Year</th>
+          <th>Reason</th>
+          <th>Token</th>
+        </tr>
+      </thead>
+      <tbody id="denied-attendances">
+        <tr>
+          <td colspan="6">No failed attempts</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Device Fingerprints -->
+  <div>
+    <h2>Device Tracking</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Device ID</th>
+          <th>First Seen</th>
+          <th>Last Seen</th>
+          <th>Usage Count</th>
+          <th>Device Info</th>
+        </tr>
+      </thead>
+      <tbody id="device-fingerprints">
+        <tr>
+          <td colspan="5">No device data available</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Export Data -->
+  <div>
+    <h2>Data Management</h2>
+    <button id="export-data">Export All Data</button>
+    <button id="clear-old-data">Clear Old Data</button>
+  </div>
+</body>
+</html>
