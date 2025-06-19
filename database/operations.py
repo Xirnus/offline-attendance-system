@@ -3,6 +3,10 @@ from config import DEFAULT_SETTINGS
 import time
 from datetime import datetime
 
+def row_to_dict(row):
+    """Convert sqlite3.Row to dict, return None if row is None"""
+    return dict(row) if row else None
+
 def get_settings():
     """Get app settings from database"""
     try:
@@ -12,11 +16,15 @@ def get_settings():
         row = cursor.fetchone()
         conn.close()
         
-        return {
-            'max_uses_per_device': row['max_uses_per_device'],
-            'time_window_minutes': row['time_window_minutes'],
-            'enable_fingerprint_blocking': bool(row['enable_fingerprint_blocking'])
-        } if row else DEFAULT_SETTINGS
+        if row:
+            row_dict = dict(row)  # Convert to dict first
+            return {
+                'max_uses_per_device': row_dict['max_uses_per_device'],
+                'time_window_minutes': row_dict['time_window_minutes'],
+                'enable_fingerprint_blocking': bool(row_dict['enable_fingerprint_blocking'])
+            }
+        else:
+            return DEFAULT_SETTINGS
     except Exception:
         return DEFAULT_SETTINGS
 
@@ -51,7 +59,7 @@ def get_token(token):
     cursor.execute('SELECT * FROM active_tokens WHERE token = ?', (token,))
     result = cursor.fetchone()
     conn.close()
-    return result
+    return row_to_dict(result)  # Convert to dict
 
 def update_token(token, **kwargs):
     """Update token with new data"""
@@ -103,7 +111,17 @@ def get_all_data(table_name, limit=100):
     """Get all data from specified table"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(f'SELECT * FROM {table_name} ORDER BY timestamp DESC LIMIT ?', (limit,))
+    
+    timestamp_columns = {
+        'device_fingerprints': 'last_seen',
+        'attendances': 'timestamp',
+        'denied_attempts': 'timestamp',
+        'active_tokens': 'created_at',
+        'settings': 'id'
+    }
+    
+    order_column = timestamp_columns.get(table_name, 'id') 
+    cursor.execute(f'SELECT * FROM {table_name} ORDER BY {order_column} DESC LIMIT ?', (limit,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]

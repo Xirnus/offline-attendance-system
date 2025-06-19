@@ -4,6 +4,14 @@ To start flask server
 
 "flask run"
 
+
+To test check ins
+
+1. run flask server
+2. turn on hotsport of local server device
+3. connect phone to hotspot
+4. scan qr code
+
 -------------
 
 Bugs:
