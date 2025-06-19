@@ -14,7 +14,16 @@ The Device being being displayed is incorrect.
 -------------
 TODO:
 
-UI of dashboard, index, and used token landing page
+improvement of check in system (current system: single use qr scan)
+WiFi network detection to verify they're on campus/classroom network
+Attendance trends and patterns analysis
+Late arrival statistics and insights
+Export to various formats (PDF, Excel, CSV)
+Custom report templates
+Scheduled email reports to instructors
+Data redundancy measures
+Automated database backups
+Short Student Profile (Absents, Class Attendeds, Ratio nitong dalawa)
 
 -------------
 
