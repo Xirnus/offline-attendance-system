@@ -1,8 +1,8 @@
-
 // Global variables
 let attendanceData = [];
 let deniedAttempts = [];
 let deviceFingerprints = [];
+let lastUpdateTime = 0;
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
@@ -10,8 +10,15 @@ document.addEventListener('DOMContentLoaded', function() {
   loadData();
   setupEventListeners();
   
-  // Auto-refresh data every 30 seconds
-  setInterval(loadData, 30000);
+  // More frequent auto-refresh for better real-time updates
+  setInterval(loadData, 5000); // Refresh every 5 seconds
+
+  // Also add visibility change listener to refresh when tab becomes active
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      loadData();
+    }
+  });
 });
 
 function setupEventListeners() {
@@ -99,17 +106,133 @@ async function loadData() {
       fetch('/api/device_fingerprints')
     ]);
     
-    attendanceData = await attendanceRes.json();
-    deniedAttempts = await deniedRes.json();
-    deviceFingerprints = await devicesRes.json();
+    const newAttendanceData = await attendanceRes.json();
+    const newDeniedAttempts = await deniedRes.json();
+    const newDeviceFingerprints = await devicesRes.json();
     
+    // Check if we have new data
+    const hasNewData = 
+      newAttendanceData.length !== attendanceData.length ||
+      newDeniedAttempts.length !== deniedAttempts.length ||
+      newDeviceFingerprints.length !== deviceFingerprints.length;
+    
+    // Update data
+    attendanceData = newAttendanceData;
+    deniedAttempts = newDeniedAttempts;
+    deviceFingerprints = newDeviceFingerprints;
+    
+    // Update displays
     updateStatistics();
     updateAttendanceTable();
     updateDeniedTable();
     updateDeviceTable();
+    
+    // Show notification for new check-ins
+    if (hasNewData && lastUpdateTime > 0) {
+      showNotification('New activity detected!', 'info');
+    }
+    
+    lastUpdateTime = Date.now();
+    
   } catch (error) {
     console.error('Error loading data:', error);
   }
+}
+
+// Enhanced function to show detailed device info in a modal or tooltip
+function showDetailedDeviceInfo(deviceInfoStr) {
+  try {
+    if (!deviceInfoStr) return;
+    
+    const info = JSON.parse(deviceInfoStr);
+    
+    let details = '';
+    
+    if (info.device_signature) {
+      const device = info.device_signature;
+      details += `<strong>Device Details:</strong><br>`;
+      details += `Type: ${device.type || 'Unknown'}<br>`;
+      details += `Brand: ${device.brand || 'Unknown'}<br>`;
+      details += `Model: ${device.model || 'Unknown'}<br>`;
+      details += `OS: ${device.os || 'Unknown'}`;
+      if (device.os_version) {
+        details += ` ${device.os_version}`;
+      }
+      details += `<br>`;
+      details += `Browser: ${device.browser || 'Unknown'}`;
+      if (device.browser_version) {
+        details += ` ${device.browser_version}`;
+      }
+      details += `<br><br>`;
+    }
+    
+    details += `<strong>Technical Info:</strong><br>`;
+    details += `Screen: ${info.screen_resolution || 'Unknown'}<br>`;
+    details += `Timezone: ${info.timezone || 'Unknown'}<br>`;
+    details += `Language: ${info.language || 'Unknown'}<br>`;
+    details += `Platform: ${info.platform || 'Unknown'}<br>`;
+    
+    if (info.color_depth) {
+      details += `Color Depth: ${info.color_depth}<br>`;
+    }
+    if (info.pixel_ratio) {
+      details += `Pixel Ratio: ${info.pixel_ratio}<br>`;
+    }
+    if (info.touch_support !== undefined) {
+      details += `Touch Support: ${info.touch_support ? 'Yes' : 'No'}<br>`;
+    }
+    
+    // Show in a modal or alert 
+    showDeviceModal(details);
+    
+  } catch (error) {
+    console.error('Error showing device details:', error);
+  }
+}
+
+function showDeviceModal(content) {
+  // Create a simple modal 
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  `;
+  
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+  `;
+  
+  modalContent.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3>Device Information</h3>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="border: none; background: #ccc; border-radius: 4px; padding: 5px 10px; cursor: pointer;">×</button>
+    </div>
+    <div>${content}</div>
+  `;
+  
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+  
+  // Close on outside click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
 }
 
 function updateStatistics() {
@@ -139,7 +262,15 @@ function updateAttendanceTable() {
       <td>${escapeHtml(item.name)}</td>
       <td>${escapeHtml(item.course)}</td>
       <td>${escapeHtml(item.year)}</td>
-      <td>${getDeviceInfo(item.device_info)}</td>
+      <td>
+        <span 
+          style="cursor: pointer; color: #007bff; text-decoration: underline;" 
+          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info)}')"
+          title="Click for detailed device information"
+        >
+          ${getDeviceInfo(item.device_info)}
+        </span>
+      </td>
       <td>${item.token.substring(0, 8)}...</td>
     </tr>
   `).join('');
@@ -165,6 +296,7 @@ function updateDeniedTable() {
   `).join('');
 }
 
+// Enhanced updateDeviceTable function with clickable device info
 function updateDeviceTable() {
   const tbody = document.getElementById('device-fingerprints');
   
@@ -175,11 +307,19 @@ function updateDeviceTable() {
   
   tbody.innerHTML = deviceFingerprints.map(item => `
     <tr>
-      <td>${item.fingerprint_hash}</td>
+      <td>${item.fingerprint_hash.substring(0, 12)}...</td>
       <td>${formatDateTime(item.first_seen)}</td>
       <td>${formatDateTime(item.last_seen)}</td>
       <td>${item.usage_count}</td>
-      <td>${getDeviceInfo(item.device_info)}</td>
+      <td>
+        <span 
+          style="cursor: pointer; color: #007bff; text-decoration: underline;" 
+          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info)}')"
+          title="Click for detailed device information"
+        >
+          ${getDeviceInfo(item.device_info)}
+        </span>
+      </td>
     </tr>
   `).join('');
 }
@@ -204,14 +344,115 @@ function formatReason(reason) {
 function getDeviceInfo(deviceInfoStr) {
   try {
     if (!deviceInfoStr) return 'Unknown';
+    
     const info = JSON.parse(deviceInfoStr);
-    return info.platform || info.userAgent?.split(' ')[0] || 'Unknown';
-  } catch {
-    return 'Unknown';
+    
+    // Handle new enhanced device signature format
+    if (info.device_signature) {
+      const device = info.device_signature;
+      
+      // Create a readable device string
+      let deviceString = '';
+      
+      // Prioritize brand and model for mobile devices
+      if (device.type === 'mobile' || device.type === 'tablet') {
+        if (device.brand && device.brand !== 'unknown') {
+          deviceString += device.brand.charAt(0).toUpperCase() + device.brand.slice(1);
+        }
+        
+        if (device.model && device.model !== 'unknown') {
+          deviceString += ` ${device.model}`;
+        }
+        
+        // Add OS for mobile devices
+        if (device.os && device.os !== 'unknown') {
+          deviceString += ` (${device.os}`;
+          if (device.os_version) {
+            deviceString += ` ${device.os_version}`;
+          }
+          deviceString += ')';
+        }
+      } else {
+        // For desktop devices, show OS and browser
+        if (device.os && device.os !== 'unknown') {
+          deviceString += device.os.charAt(0).toUpperCase() + device.os.slice(1);
+        }
+        
+        if (device.browser && device.browser !== 'unknown') {
+          deviceString += ` ${device.browser.charAt(0).toUpperCase() + device.browser.slice(1)}`;
+          if (device.browser_version) {
+            deviceString += ` ${device.browser_version}`;
+          }
+        }
+      }
+      
+      if (deviceString.trim()) {
+        return deviceString.trim();
+      }
+    }
+    
+    // Enhanced fallback logic
+    if (info.user_agent) {
+      const ua = info.user_agent.toLowerCase();
+      
+      // Better mobile device detection
+      if (ua.includes('iphone')) {
+        return 'iPhone (iOS)';
+      } else if (ua.includes('ipad')) {
+        return 'iPad (iOS)';
+      } else if (ua.includes('android')) {
+        // Try to extract Android device info
+        if (ua.includes('samsung')) {
+          return 'Samsung Android';
+        } else if (ua.includes('huawei')) {
+          return 'Huawei Android';
+        } else if (ua.includes('xiaomi')) {
+          return 'Xiaomi Android';
+        } else if (ua.includes('oppo')) {
+          return 'OPPO Android';
+        } else if (ua.includes('vivo')) {
+          return 'Vivo Android';
+        } else if (ua.includes('oneplus')) {
+          return 'OnePlus Android';
+        } else {
+          return 'Android Device';
+        }
+      } else if (ua.includes('windows')) {
+        if (ua.includes('chrome')) {
+          return 'Windows Chrome';
+        } else if (ua.includes('firefox')) {
+          return 'Windows Firefox';
+        } else if (ua.includes('edge')) {
+          return 'Windows Edge';
+        } else {
+          return 'Windows PC';
+        }
+      } else if (ua.includes('mac') && !ua.includes('iphone') && !ua.includes('ipad')) {
+        if (ua.includes('chrome')) {
+          return 'Mac Chrome';
+        } else if (ua.includes('safari')) {
+          return 'Mac Safari';
+        } else if (ua.includes('firefox')) {
+          return 'Mac Firefox';
+        } else {
+          return 'Mac Computer';
+        }
+      } else if (ua.includes('linux')) {
+        return 'Linux Desktop';
+      }
+    }
+    
+    // Don't show raw platform info - return generic instead
+    return 'Unknown Device';
+           
+  } catch (error) {
+    console.error('Error parsing device info:', error);
+    return 'Unknown Device';
   }
 }
 
 function escapeHtml(text) {
+  if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
@@ -248,9 +489,38 @@ function showNotification(message, type = 'info') {
   notification.className = `notification ${type}`;
   notification.textContent = message;
   
+  // Add some basic styling
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 10px 20px;
+    border-radius: 4px;
+    color: white;
+    z-index: 1000;
+    font-weight: bold;
+  `;
+  
+  // Set background color based on type
+  switch(type) {
+    case 'success':
+      notification.style.backgroundColor = '#28a745';
+      break;
+    case 'error':
+      notification.style.backgroundColor = '#dc3545';
+      break;
+    case 'info':
+      notification.style.backgroundColor = '#17a2b8';
+      break;
+    default:
+      notification.style.backgroundColor = '#6c757d';
+  }
+  
   document.body.appendChild(notification);
   
   setTimeout(() => {
-    document.body.removeChild(notification);
+    if (document.body.contains(notification)) {
+      document.body.removeChild(notification);
+    }
   }, 3000);
 }

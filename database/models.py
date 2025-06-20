@@ -87,6 +87,7 @@ def create_all_tables():
     except Exception as e:
         print(f"Database initialization error: {e}")
 
+
 def migrate_tables():
     """Apply database migrations"""
     conn = sqlite3.connect(Config.DATABASE_PATH)
@@ -98,6 +99,8 @@ def migrate_tables():
         ('denied_attempts', 'fingerprint_hash', 'ALTER TABLE denied_attempts ADD COLUMN fingerprint_hash TEXT'),
         ('active_tokens', 'fingerprint_hash', 'ALTER TABLE active_tokens ADD COLUMN fingerprint_hash TEXT'),
         ('active_tokens', 'device_signature', 'ALTER TABLE active_tokens ADD COLUMN device_signature TEXT'),
+        ('attendances', 'device_signature', 'ALTER TABLE attendances ADD COLUMN device_signature TEXT'),
+        ('denied_attempts', 'device_signature', 'ALTER TABLE denied_attempts ADD COLUMN device_signature TEXT'),
     ]
     
     for table, column, query in migrations:

@@ -17,7 +17,7 @@ def get_settings():
         conn.close()
         
         if row:
-            row_dict = dict(row)  # Convert to dict first
+            row_dict = dict(row)  
             return {
                 'max_uses_per_device': row_dict['max_uses_per_device'],
                 'time_window_minutes': row_dict['time_window_minutes'],
@@ -59,7 +59,7 @@ def get_token(token):
     cursor.execute('SELECT * FROM active_tokens WHERE token = ?', (token,))
     result = cursor.fetchone()
     conn.close()
-    return row_to_dict(result)  # Convert to dict
+    return row_to_dict(result) 
 
 def update_token(token, **kwargs):
     """Update token with new data"""
@@ -78,34 +78,65 @@ def update_token(token, **kwargs):
     cursor.execute(query, values)
     conn.commit()
     conn.close()
-
+    
 def record_attendance(data):
-    """Record successful attendance"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO attendances 
-        (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (data['token'], data['fingerprint_hash'], time.time(), 
-          datetime.utcnow().isoformat(), data['name'], data['course'], 
-          data['year'], data['device_info']))
-    conn.commit()
-    conn.close()
+    """Record attendance with enhanced device signature"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        current_time = datetime.utcnow().isoformat()
+        
+        cursor.execute('''
+            INSERT INTO attendances 
+            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('token'),
+            data.get('fingerprint_hash'),
+            time.time(),
+            current_time,
+            data.get('name'),
+            data.get('course'),
+            data.get('year'),
+            data.get('device_info'),
+            data.get('device_signature') 
+        ))
+        
+        conn.commit()
+        conn.close()
+        print(f"Attendance recorded for {data.get('name')} with device: {data.get('device_signature')}")
+    except Exception as e:
+        print(f"Error recording attendance: {e}")
 
 def record_denied_attempt(data, reason):
-    """Record denied attendance attempt"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO denied_attempts 
-        (token, fingerprint_hash, timestamp, created_at, reason, name, course, year, device_info)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (data['token'], data['fingerprint_hash'], time.time(), 
-          datetime.utcnow().isoformat(), reason, data['name'], 
-          data['course'], data['year'], data['device_info']))
-    conn.commit()
-    conn.close()
+    """Record denied attempt with enhanced device signature"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        current_time = datetime.utcnow().isoformat()
+        
+        cursor.execute('''
+            INSERT INTO denied_attempts 
+            (token, fingerprint_hash, timestamp, created_at, reason, name, course, year, device_info, device_signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('token'),
+            data.get('fingerprint_hash'),
+            time.time(),
+            current_time,
+            reason,
+            data.get('name', 'Unknown'),
+            data.get('course', 'Unknown'),
+            data.get('year', 'Unknown'),
+            data.get('device_info'),
+            data.get('device_signature')
+        ))
+        
+        conn.commit()
+        conn.close()
+        print(f"Denied attempt recorded for {data.get('name')} with device: {data.get('device_signature')}")
+    except Exception as e:
+        print(f"Error recording denied attempt: {e}")
 
 def get_all_data(table_name, limit=100):
     """Get all data from specified table"""

@@ -3,7 +3,19 @@ import json
 import time
 from datetime import datetime
 
-# Safe imports with error handling
+
+try:
+    from services.fingerprint import generate_comprehensive_fingerprint, create_fingerprint_hash
+    print("✓ Fingerprint functions imported successfully")
+except ImportError as e:
+    print(f"✗ Fingerprint functions import failed: {e}")
+    def generate_comprehensive_fingerprint(data):
+        return {}
+    def create_fingerprint_hash(data):
+        return ""
+    
+    
+
 try:
     from database.operations import (
         get_settings, update_settings, create_token, get_token, 
@@ -35,7 +47,6 @@ try:
     print("✓ Services.attendance imported successfully")
 except ImportError as e:
     print(f"✗ Services.attendance import failed: {e}")
-    # Create dummy functions
     def is_fingerprint_allowed(fingerprint_hash):
         return True, "Allowed"
     def store_device_fingerprint(fingerprint_hash, device_info):
@@ -111,26 +122,21 @@ def scan(token):
     try:
         token_data = get_token(token)
         
-        # Simple device signature extraction
-        ua = request.headers.get('User-Agent', '').lower()
-        if 'iphone' in ua:
-            device_sig = 'iphone'
-        elif 'android' in ua:
-            device_sig = 'android'
-        elif 'ipad' in ua:
-            device_sig = 'ipad'
-        elif 'mobile' in ua:
-            device_sig = 'mobile'
-        else:
-            device_sig = 'desktop'
+        request_data = {
+            'user_agent': request.headers.get('User-Agent', ''),
+            'language': request.headers.get('Accept-Language', ''),
+            'platform': request.headers.get('Sec-Ch-Ua-Platform', '').replace('"', ''),
+        }
+        
+        device_info = generate_comprehensive_fingerprint(request_data)
+        device_sig = device_info.get('device_signature', {})
         
         valid, message = validate_token_access(token_data, device_sig)
         if not valid:
             return f"<h3>{message}</h3>", 400
         
-        # Update token on first open
         if not token_data['opened']:
-            update_token(token, opened=True, device_signature=device_sig)
+            update_token(token, opened=True, device_signature=json.dumps(device_sig))
         
         return render_template('index.html', token=token)
     except Exception as e:
@@ -142,6 +148,25 @@ def checkin():
     try:
         data = request.json or {}
         
+        request_data = {
+            'user_agent': data.get('user_agent', ''),
+            'screen_resolution': data.get('screen_resolution', ''),
+            'timezone': data.get('timezone', ''),
+            'language': data.get('language', ''),
+            'platform': data.get('platform', ''),
+            'color_depth': data.get('color_depth', ''),
+            'pixel_ratio': data.get('pixel_ratio', ''),
+            'touch_support': data.get('touch_support', False),
+        }
+        
+        # Generate comprehensive fingerprint and hash
+        fingerprint_data = generate_comprehensive_fingerprint(request_data)
+        fingerprint_hash = create_fingerprint_hash(request_data)
+        
+        # Update data with generated fingerprint
+        data['fingerprint_hash'] = fingerprint_hash
+        data['device_info'] = json.dumps(fingerprint_data)
+        
         # Validate required fields
         if not validate_attendance_data(data):
             return jsonify(status='error', message='Missing required fields')
@@ -152,8 +177,6 @@ def checkin():
                 data[key] = sanitize_input(data[key])
         
         token = data.get('token', '')
-        fingerprint_hash = data.get('fingerprint_hash', '')
-        device_info = json.dumps(data.get('device_info', {}))
         
         # Validate token
         token_data = get_token(token)
@@ -173,9 +196,8 @@ def checkin():
         
         # Record attendance
         update_token(token, used=True, fingerprint_hash=fingerprint_hash)
-        data['device_info'] = device_info
         record_attendance(data)
-        store_device_fingerprint(fingerprint_hash, device_info)
+        store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
         
         return jsonify(status='success', message='Attendance recorded successfully')
     
@@ -189,8 +211,7 @@ def api_attendances():
     try:
         attendances = get_all_data('attendances')
         print(f"Got {len(attendances) if attendances else 0} attendances")
-        
-        # Hide full fingerprint hash for privacy
+    
         for attendance in attendances:
             if 'fingerprint_hash' in attendance and attendance['fingerprint_hash']:
                 attendance['fingerprint_hash'] = attendance['fingerprint_hash'][:8] + '...'
@@ -209,7 +230,6 @@ def api_denied():
         denied = get_all_data('denied_attempts')
         print(f"Got {len(denied) if denied else 0} denied attempts")
         
-        # Hide full fingerprint hash for privacy
         for attempt in denied:
             if 'fingerprint_hash' in attempt and attempt['fingerprint_hash']:
                 attempt['fingerprint_hash'] = attempt['fingerprint_hash'][:8] + '...'
@@ -230,7 +250,7 @@ def api_device_fingerprints():
         fingerprints = get_all_data('device_fingerprints')
         print(f"Got {len(fingerprints) if fingerprints else 0} device fingerprints")
         
-        # Hide full fingerprint hash for privacy
+        
         for fp in fingerprints:
             if 'fingerprint_hash' in fp and fp['fingerprint_hash']:
                 fp['fingerprint_hash'] = fp['fingerprint_hash'][:8] + '...'
