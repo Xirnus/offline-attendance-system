@@ -69,32 +69,20 @@
     </div>
 
     <!-- Check-in Form -->
-    <div class="form-container">
-        <form id="checkin-form">
-            <label for="name">Full Name <span class="required">*</span></label>
-            <input type="text" id="name" name="name" required placeholder="Enter your full name">
-
-            <label for="course">Course <span class="required">*</span></label>
-            <input type="text" id="course" name="course" required placeholder="e.g., Computer Science">
-
-            <label for="year">Year Level <span class="required">*</span></label>
-            <select id="year" name="year" required>
-                <option value="">Select your year</option>
-                <option value="1st Year">1st Year</option>
-                <option value="2nd Year">2nd Year</option>
-                <option value="3rd Year">3rd Year</option>
-                <option value="4th Year">4th Year</option>
-                <option value="5th Year">5th Year</option>
-                <option value="Graduate">Graduate</option>
-            </select>
-
-            <input type="hidden" id="token" name="token" value="{{ token }}">
-            <input type="hidden" id="fingerprint_hash" name="fingerprint_hash" value="">
+    <div class="container">
+        <h2>Student Attendance Check-in</h2>
+        <form id="attendanceForm">
+            <div class="form-group">
+                <label for="student_id">Student ID:</label>
+                <input type="text" id="student_id" name="student_id" required 
+                    placeholder="Enter your Student ID" class="form-control">
+            </div>
             
-            <button type="submit" id="submit-btn" disabled>
-                <span id="submit-text">Preparing...</span>
-            </button>
+            <button type="submit" class="btn btn-primary">Check In</button>
+            <div id="message" class="alert" style="display: none;"></div>
         </form>
+    </div>
+
 
         <div class="device-info">
             <div>Device: <span id="device-info">Detecting...</span></div>
@@ -173,97 +161,60 @@
             return 'Desktop';
         }
 
-        function setupForm() {
-            const form = document.getElementById('checkin-form');
-            form.addEventListener('submit', handleSubmit);
-        }
-
-        async function handleSubmit(event) {
-            event.preventDefault();
-            
-            const submitBtn = document.getElementById('submit-btn');
-            const submitText = document.getElementById('submit-text');
-            
-            submitBtn.disabled = true;
-            submitText.textContent = 'Checking in...';
-            
-            hideMessages();
-            
-            try {
-                const formData = new FormData(event.target);
-                const data = {
-                    token: formData.get('token'),
-                    fingerprint_hash: fingerprintHash,
-                    name: formData.get('name'),
-                    course: formData.get('course'),
-                    year: formData.get('year'),
-                    device_info: deviceInfo
-                };
-                
-                const response = await fetch('/checkin', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.status === 'success') {
-                    showSuccess(result.message || 'Check-in successful!');
-                    submitText.textContent = 'Checked In ✓';
-                } else {
-                    throw new Error(result.message || 'Check-in failed');
-                }
-                
-            } catch (error) {
-                console.error('Check-in error:', error);
-                showError(error.message || 'Check-in failed. Please try again.');
-                
-                submitBtn.disabled = false;
-                submitText.textContent = 'Check In';
-            }
-        }
-
-        function enableForm() {
-            const submitBtn = document.getElementById('submit-btn');
-            const submitText = document.getElementById('submit-text');
-            
-            submitBtn.disabled = false;
-            submitText.textContent = 'Check In';
-        }
-
-        function showLoading(message) {
-            const loadingEl = document.getElementById('loading-message');
-            loadingEl.textContent = message;
-            loadingEl.classList.remove('hidden');
-        }
-
-        function hideLoading() {
-            document.getElementById('loading-message').classList.add('hidden');
-        }
-
-        function showError(message) {
-            document.getElementById('error-text').textContent = message;
-            document.getElementById('error-message').classList.remove('hidden');
-        }
-
-        function showSuccess(message) {
-            document.getElementById('success-message').textContent = message;
-            document.getElementById('success-message').classList.remove('hidden');
-        }
-
-        function hideMessages() {
-            document.getElementById('error-message').classList.add('hidden');
-            document.getElementById('success-message').classList.add('hidden');
-        }
-
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                console.log('Page visible again');
-            }
+document.getElementById('attendanceForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const messageDiv = document.getElementById('message');
+    const studentId = document.getElementById('student_id').value.trim();
+    
+    if (!studentId) {
+        showMessage('Please enter your Student ID', 'error');
+        return;
+    }
+    
+    try {
+        // Collect device information
+        const deviceData = {
+            token: '{{ token }}',
+            student_id: studentId,
+            user_agent: navigator.userAgent,
+            screen_resolution: `${screen.width}x${screen.height}`,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: navigator.language,
+            platform: navigator.platform,
+            color_depth: screen.colorDepth,
+            pixel_ratio: window.devicePixelRatio,
+            touch_support: 'ontouchstart' in window
+        };
+        
+        const response = await fetch('/checkin', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(deviceData)
         });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showMessage(result.message, 'success');
+            document.getElementById('attendanceForm').style.display = 'none';
+        } else {
+            showMessage(result.message, 'error');
+        }
+        
+    } catch (error) {
+        showMessage('Network error. Please try again.', 'error');
+    }
+});
+
+function showMessage(text, type) {
+    const messageDiv = document.getElementById('message');
+    messageDiv.textContent = text;
+    messageDiv.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
+    messageDiv.style.display = 'block';
+}
     </script>
 </body>
 </html>

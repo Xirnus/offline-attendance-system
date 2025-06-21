@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Students</title>
+    <script src="/static/js/students.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <header>
+      <nav>
+        <a href="/dashboard">Dashboard</a> |
+        <a href="/students">Students</a>
+      </nav>
+    </header>
+    <h1>Students Dashboard</h1>
+    
+    <div>
+        <button id="import-csv">Import CSV/Excel</button>
+        <button id="clear-table">Clear All Students</button>
+        <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
+    </div>
+
+    <table id="student-table">
+        <thead>
+            <tr>
+                <th>Student ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Last Check-in</th>
+                <th>Absents</th>
+                <th>Attendance Ratio</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <!-- Rows will be added here dynamically -->
+        </tbody>
+    </table>
+</body>
+</html>

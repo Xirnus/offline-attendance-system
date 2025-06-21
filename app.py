@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template, request, jsonify, current_app
 from database import init_db, migrate_database
 from utils.network import get_all_network_interfaces
 
@@ -46,3 +46,15 @@ if __name__ == '__main__':
         print(f"Error starting application: {e}")
         import traceback
         traceback.print_exc()
+    
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/students')
+def students():
+    return render_template('students.html')
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')

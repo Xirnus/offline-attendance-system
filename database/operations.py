@@ -156,3 +156,128 @@ def get_all_data(table_name, limit=100):
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+# Add these functions to your existing operations.py file
+
+def insert_students(rows):
+    """Insert students from CSV/Excel data"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    count = 0
+    
+    for row in rows:
+        if len(row) >= 3:  # student_id, name, course
+            try:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO students (student_id, name, course)
+                    VALUES (?, ?, ?)
+                ''', (str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip()))
+                count += 1
+            except Exception as e:
+                print(f"Error inserting student {row}: {e}")
+    
+    conn.commit()
+    conn.close()
+    return count
+
+def get_all_students():
+    """Get all students from database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM students ORDER BY name')
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def clear_all_students():
+    """Clear all students from database"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM students')
+    count = cursor.fetchone()[0]
+    cursor.execute('DELETE FROM students')
+    conn.commit()
+    conn.close()
+    return count
+
+# Add to operations.py
+
+def get_student_by_id(student_id):
+    """Get student by student ID"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None
+
+def update_student_attendance(student_id, status='present'):
+    """Update student attendance status and last check-in time"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    current_time = datetime.utcnow().isoformat()
+    
+    cursor.execute('''
+        UPDATE students 
+        SET last_check_in = ?, status = ?
+        WHERE student_id = ?
+    ''', (current_time, status, student_id))
+    
+    conn.commit()
+    conn.close()
+
+def mark_students_absent():
+    """Mark students as absent if they didn't check in during active session"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get current active session
+    cursor.execute('''
+        SELECT * FROM attendance_sessions 
+        WHERE is_active = 1 AND datetime('now') > datetime(end_time)
+    ''')
+    expired_sessions = cursor.fetchall()
+    
+    for session in expired_sessions:
+        # Mark students as absent if they haven't checked in
+        cursor.execute('''
+            UPDATE students 
+            SET status = 'absent', absent_count = absent_count + 1
+            WHERE (status IS NULL OR status != 'present') 
+            AND (last_check_in IS NULL OR last_check_in < ?)
+        ''', (session['start_time'],))
+        
+        # Deactivate the session
+        cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session['id'],))
+    
+    conn.commit()
+    conn.close()
+
+def create_attendance_session(session_name, start_time, end_time):
+    """Create new attendance session"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Clear previous student statuses
+    cursor.execute('UPDATE students SET status = NULL')
+    
+    # Create new session
+    cursor.execute('''
+        INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active)
+        VALUES (?, ?, ?, 1)
+    ''', (session_name, start_time, end_time))
+    
+    conn.commit()
+    conn.close()
+
+def get_active_session():
+    """Get current active attendance session"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM attendance_sessions 
+        WHERE is_active = 1 AND datetime('now') BETWEEN datetime(start_time) AND datetime(end_time)
+    ''')
+    result = cursor.fetchone()
+    conn.close()
+    return dict(result) if result else None

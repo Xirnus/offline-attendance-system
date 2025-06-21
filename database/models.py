@@ -2,6 +2,29 @@ import sqlite3
 from config import Config, DEFAULT_SETTINGS
 
 TABLES = {
+    'students': '''
+        CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            course TEXT NOT NULL,
+            year TEXT NOT NULL,
+            last_check_in TEXT,
+            status TEXT DEFAULT NULL,
+            absent_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''',
+    'attendance_sessions' : '''
+        CREATE TABLE IF NOT EXISTS attendance_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_name TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+    ''',
     'active_tokens': '''
         CREATE TABLE IF NOT EXISTS active_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,7 +116,6 @@ def migrate_tables():
     conn = sqlite3.connect(Config.DATABASE_PATH)
     cursor = conn.cursor()
     
-    # Migration: Add missing columns
     migrations = [
         ('attendances', 'fingerprint_hash', 'ALTER TABLE attendances ADD COLUMN fingerprint_hash TEXT'),
         ('denied_attempts', 'fingerprint_hash', 'ALTER TABLE denied_attempts ADD COLUMN fingerprint_hash TEXT'),
@@ -101,6 +123,10 @@ def migrate_tables():
         ('active_tokens', 'device_signature', 'ALTER TABLE active_tokens ADD COLUMN device_signature TEXT'),
         ('attendances', 'device_signature', 'ALTER TABLE attendances ADD COLUMN device_signature TEXT'),
         ('denied_attempts', 'device_signature', 'ALTER TABLE denied_attempts ADD COLUMN device_signature TEXT'),
+        ('students', 'year', 'ALTER TABLE students ADD COLUMN year TEXT'),
+        ('students', 'last_check_in', 'ALTER TABLE students ADD COLUMN last_check_in TEXT'),
+        ('students', 'status', 'ALTER TABLE students ADD COLUMN status TEXT DEFAULT NULL'),
+        ('students', 'absent_count', 'ALTER TABLE students ADD COLUMN absent_count INTEGER DEFAULT 0'),
     ]
     
     for table, column, query in migrations:
