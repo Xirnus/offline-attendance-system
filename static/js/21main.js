@@ -330,22 +330,17 @@ async function handleSubmit(event) {
     const submitBtn = document.getElementById('submit-btn');
     const submitText = document.getElementById('submit-text');
     
-    // Disable form
     submitBtn.disabled = true;
     submitText.textContent = 'Checking in...';
-    submitBtn.className = 'w-full bg-blue-400 text-white py-3 px-6 rounded-lg font-medium cursor-not-allowed';
-    
     hideMessages();
     
     try {
         const formData = new FormData(event.target);
         const data = {
             token: formData.get('token'),
+            student_id: formData.get('student_id'), // Make sure this matches your form field
             fingerprint_hash: fingerprintHash,
-            name: formData.get('name'),
-            course: formData.get('course'),
-            year: formData.get('year'),
-            device_info: JSON.stringify(deviceInfo) // Stringify the device info
+            device_info: JSON.stringify(deviceInfo)
         };
         
         const response = await fetch('/checkin', {
@@ -360,18 +355,16 @@ async function handleSubmit(event) {
         
         if (result.status === 'success') {
             showSuccess(result.message || 'Check-in successful!');
-            // Keep form disabled after success
-            submitText.textContent = 'Checked In ✓';
-            submitBtn.className = 'w-full bg-green-500 text-white py-3 px-6 rounded-lg font-medium cursor-not-allowed';
+            document.getElementById('student_id').value = ''; // Clear form
         } else {
-            throw new Error(result.message || 'Check-in failed');
+            showError(result.message || 'Check-in failed');
         }
         
     } catch (error) {
         console.error('Check-in error:', error);
-        showError(error.message || 'Check-in failed. Please try again.');
-        
-        // Re-enable form on error
+        showError('Check-in failed. Please try again.');
+    } finally {
+        // Re-enable form
         submitBtn.disabled = false;
         submitText.textContent = 'Check In';
         submitBtn.className = 'w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded-lg font-medium transition-colors';

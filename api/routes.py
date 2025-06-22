@@ -97,10 +97,6 @@ except ImportError as e:
 
 api_bp = Blueprint('api', __name__)
 
-@api_bp.route('/')
-def dashboard():
-    return render_template('dashboard.html')
-
 @api_bp.route('/generate_qr')
 def generate_qr():
     if is_rate_limited(get_client_ip(request)):
@@ -148,83 +144,152 @@ def scan(token):
 
 @api_bp.route('/checkin', methods=['POST'])
 def checkin():
+    print("=== CHECKIN ROUTE CALLED ===")
+    
     try:
+        # Get data from request
         data = request.json or {}
-        student_id = data.get('student_id', '').strip()
+        print(f"Received data: {data}")
         
-        # Validate student ID is provided
+        student_id = data.get('student_id', '').strip()
+        token = data.get('token', '').strip()
+        
+        print(f"Student ID: {student_id}")
+        print(f"Token: {token}")
+        
+        # Basic validation
         if not student_id:
-            return jsonify(status='error', message='Student ID is required')
+            print("Error: Student ID is required")
+            return jsonify(status='error', message='Student ID is required'), 400
+        
+        if not token:
+            print("Error: Token is required")
+            return jsonify(status='error', message='Token is required'), 400
         
         # Check if student exists in database
-        student = get_student_by_id(student_id)
+        try:
+            student = get_student_by_id(student_id)
+            print(f"Student lookup result: {student}")
+        except Exception as e:
+            print(f"Error looking up student: {e}")
+            return jsonify(status='error', message='Database error - could not verify student'), 500
+        
         if not student:
-            return jsonify(status='error', message='Student ID not found in database')
+            print(f"Student not found: {student_id}")
+            return jsonify(status='error', message='Student ID not found in database'), 404
         
-        # Check if there's an active attendance session
-        active_session = get_active_session()
-        if not active_session:
-            return jsonify(status='error', message='No active attendance session')
+        # Check token validity
+        try:
+            token_data = get_token(token)
+            print(f"Token lookup result: {token_data}")
+        except Exception as e:
+            print(f"Error looking up token: {e}")
+            return jsonify(status='error', message='Database error - could not verify token'), 500
         
-        # Check if student already checked in for this session
-        if student.get('status') == 'present':
-            return jsonify(status='error', message='Already checked in for this session')
-        
-        # Generate fingerprint for tracking
-        request_data = {
-            'user_agent': data.get('user_agent', ''),
-            'screen_resolution': data.get('screen_resolution', ''),
-            'timezone': data.get('timezone', ''),
-            'language': data.get('language', ''),
-            'platform': data.get('platform', ''),
-        }
-        
-        fingerprint_data = generate_comprehensive_fingerprint(request_data)
-        fingerprint_hash = create_fingerprint_hash(request_data)
-        
-        # Update data with student info and fingerprint
-        data.update({
-            'name': student['name'],
-            'course': student['course'],
-            'year': student['year'],
-            'student_id': student_id,
-            'fingerprint_hash': fingerprint_hash,
-            'device_info': json.dumps(fingerprint_data)
-        })
-        
-        # Validate token
-        token = data.get('token', '')
-        token_data = get_token(token)
         if not token_data:
-            record_denied_attempt(data, 'invalid_token')
-            return jsonify(status='error', message='Invalid token')
+            print(f"Invalid token: {token}")
+            return jsonify(status='error', message='Invalid or expired token'), 401
         
         if token_data.get('used'):
-            record_denied_attempt(data, 'already_used')
-            return jsonify(status='error', message='Token already used')
+            print(f"Token already used: {token}")
+            return jsonify(status='error', message='Token already used'), 409
+        
+        # Check for active attendance session
+        try:
+            active_session = get_active_session()
+            print(f"Active session: {active_session}")
+        except Exception as e:
+            print(f"Error checking active session: {e}")
+            return jsonify(status='error', message='Could not verify attendance session'), 500
+        
+        if not active_session:
+            print("No active attendance session")
+            return jsonify(status='error', message='No active attendance session'), 400
+        
+        # Check if student already checked in
+        if student.get('status') == 'present':
+            print(f"Student already checked in: {student_id}")
+            return jsonify(status='error', message='Already checked in for this session'), 409
+        
+        # Generate fingerprint for tracking
+        try:
+            request_data = {
+                'user_agent': data.get('user_agent', ''),
+                'screen_resolution': data.get('screen_resolution', ''),
+                'timezone': data.get('timezone', ''),
+                'language': data.get('language', ''),
+                'platform': data.get('platform', ''),
+            }
+            
+            fingerprint_data = generate_comprehensive_fingerprint(request_data)
+            fingerprint_hash = create_fingerprint_hash(request_data)
+            print(f"Generated fingerprint: {fingerprint_hash[:8]}...")
+            
+        except Exception as e:
+            print(f"Error generating fingerprint: {e}")
+            # Use fallback fingerprint
+            fingerprint_hash = f"fallback_{hash(str(request_data))}"
+            fingerprint_data = {}
         
         # Check fingerprint limits
-        allowed, reason = is_fingerprint_allowed(fingerprint_hash)
+        try:
+            allowed, reason = is_fingerprint_allowed(fingerprint_hash)
+            print(f"Fingerprint check: allowed={allowed}, reason={reason}")
+        except Exception as e:
+            print(f"Error checking fingerprint: {e}")
+            allowed, reason = True, "Fingerprint check failed - allowing"
+        
         if not allowed:
-            record_denied_attempt(data, 'fingerprint_blocked')
-            return jsonify(status='error', message=reason)
+            try:
+                record_denied_attempt(data, 'fingerprint_blocked')
+            except Exception as e:
+                print(f"Error recording denied attempt: {e}")
+            return jsonify(status='error', message=reason), 403
         
-        # Mark student as present
-        update_student_attendance(student_id, 'present')
+        # Update attendance records
+        try:
+            # Mark student as present in students table
+            update_student_attendance(student_id, 'present')
+            print(f"Updated student attendance: {student_id}")
+            
+            # Mark token as used
+            update_token(token, used=True, fingerprint_hash=fingerprint_hash)
+            print(f"Updated token: {token}")
+            
+            # Record attendance in attendances table
+            attendance_data = {
+                'student_id': student_id,
+                'name': student['name'],
+                'course': student['course'],
+                'year': student['year'],
+                'session_id': active_session['id'],  # Add session reference
+                'fingerprint_hash': fingerprint_hash,
+                'device_info': json.dumps(fingerprint_data),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            record_attendance(attendance_data)
+            print("Recorded attendance")
+            
+            # Store device fingerprint
+            store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
+            print("Stored device fingerprint")
+            
+        except Exception as e:
+            print(f"Error updating records: {e}")
+            return jsonify(status='error', message='Failed to record attendance'), 500
         
-        # Record attendance
-        update_token(token, used=True, fingerprint_hash=fingerprint_hash)
-        record_attendance(data)
-        store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
-        
+        print(f"Check-in successful for {student['name']}")
         return jsonify(
             status='success', 
             message=f'Welcome {student["name"]}! Attendance recorded successfully'
         )
     
     except Exception as e:
-        print(f"Checkin error: {e}")
-        return jsonify(status='error', message='Server error'), 500
+        print(f"Unexpected error in checkin: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify(status='error', message='Server error occurred'), 500
 
 
 @api_bp.route('/api/attendances')
@@ -323,10 +388,6 @@ def export_data():
     
 # Add these routes to your existing routes.py file
 
-@api_bp.route('/students')
-def students():
-    return render_template('students.html')
-
 @api_bp.route('/upload_students', methods=['POST'])
 def upload_students():
     try:
@@ -340,8 +401,19 @@ def upload_students():
         if filename.endswith(('.xlsx', '.xls')):
             import pandas as pd
             df = pd.read_excel(file)
+
+            # Keep only the required columns
+            required_columns = ['Student ID', 'Name', 'Course', 'Year']
+            df = df[required_columns] 
+
+            # Rename columns to match database fields
+            df.columns = ['student_id', 'name', 'course', 'year'] 
+
+            # Optional: convert 'year' to integer
+            df['year'] = df['year'].astype(int)
+
             rows = df.values.tolist()
-            
+
         # Handle CSV files
         elif filename.endswith('.csv'):
             import csv

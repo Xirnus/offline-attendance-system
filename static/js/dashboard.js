@@ -27,6 +27,7 @@ function setupEventListeners() {
   document.getElementById('refresh-data').addEventListener('click', loadData);
   document.getElementById('export-data').addEventListener('click', exportData);
   document.getElementById('clear-old-data').addEventListener('click', clearOldData);
+  document.getElementById('create-session-btn').addEventListener('click', createAttendanceSession);
 }
 
 async function generateQR() {
@@ -523,4 +524,51 @@ function showNotification(message, type = 'info') {
       document.body.removeChild(notification);
     }
   }, 3000);
+}
+
+async function createAttendanceSession() {
+  try {
+    const btn = document.getElementById('create-session-btn');
+    const status = document.getElementById('session-status');
+    
+    // Simple session creation - starts now, ends in 2 hours
+    const now = new Date();
+    const endTime = new Date(now.getTime() + (2 * 60 * 60 * 1000)); // 2 hours from now
+    
+    const sessionData = {
+      session_name: `Session ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`,
+      start_time: now.toISOString(),
+      end_time: endTime.toISOString()
+    };
+    
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    status.textContent = 'Creating attendance session...';
+    
+    const response = await fetch('/api/create_session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(sessionData)
+    });
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      status.textContent = `Session active until ${endTime.toLocaleTimeString()}`;
+      showNotification('Attendance session created successfully!', 'success');
+    } else {
+      throw new Error(result.message || 'Failed to create session');
+    }
+    
+  } catch (error) {
+    console.error('Error creating session:', error);
+    document.getElementById('session-status').textContent = 'Error creating session';
+    showNotification('Error creating attendance session', 'error');
+  } finally {
+    const btn = document.getElementById('create-session-btn');
+    btn.disabled = false;
+    btn.textContent = 'Create Attendance Session';
+  }
 }

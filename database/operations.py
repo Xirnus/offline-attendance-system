@@ -157,8 +157,6 @@ def get_all_data(table_name, limit=100):
     conn.close()
     return [dict(row) for row in rows]
 
-# Add these functions to your existing operations.py file
-
 def insert_students(rows):
     """Insert students from CSV/Excel data"""
     conn = get_db_connection()
@@ -166,12 +164,18 @@ def insert_students(rows):
     count = 0
     
     for row in rows:
-        if len(row) >= 3:  # student_id, name, course
+        if len(row) >= 4:  # student_id, name, course, year
             try:
                 cursor.execute('''
-                    INSERT OR REPLACE INTO students (student_id, name, course)
-                    VALUES (?, ?, ?)
-                ''', (str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip()))
+                    INSERT OR REPLACE INTO students (student_id, name, course, year)
+                    VALUES (?, ?, ?, ?)
+                ''',
+                (
+                    str(row[0]).strip(),  # student_id
+                    str(row[1]).strip(),  # name
+                    str(row[2]).strip(),  # course
+                    int(row[3])           # year
+                ))
                 count += 1
             except Exception as e:
                 print(f"Error inserting student {row}: {e}")

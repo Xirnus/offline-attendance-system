@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     tr.innerHTML = `
                         <td>${student.student_id}</td>
                         <td>${student.name}</td>
+                        <td>${student.year}</td>
                         <td>Present</td>
                         <td>-</td>
                         <td>0</td>

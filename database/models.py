@@ -5,10 +5,10 @@ TABLES = {
     'students': '''
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT UNIQUE NOT NULL,
+            student_id TEXT NOT NULL,
             name TEXT NOT NULL,
             course TEXT NOT NULL,
-            year TEXT NOT NULL,
+            year INTEGER NOT NULL,
             last_check_in TEXT,
             status TEXT DEFAULT NULL,
             absent_count INTEGER DEFAULT 0,
@@ -40,6 +40,7 @@ TABLES = {
     'attendances': '''
         CREATE TABLE IF NOT EXISTS attendances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT UNIQUE NOT NULL,
             token TEXT NOT NULL,
             fingerprint_hash TEXT,
             timestamp REAL NOT NULL,
