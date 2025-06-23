@@ -1,7 +1,42 @@
+"""
+Device Fingerprinting Service Module for Offline Attendance System
+
+This module provides comprehensive device fingerprinting capabilities for the SQLite-based attendance tracking system. It generates unique device signatures to prevent duplicate check-ins and ensure attendance integrity through advanced browser fingerprinting techniques.
+
+Main Features:
+- Device Signature Extraction: Parse User-Agent strings for device/OS/browser info
+- Comprehensive Fingerprinting: Collect multiple device characteristics for uniqueness
+- Hash Generation: Create unique, consistent hashes for device identification
+- Uniqueness Scoring: Calculate how distinctive a device fingerprint is
+- Cross-Platform Support: Handle mobile, tablet, and desktop devices
+
+Key Functions:
+- extract_device_signature(): Parse User-Agent for basic device information
+- generate_comprehensive_fingerprint(): Collect extensive device characteristics
+- create_fingerprint_hash(): Generate unique SHA256 hash from device data
+- get_device_uniqueness_score(): Calculate fingerprint uniqueness (0-100 scale)
+
+Fingerprinting Components:
+- Device Type: Mobile, tablet, desktop classification
+- Operating System: Windows, macOS, Linux, iOS, Android detection
+- Browser Information: Chrome, Firefox, Safari, Edge identification
+- Screen Properties: Resolution, color depth, pixel ratio
+- System Settings: Timezone, language, platform details
+- Hardware Features: Touch support, CPU cores, memory info
+- Advanced Fingerprints: Canvas, WebGL, audio fingerprinting
+
+Security Features:
+- SHA256 hashing for consistent device identification
+- Multiple fingerprinting layers for enhanced uniqueness
+- Graceful degradation when fingerprinting data is unavailable
+- Privacy-conscious data collection (no personal information)
+
+Used by: API routes, attendance validation, security checks
+Dependencies: Standard library (hashlib, re), request data parsing
+"""
+
 import re
-import json
 import hashlib
-import time
 
 def extract_device_signature(user_agent):
     """Extract basic device signature from User-Agent"""

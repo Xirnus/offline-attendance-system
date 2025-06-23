@@ -1,3 +1,38 @@
+"""
+Database Models Module for Offline Attendance System
+
+This module defines all database table schemas and handles database initialization, migrations, and structural changes for the SQLite-based attendance tracking system.
+
+Main Features:
+- Table Definitions: Complete schema definitions for all database tables
+- Database Initialization: Creates tables and sets up initial configuration
+- Migration System: Handles schema changes and column additions
+- Data Integrity: Foreign key relationships and constraints
+- Default Settings: Initializes system configuration values
+
+Database Tables:
+- students: Student information and attendance status
+- student_attendance_history: Historical attendance records per session
+- attendance_sessions: Session management and timing
+- active_tokens: QR code tokens and validation
+- attendances: Successful attendance check-ins
+- denied_attempts: Failed check-in attempts with reasons
+- device_fingerprints: Device tracking and usage limits
+- settings: System configuration and security settings
+
+Key Functions:
+- create_all_tables(): Initialize complete database schema
+- migrate_tables(): Apply structural changes and updates
+
+Migration System:
+- Automatic column additions for schema evolution
+- Backward compatibility maintenance
+- Safe migration execution with error handling
+
+Used by: Database connection module, initialization scripts
+Dependencies: SQLite3, config settings
+"""
+
 import sqlite3
 from config import Config, DEFAULT_SETTINGS
 
@@ -5,7 +40,7 @@ TABLES = {
     'students': '''
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT NOT NULL,
+            student_id TEXT NOT NULL UNIQUE,
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year INTEGER NOT NULL,
@@ -15,15 +50,26 @@ TABLES = {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''',
-    'attendance_sessions' : '''
+    'student_attendance_history': '''
+        CREATE TABLE IF NOT EXISTS student_attendance_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            session_id INTEGER,
+            recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
+            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL
+        )
+    ''',
+    'attendance_sessions': '''
         CREATE TABLE IF NOT EXISTS attendance_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_name TEXT NOT NULL,
-        start_time TEXT NOT NULL,
-        end_time TEXT NOT NULL,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_name TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
     ''',
     'active_tokens': '''
         CREATE TABLE IF NOT EXISTS active_tokens (
@@ -40,7 +86,7 @@ TABLES = {
     'attendances': '''
         CREATE TABLE IF NOT EXISTS attendances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT UNIQUE NOT NULL,
+            student_id TEXT NOT NULL,
             token TEXT NOT NULL,
             fingerprint_hash TEXT,
             timestamp REAL NOT NULL,
@@ -48,7 +94,8 @@ TABLES = {
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year TEXT NOT NULL,
-            device_info TEXT
+            device_info TEXT,
+            device_signature TEXT
         )
     ''',
     'denied_attempts': '''
@@ -93,7 +140,6 @@ def create_all_tables():
         
         for table_name, query in TABLES.items():
             cursor.execute(query)
-            print(f"✓ {table_name} table ready")
         
         # Insert default settings
         cursor.execute('SELECT * FROM settings WHERE id = ?', ('config',))
@@ -107,10 +153,12 @@ def create_all_tables():
         
         conn.commit()
         conn.close()
-        print("Database initialized successfully")
+        
+        # Run migrations after table creation
+        migrate_tables()
+        
     except Exception as e:
         print(f"Database initialization error: {e}")
-
 
 def migrate_tables():
     """Apply database migrations"""
@@ -128,6 +176,8 @@ def migrate_tables():
         ('students', 'last_check_in', 'ALTER TABLE students ADD COLUMN last_check_in TEXT'),
         ('students', 'status', 'ALTER TABLE students ADD COLUMN status TEXT DEFAULT NULL'),
         ('students', 'absent_count', 'ALTER TABLE students ADD COLUMN absent_count INTEGER DEFAULT 0'),
+        ('students', 'present_count', 'ALTER TABLE students ADD COLUMN present_count INTEGER DEFAULT 0'),
+        ('attendances', 'student_id', 'ALTER TABLE attendances ADD COLUMN student_id TEXT'),
     ]
     
     for table, column, query in migrations:
@@ -136,9 +186,8 @@ def migrate_tables():
             columns = [col[1] for col in cursor.fetchall()]
             if column not in columns:
                 cursor.execute(query)
-                print(f"✓ Added {column} to {table}")
         except Exception as e:
-            print(f"Migration error for {table}.{column}: {e}")
+            continue  # Skip failed migrations silently
     
     conn.commit()
     conn.close()

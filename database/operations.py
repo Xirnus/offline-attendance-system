@@ -1,4 +1,42 @@
-from .connection import get_db_connection
+"""
+Database Operations Module for Offline Attendance System
+
+This module provides all database CRUD operations and business logic for the SQLite-based attendance tracking system. It serves as the data access layer between the API routes and the database, handling complex queries, transactions, and data integrity.
+
+Main Features:
+- Student Management: Create, read, update, delete student records
+- Attendance Tracking: Record attendance, manage sessions, track statistics
+- Token Management: Handle QR code tokens and validation
+- Session Control: Create, start, stop attendance sessions
+- Data Analytics: Generate attendance reports and statistics
+- Device Tracking: Monitor and limit device usage per student
+- Settings Management: System configuration and security settings
+
+Key Function Categories:
+- Student Operations: get_student_by_id, insert_students, update_student_attendance
+- Session Management: create_attendance_session, stop_active_session, get_active_session
+- Attendance Recording: record_attendance, mark_students_absent, get_students_with_attendance_data
+- Token Operations: create_token, get_token, update_token
+- Data Retrieval: get_all_data, get_all_students, get_settings
+- Security Functions: record_denied_attempt, device fingerprinting
+
+Database Transactions:
+- Automatic retry mechanisms for database locks
+- Transaction rollback on errors
+- Connection pooling and proper resource cleanup
+- Concurrent access handling with SQLite WAL mode
+
+Business Logic:
+- Automatic absent marking when sessions end
+- Present/absent count tracking per student
+- Historical attendance record maintenance
+- Device usage limits and fingerprint validation
+
+Used by: API routes, web interface controllers, background tasks
+Dependencies: Database connection module, config settings, retry decorators
+"""
+
+from .connection import get_db_connection, get_db_connection_with_retry, retry_db_operation
 from config import DEFAULT_SETTINGS
 import time
 from datetime import datetime
@@ -78,18 +116,20 @@ def update_token(token, **kwargs):
     cursor.execute(query, values)
     conn.commit()
     conn.close()
-    
+
+@retry_db_operation()
 def record_attendance(data):
     """Record attendance with enhanced device signature"""
+    conn = None
     try:
-        conn = get_db_connection()
+        conn = get_db_connection_with_retry()
         cursor = conn.cursor()
         current_time = datetime.utcnow().isoformat()
         
         cursor.execute('''
             INSERT INTO attendances 
-            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature, student_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('token'),
             data.get('fingerprint_hash'),
@@ -99,19 +139,25 @@ def record_attendance(data):
             data.get('course'),
             data.get('year'),
             data.get('device_info'),
-            data.get('device_signature') 
+            data.get('device_signature'),
+            data.get('student_id')
         ))
         
         conn.commit()
-        conn.close()
-        print(f"Attendance recorded for {data.get('name')} with device: {data.get('device_signature')}")
     except Exception as e:
-        print(f"Error recording attendance: {e}")
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
 
+@retry_db_operation()
 def record_denied_attempt(data, reason):
     """Record denied attempt with enhanced device signature"""
+    conn = None
     try:
-        conn = get_db_connection()
+        conn = get_db_connection_with_retry()
         cursor = conn.cursor()
         current_time = datetime.utcnow().isoformat()
         
@@ -133,10 +179,13 @@ def record_denied_attempt(data, reason):
         ))
         
         conn.commit()
-        conn.close()
-        print(f"Denied attempt recorded for {data.get('name')} with device: {data.get('device_signature')}")
     except Exception as e:
-        print(f"Error recording denied attempt: {e}")
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
 
 def get_all_data(table_name, limit=100):
     """Get all data from specified table"""
@@ -169,20 +218,54 @@ def insert_students(rows):
                 cursor.execute('''
                     INSERT OR REPLACE INTO students (student_id, name, course, year)
                     VALUES (?, ?, ?, ?)
-                ''',
-                (
+                ''', (
                     str(row[0]).strip(),  # student_id
                     str(row[1]).strip(),  # name
                     str(row[2]).strip(),  # course
                     int(row[3])           # year
                 ))
                 count += 1
-            except Exception as e:
-                print(f"Error inserting student {row}: {e}")
+            except Exception:
+                continue
     
     conn.commit()
     conn.close()
     return count
+
+def mark_students_absent_for_session(session_id, cursor):
+    """Mark students as absent for a specific session"""
+    # Get students who haven't checked in for this session
+    cursor.execute('''
+        SELECT s.student_id FROM students s
+        WHERE s.student_id NOT IN (
+            SELECT DISTINCT sah.student_id 
+            FROM student_attendance_history sah
+            WHERE sah.session_id = ? AND sah.status = 'present'
+        )
+    ''', (session_id,))
+    
+    students_to_mark = cursor.fetchall()
+    
+    if not students_to_mark:
+        return 0
+    
+    # Mark students as absent
+    for (student_id,) in students_to_mark:
+        # Update student status
+        cursor.execute('''
+            UPDATE students 
+            SET status = 'absent', absent_count = COALESCE(absent_count, 0) + 1
+            WHERE student_id = ?
+        ''', (student_id,))
+        
+        # Record in attendance history
+        cursor.execute('''
+            INSERT INTO student_attendance_history 
+            (student_id, status, session_id, recorded_at)
+            VALUES (?, 'absent', ?, datetime('now'))
+        ''', (student_id, session_id))
+    
+    return len(students_to_mark)
 
 def get_all_students():
     """Get all students from database"""
@@ -204,8 +287,6 @@ def clear_all_students():
     conn.close()
     return count
 
-# Add to operations.py
-
 def get_student_by_id(student_id):
     """Get student by student ID"""
     conn = get_db_connection()
@@ -215,73 +296,250 @@ def get_student_by_id(student_id):
     conn.close()
     return dict(result) if result else None
 
-def update_student_attendance(student_id, status='present'):
-    """Update student attendance status and last check-in time"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    current_time = datetime.utcnow().isoformat()
-    
-    cursor.execute('''
-        UPDATE students 
-        SET last_check_in = ?, status = ?
-        WHERE student_id = ?
-    ''', (current_time, status, student_id))
-    
-    conn.commit()
-    conn.close()
-
-def mark_students_absent():
-    """Mark students as absent if they didn't check in during active session"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Get current active session
-    cursor.execute('''
-        SELECT * FROM attendance_sessions 
-        WHERE is_active = 1 AND datetime('now') > datetime(end_time)
-    ''')
-    expired_sessions = cursor.fetchall()
-    
-    for session in expired_sessions:
-        # Mark students as absent if they haven't checked in
+@retry_db_operation()
+def update_student_attendance(student_id, status):
+    """Update student attendance status and record history"""
+    conn = None
+    try:
+        conn = get_db_connection_with_retry()
+        cursor = conn.cursor()
+        
+        # Update student status
         cursor.execute('''
             UPDATE students 
-            SET status = 'absent', absent_count = absent_count + 1
-            WHERE (status IS NULL OR status != 'present') 
-            AND (last_check_in IS NULL OR last_check_in < ?)
-        ''', (session['start_time'],))
+            SET status = ?, last_check_in = datetime('now')
+            WHERE student_id = ?
+        ''', (status, student_id))
         
-        # Deactivate the session
-        cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session['id'],))
-    
-    conn.commit()
-    conn.close()
+        # Get current active session
+        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1 LIMIT 1')
+        session = cursor.fetchone()
+        session_id = session[0] if session else None
+        
+        # Record in attendance history
+        cursor.execute('''
+            INSERT INTO student_attendance_history 
+            (student_id, status, session_id, recorded_at)
+            VALUES (?, ?, ?, datetime('now'))
+        ''', (student_id, status, session_id))
+        
+        conn.commit()
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
 
-def create_attendance_session(session_name, start_time, end_time):
-    """Create new attendance session"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Clear previous student statuses
-    cursor.execute('UPDATE students SET status = NULL')
-    
-    # Create new session
-    cursor.execute('''
-        INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active)
-        VALUES (?, ?, ?, 1)
-    ''', (session_name, start_time, end_time))
-    
-    conn.commit()
-    conn.close()
+@retry_db_operation()
+def mark_students_absent():
+    """Mark students as absent if they didn't check in during active session"""
+    conn = None
+    try:
+        conn = get_db_connection_with_retry()
+        cursor = conn.cursor()
+        
+        # Get active session
+        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1')
+        session = cursor.fetchone()
+        
+        if not session:
+            return 0
+        
+        session_id = session[0]
+        
+        # Get students who haven't checked in for this session
+        cursor.execute('''
+            SELECT student_id FROM students 
+            WHERE student_id NOT IN (
+                SELECT DISTINCT student_id 
+                FROM student_attendance_history 
+                WHERE session_id = ? AND status = 'present'
+            )
+            AND (status IS NULL OR status != 'present')
+        ''', (session_id,))
+        
+        students_to_mark = cursor.fetchall()
+        
+        if not students_to_mark:
+            return 0
+        
+        # Mark students as absent
+        for (student_id,) in students_to_mark:
+            cursor.execute('''
+                UPDATE students 
+                SET status = 'absent' 
+                WHERE student_id = ?
+            ''', (student_id,))
+            
+            # Record in attendance history
+            cursor.execute('''
+                INSERT INTO student_attendance_history 
+                (student_id, status, session_id, recorded_at)
+                VALUES (?, 'absent', ?, datetime('now'))
+            ''', (student_id, session_id))
+        
+        absent_count = len(students_to_mark)
+        conn.commit()
+        
+        return absent_count
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
 
 def get_active_session():
-    """Get current active attendance session"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT * FROM attendance_sessions 
-        WHERE is_active = 1 AND datetime('now') BETWEEN datetime(start_time) AND datetime(end_time)
-    ''')
-    result = cursor.fetchone()
-    conn.close()
-    return dict(result) if result else None
+    """Get the currently active attendance session"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM attendance_sessions 
+            WHERE is_active = 1 
+            AND datetime('now') BETWEEN datetime(start_time) AND datetime(end_time)
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''')
+        result = cursor.fetchone()
+        conn.close()
+        return row_to_dict(result)
+    except Exception:
+        return None
+
+@retry_db_operation()
+def create_attendance_session(session_name, start_time, end_time):
+    """Create a new attendance session"""
+    conn = None
+    try:
+        conn = get_db_connection_with_retry()
+        cursor = conn.cursor()
+        
+        # Check if attendance_sessions table exists
+        cursor.execute('''
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='attendance_sessions'
+        ''')
+        
+        if not cursor.fetchone():
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS attendance_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_name TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+        
+        # Deactivate any existing active sessions
+        cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1')
+        
+        # Create new session
+        cursor.execute('''
+            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, created_at)
+            VALUES (?, ?, ?, 1, datetime('now'))
+        ''', (session_name, start_time, end_time))
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@retry_db_operation()
+def stop_active_session():
+    """Stop the currently active attendance session and mark absent students"""
+    conn = None
+    try:
+        conn = get_db_connection_with_retry()
+        cursor = conn.cursor()
+        
+        # Check if there's an active session
+        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1')
+        session = cursor.fetchone()
+        
+        if session:
+            session_id = session[0]
+            
+            # Mark all students who didn't check in as absent
+            absent_count = mark_students_absent_for_session(session_id, cursor)
+            
+            # Stop the active session
+            cursor.execute('''
+                UPDATE attendance_sessions 
+                SET is_active = 0, end_time = datetime('now') 
+                WHERE is_active = 1
+            ''')
+            conn.commit()
+            
+            return {'success': True, 'absent_marked': absent_count}
+        else:
+            return {'success': False, 'message': 'No active session to stop'}
+            
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
+
+@retry_db_operation()
+def get_students_with_attendance_data():
+    """Get all students with their attendance statistics"""
+    conn = None
+    try:
+        conn = get_db_connection_with_retry()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                s.student_id,
+                s.name,
+                s.course,
+                s.year,
+                s.status,
+                s.last_check_in,
+                COALESCE(stats.present_count, 0) as present_count,
+                COALESCE(stats.absent_count, 0) as absent_count
+            FROM students s
+            LEFT JOIN (
+                SELECT 
+                    student_id,
+                    SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_count,
+                    SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent_count
+                FROM student_attendance_history 
+                GROUP BY student_id
+            ) stats ON s.student_id = stats.student_id
+            ORDER BY s.name
+        ''')
+        
+        results = cursor.fetchall()
+        
+        students = []
+        for row in results:
+            student_dict = row_to_dict(row)
+            # Ensure status defaults to None/N/A if not set
+            if not student_dict.get('status'):
+                student_dict['status'] = None
+            students.append(student_dict)
+        
+        return students
+        
+    except Exception as e:
+        return []
+    finally:
+        if conn:
+            conn.close()

@@ -1,5 +1,36 @@
+"""
+Attendance Service Module for Offline Attendance System
+
+This module provides core attendance business logic and device fingerprint management for the SQLite-based attendance tracking system. It handles device usage validation, fingerprint storage, and attendance policy enforcement.
+
+Main Features:
+- Device Fingerprint Validation: Check if devices are allowed to check in
+- Usage Limit Enforcement: Prevent multiple check-ins from same device
+- Time Window Management: Control device usage within specified time periods
+- Device Tracking: Store and update device fingerprint information
+- Security Policy: Configurable blocking and validation rules
+
+Key Functions:
+- is_fingerprint_allowed(): Validates device fingerprints against usage policies
+- store_device_fingerprint(): Records and updates device usage information
+
+Business Logic:
+- Configurable device usage limits per time window
+- Automatic device fingerprint tracking and counting
+- Time-based usage restrictions (e.g., max 1 use per 24 hours)
+- Graceful error handling to prevent system disruption
+
+Security Features:
+- Device fingerprint-based duplicate prevention
+- Configurable blocking policies via system settings
+- Usage counting and time window enforcement
+- Historical device usage tracking
+
+Used by: API routes, check-in validation, attendance recording
+Dependencies: Database operations, system settings, device fingerprinting
+"""
+
 import time
-import hashlib
 from database.operations import get_settings, get_db_connection
 from datetime import datetime
 
@@ -26,161 +57,11 @@ def is_fingerprint_allowed(fingerprint_hash):
         
         if usage_count >= settings['max_uses_per_device']:
             hours = settings['time_window_minutes'] // 60
-            return False, f"Device used {usage_count} times in last {hours} hours"
+            return False, f"Device already used {usage_count} times in the last {hours} hours, Please use another device"
         
         return True, "Device allowed"
     except Exception as e:
-        print(f"Error checking fingerprint: {e}")
         return True, "Error checking fingerprint"
-
-def has_device_scanned_qr(qr_code_id, fingerprint_hash):
-    """Check if this specific device has already scanned this QR code"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT COUNT(*) as scan_count 
-            FROM qr_scans 
-            WHERE qr_code_id = ? AND fingerprint_hash = ?
-        ''', (qr_code_id, fingerprint_hash))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        return result['scan_count'] > 0
-    except Exception as e:
-        print(f"Error checking QR scan history: {e}")
-        return False
-
-def is_qr_code_valid(qr_code_id):
-    """Check if QR code is valid and active"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM qr_codes 
-            WHERE qr_code_id = ? AND is_active = 1
-        ''', (qr_code_id,))
-        
-        qr_code = cursor.fetchone()
-        conn.close()
-        
-        if not qr_code:
-            return False, "Invalid or inactive QR code"
-        
-        # Check if QR code has expired
-        if qr_code.get('expires_at'):
-            expiry_time = datetime.fromisoformat(qr_code['expires_at'])
-            if datetime.utcnow() > expiry_time:
-                return False, "QR code has expired"
-        
-        return True, "Valid QR code"
-    except Exception as e:
-        print(f"Error validating QR code: {e}")
-        return False, "Error validating QR code"
-
-def record_qr_scan(qr_code_id, fingerprint_hash, device_info, scan_result="success"):
-    """Record QR code scan attempt"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        current_time = datetime.utcnow().isoformat()
-        
-        cursor.execute('''
-            INSERT INTO qr_scans 
-            (qr_code_id, fingerprint_hash, device_info, scan_time, scan_result)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (qr_code_id, fingerprint_hash, device_info, current_time, scan_result))
-        
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"Error recording QR scan: {e}")
-
-def validate_attendance_request(data):
-    """Enhanced validation for attendance requests with QR tracking"""
-    # Basic validation
-    required = ['token', 'fingerprint_hash', 'name', 'course', 'year', 'qr_code_id']
-    if not all(data.get(field) for field in required):
-        return False, "Missing required fields"
-    
-    qr_code_id = data['qr_code_id']
-    fingerprint_hash = data['fingerprint_hash']
-    
-    # Check if QR code is valid
-    is_valid, message = is_qr_code_valid(qr_code_id)
-    if not is_valid:
-        return False, message
-    
-    # Check if this device has already scanned this QR code
-    if has_device_scanned_qr(qr_code_id, fingerprint_hash):
-        return False, "This device has already scanned this QR code"
-    
-    # Check fingerprint limits
-    is_allowed, fp_message = is_fingerprint_allowed(fingerprint_hash)
-    if not is_allowed:
-        return False, fp_message
-    
-    return True, "Valid attendance request"
-
-def process_attendance_with_qr(data):
-    """Process attendance with QR code tracking"""
-    # Validate the request
-    is_valid, message = validate_attendance_request(data)
-    if not is_valid:
-        # Record failed scan attempt
-        record_qr_scan(
-            data.get('qr_code_id'), 
-            data.get('fingerprint_hash'), 
-            data.get('device_info', '{}'), 
-            f"failed: {message}"
-        )
-        return False, message
-    
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # Record attendance
-        current_time = datetime.utcnow().isoformat()
-        cursor.execute('''
-            INSERT INTO attendances 
-            (name, course, year, fingerprint_hash, qr_code_id, timestamp, device_info)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['name'], 
-            data['course'], 
-            data['year'], 
-            data['fingerprint_hash'],
-            data['qr_code_id'],
-            current_time,
-            data.get('device_info', '{}')
-        ))
-        
-        attendance_id = cursor.lastrowid
-        
-        # Record successful QR scan
-        record_qr_scan(
-            data['qr_code_id'], 
-            data['fingerprint_hash'], 
-            data.get('device_info', '{}'), 
-            "success"
-        )
-        
-        # Update device fingerprint usage
-        store_device_fingerprint(data['fingerprint_hash'], data.get('device_info', '{}'))
-        
-        conn.commit()
-        conn.close()
-        
-        return True, f"Attendance recorded successfully (ID: {attendance_id})"
-        
-    except Exception as e:
-        print(f"Error processing attendance: {e}")
-        return False, "Error processing attendance"
 
 def store_device_fingerprint(fingerprint_hash, device_info):
     """Store or update device fingerprint"""
@@ -208,9 +89,4 @@ def store_device_fingerprint(fingerprint_hash, device_info):
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error storing fingerprint: {e}")
-
-def validate_attendance_data(data):
-    """Validate attendance form data (backward compatibility)"""
-    required = ['token', 'fingerprint_hash', 'name', 'course', 'year']
-    return all(data.get(field) for field in required)
+        pass  # Silently handle errors to avoid breaking the main flow

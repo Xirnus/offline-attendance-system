@@ -10,16 +10,76 @@ document.addEventListener('DOMContentLoaded', function() {
   loadData();
   setupEventListeners();
   
-  // More frequent auto-refresh for better real-time updates
-  setInterval(loadData, 5000); // Refresh every 5 seconds
+  // Add session status check here
+  checkSessionStatusWithExpiration();
+  
+  // REDUCED refresh frequency to prevent database locks
+  setInterval(loadData, 15000); // Refresh every 15 seconds instead of 5
+  
+  // Check session status every 60 seconds instead of 30
+  setInterval(checkSessionStatusWithExpiration, 60000);
 
   // Also add visibility change listener to refresh when tab becomes active
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
-      loadData();
+      // Add a small delay to prevent immediate database contention
+      setTimeout(() => {
+        loadData();
+        checkSessionStatusWithExpiration();
+      }, 500);
     }
   });
 });
+
+// Add debouncing to prevent rapid API calls
+let loadDataTimeout;
+async function loadData() {
+  // Clear any pending loadData calls
+  if (loadDataTimeout) {
+    clearTimeout(loadDataTimeout);
+  }
+  
+  loadDataTimeout = setTimeout(async () => {
+    try {
+      const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
+        fetch('/api/attendances'),
+        fetch('/api/denied'),
+        fetch('/api/device_fingerprints')
+      ]);
+      
+      const newAttendanceData = await attendanceRes.json();
+      const newDeniedAttempts = await deniedRes.json();
+      const newDeviceFingerprints = await devicesRes.json();
+      
+      // Check if we have new data
+      const hasNewData = 
+        newAttendanceData.length !== attendanceData.length ||
+        newDeniedAttempts.length !== deniedAttempts.length ||
+        newDeviceFingerprints.length !== deviceFingerprints.length;
+      
+      // Update data
+      attendanceData = newAttendanceData;
+      deniedAttempts = newDeniedAttempts;
+      deviceFingerprints = newDeviceFingerprints;
+      
+      // Update displays
+      updateStatistics();
+      updateAttendanceTable();
+      updateDeniedTable();
+      updateDeviceTable();
+      
+      // Show notification for new check-ins
+      if (hasNewData && lastUpdateTime > 0) {
+        showNotification('New activity detected!', 'info');
+      }
+      
+      lastUpdateTime = Date.now();
+      
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
+  }, 100); // Small delay to prevent rapid calls
+}
 
 function setupEventListeners() {
   document.getElementById('generate-btn').addEventListener('click', generateQR);
@@ -27,8 +87,350 @@ function setupEventListeners() {
   document.getElementById('refresh-data').addEventListener('click', loadData);
   document.getElementById('export-data').addEventListener('click', exportData);
   document.getElementById('clear-old-data').addEventListener('click', clearOldData);
-  document.getElementById('create-session-btn').addEventListener('click', createAttendanceSession);
+  
+  // Add session event listeners here
+  const createSessionBtn = document.getElementById('create-session-btn');
+  const stopSessionBtn = document.getElementById('stop-session-btn');
+  
+  console.log('Setting up event listeners...');
+  console.log('Create button found:', !!createSessionBtn);
+  console.log('Stop button found:', !!stopSessionBtn);
+  
+  if (createSessionBtn) {
+    createSessionBtn.addEventListener('click', function(e) {
+      console.log('Create session button clicked!');
+      e.preventDefault();
+      
+      const sessionName = prompt('Enter session name:');
+      if (!sessionName) return;
+      
+      const startTime = new Date().toISOString();
+      
+      // Simplified time input - just hours and minutes
+      const endTimeInput = prompt('Enter end time (HH:MM) - example: 14:30 for 2:30 PM:');
+      if (!endTimeInput) return;
+      
+      // Parse the time input and create full datetime
+      const timeMatch = endTimeInput.match(/^(\d{1,2}):(\d{2})$/);
+      if (!timeMatch) {
+        alert('Invalid time format. Please use HH:MM format (e.g., 14:30)');
+        return;
+      }
+      
+      const hours = parseInt(timeMatch[1]);
+      const minutes = parseInt(timeMatch[2]);
+      
+      if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        alert('Invalid time. Hours must be 0-23 and minutes must be 0-59');
+        return;
+      }
+      
+      // Create end time for today with the specified time
+      const endTime = new Date();
+      endTime.setHours(hours, minutes, 0, 0);
+      
+      // If the end time is earlier than now, assume it's for tomorrow
+      if (endTime <= new Date()) {
+        endTime.setDate(endTime.getDate() + 1);
+      }
+      
+      createSession(sessionName, startTime, endTime.toISOString());
+    });
+  }
+  
+  if (stopSessionBtn) {
+    stopSessionBtn.addEventListener('click', function(e) {
+      console.log('Stop session button clicked!');
+      e.preventDefault();
+      
+      if (confirm('Are you sure you want to stop the current session?')) {
+        stopSession();
+      }
+    });
+  }
 }
+
+function createSession(sessionName, startTime, endTime) {
+    console.log('Creating session:', { sessionName, startTime, endTime });
+    
+    // Show loading state
+    const createBtn = document.getElementById('create-session-btn');
+    const originalText = createBtn.textContent;
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating Session...';
+    
+    fetch('/api/create_session', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            session_name: sessionName,
+            start_time: startTime,
+            end_time: endTime
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Create session response:', data);
+        if (data.status === 'success') {
+            showNotification('Session created successfully', 'success');
+            // IMMEDIATELY force the button update with session details
+            console.log('Forcing immediate button update...');
+            const sessionData = {
+                session_name: sessionName,
+                start_time: startTime,
+                end_time: endTime
+            };
+            updateButtonVisibility(true, sessionName);
+            displaySessionDetails(sessionData);
+        } else {
+            showNotification('Error creating session: ' + data.message, 'error');
+            // Reset button state on error
+            createBtn.disabled = false;
+            createBtn.textContent = originalText;
+        }
+    })
+    .catch(error => {
+        showNotification('Error creating session', 'error');
+        console.error('Error:', error);
+        // Reset button state on error
+        createBtn.disabled = false;
+        createBtn.textContent = originalText;
+    });
+}
+
+function stopSession() {
+    console.log('stopSession function called');
+    
+    const stopBtn = document.getElementById('stop-session-btn');
+    if (!stopBtn) {
+        console.error('Stop button not found!');
+        return;
+    }
+    
+    const originalText = stopBtn.textContent;
+    stopBtn.disabled = true;
+    stopBtn.textContent = 'Stopping...';
+    
+    console.log('Making API call to stop session...');
+    
+    fetch('/api/stop_session', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => {
+        console.log('Stop session response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Stop session response data:', data);
+        if (data.status === 'success' || data.success) {
+            const absentCount = data.absent_marked || 0;
+            const message = absentCount > 0 
+                ? `Session stopped successfully. ${absentCount} students marked absent.`
+                : 'Session stopped successfully';
+            
+            showNotification(message, 'success');
+            updateButtonVisibility(false, '');
+            
+            // Refresh data to show updated student statuses
+            setTimeout(() => {
+                loadData();
+            }, 500);
+        } else {
+            showNotification('Error stopping session: ' + (data.message || 'Unknown error'), 'error');
+            stopBtn.disabled = false;
+            stopBtn.textContent = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Fetch error:', error);
+        showNotification('Error stopping session', 'error');
+        stopBtn.disabled = false;
+        stopBtn.textContent = originalText;
+    });
+}
+
+function updateButtonVisibility(hasActiveSession, sessionName = '') {
+    const createSessionBtn = document.getElementById('create-session-btn');
+    const stopSessionBtn = document.getElementById('stop-session-btn');
+    const sessionStatus = document.getElementById('session-status');
+    
+    console.log('updateButtonVisibility called with:', { hasActiveSession, sessionName });
+    
+    if (hasActiveSession) {
+        console.log('Setting up for active session...');
+        if (sessionStatus) {
+            sessionStatus.innerHTML = `
+                <strong>Active: ${sessionName}</strong><br>
+                <small id="session-details">Loading session details...</small>
+            `;
+        }
+        if (createSessionBtn) {
+            createSessionBtn.style.display = 'none';
+            createSessionBtn.disabled = false;
+            createSessionBtn.textContent = 'Create Attendance Session';
+        }
+        if (stopSessionBtn) {
+            stopSessionBtn.style.display = 'inline-block';
+            stopSessionBtn.disabled = false;
+            stopSessionBtn.textContent = 'Stop Session';
+        }
+    } else {
+        console.log('Setting up for no active session...');
+        if (sessionStatus) {
+            sessionStatus.innerHTML = '<span>No active session</span>';
+        }
+        if (createSessionBtn) {
+            createSessionBtn.style.display = 'inline-block';
+            createSessionBtn.disabled = false;
+            createSessionBtn.textContent = 'Create Attendance Session';
+        }
+        if (stopSessionBtn) {
+            stopSessionBtn.style.display = 'none';
+            stopSessionBtn.disabled = false;
+            stopSessionBtn.textContent = 'Stop Session';
+        }
+    }
+    
+    console.log('Button visibility updated. Create visible:', createSessionBtn?.style.display !== 'none', 'Stop visible:', stopSessionBtn?.style.display !== 'none');
+}
+
+
+function displaySessionDetails(session) {
+    console.log('Displaying session details:', session);
+    const sessionDetailsElement = document.getElementById('session-details');
+    if (!sessionDetailsElement) {
+        console.log('Session details element not found');
+        return;
+    }
+    
+    try {
+        const startTime = new Date(session.start_time);
+        const endTime = new Date(session.end_time);
+        const now = new Date();
+        
+        console.log('Times:', { startTime, endTime, now });
+        
+        // Calculate time remaining
+        const timeRemaining = endTime - now;
+        const hoursRemaining = Math.floor(timeRemaining / (1000 * 60 * 60));
+        const minutesRemaining = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+        
+        let timeRemainingText = '';
+        if (timeRemaining > 0) {
+            if (hoursRemaining > 0) {
+                timeRemainingText = `${hoursRemaining}h ${minutesRemaining}m remaining`;
+            } else if (minutesRemaining > 0) {
+                timeRemainingText = `${minutesRemaining}m remaining`;
+            } else {
+                timeRemainingText = 'Less than 1 minute remaining';
+            }
+        } else {
+            timeRemainingText = 'Session expired';
+        }
+        
+        const detailsHTML = `
+            Started: ${startTime.toLocaleString()}<br>
+            Ends: ${endTime.toLocaleString()}<br>
+            <span style="color: ${timeRemaining > 0 ? '#28a745' : '#dc3545'};">
+                ${timeRemainingText}
+            </span>
+        `;
+        
+        console.log('Setting session details HTML:', detailsHTML);
+        sessionDetailsElement.innerHTML = detailsHTML;
+        
+    } catch (error) {
+        console.error('Error in displaySessionDetails:', error);
+        sessionDetailsElement.innerHTML = 'Error loading session details';
+    }
+}
+
+function checkSessionStatus() {
+    console.log('Checking session status...');
+    fetch('/api/session_status')
+    .then(response => response.json())
+    .then(data => {
+        console.log('Session status response:', data);
+        
+        if (data.active_session) {
+            console.log('Active session found:', data.active_session);
+            
+            // Check if session has expired
+            const endTime = new Date(data.active_session.end_time);
+            const now = new Date();
+            
+            if (endTime <= now) {
+                console.log('Session has expired, updating buttons...');
+                updateButtonVisibility(false, '');
+                showNotification('Session has expired', 'info');
+            } else {
+                updateButtonVisibility(true, data.active_session.session_name);
+                // Update session details after setting up buttons
+                setTimeout(() => {
+                    displaySessionDetails(data.active_session);
+                }, 100);
+            }
+        } else {
+            console.log('No active session found');
+            updateButtonVisibility(false);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking session status:', error);
+        // On error, assume no active session to prevent stuck UI
+        updateButtonVisibility(false);
+    });
+}
+
+function checkSessionStatusWithExpiration() {
+    fetch('/api/session_status')
+    .then(response => response.json())
+    .then(data => {
+        if (data.active_session) {
+            const endTime = new Date(data.active_session.end_time);
+            const now = new Date();
+            
+            if (endTime <= now) {
+                // Session has expired, automatically stop it
+                console.log('Session expired, automatically stopping...');
+                
+                // Call the backend to stop session and mark absents
+                fetch('/api/stop_session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(stopData => {
+                    console.log('Auto-stopped expired session:', stopData);
+                    updateButtonVisibility(false, '');
+                    
+                    if (stopData.absent_marked > 0) {
+                        showNotification(`Session ended. ${stopData.absent_marked} students marked absent`, 'info');
+                    } else {
+                        showNotification('Session automatically ended (expired)', 'info');
+                    }
+                });
+            } else {
+                updateButtonVisibility(true, data.active_session.session_name);
+                displaySessionDetails(data.active_session);
+            }
+        } else {
+            updateButtonVisibility(false);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking session status:', error);
+        updateButtonVisibility(false);
+    });
+}
+
 
 async function generateQR() {
   try {

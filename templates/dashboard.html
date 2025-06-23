@@ -54,10 +54,13 @@
     </div>
   </div>
   
+  
   <div class="session-control">
-    <button id="create-session-btn" class="btn btn-primary">Create Attendance Session</button>
-    <span id="session-status" class="status-text"></span>
+      <button id="create-session-btn" class="btn btn-primary" style="display: inline-block;">Create Attendance Session</button>
+      <button id="stop-session-btn" class="btn btn-danger" style="display: none;">Stop Session</button>
+      <div id="session-status" class="status-text">No active session</div>
   </div>
+  
   
   <!-- QR Code Generation -->
   <div>
@@ -107,8 +110,6 @@
         <tr>
           <th>Time</th>
           <th>Name</th>
-          <th>Course</th>
-          <th>Year</th>
           <th>Reason</th>
           <th>Token</th>
         </tr>
