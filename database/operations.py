@@ -412,51 +412,24 @@ def get_active_session():
     except Exception:
         return None
 
-@retry_db_operation()
-def create_attendance_session(session_name, start_time, end_time):
-    """Create a new attendance session"""
-    conn = None
+def create_attendance_session(session_name, start_time, end_time, profile_id=None):
+    """Create attendance session, optionally from a profile"""
     try:
-        conn = get_db_connection_with_retry()
+        conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Check if attendance_sessions table exists
+        # You might want to add profile_id to your sessions table
         cursor.execute('''
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name='attendance_sessions'
-        ''')
-        
-        if not cursor.fetchone():
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS attendance_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_name TEXT NOT NULL,
-                    start_time TEXT NOT NULL,
-                    end_time TEXT NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-        
-        # Deactivate any existing active sessions
-        cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1')
-        
-        # Create new session
-        cursor.execute('''
-            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, created_at)
-            VALUES (?, ?, ?, 1, datetime('now'))
-        ''', (session_name, start_time, end_time))
+            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, profile_id, created_at)
+            VALUES (?, ?, ?, 1, ?, datetime('now'))
+        ''', (session_name, start_time, end_time, profile_id))
         
         conn.commit()
+        conn.close()
         return True
-        
     except Exception as e:
-        if conn:
-            conn.rollback()
-        raise e
-    finally:
-        if conn:
-            conn.close()
+        print(f"Error creating session: {e}")
+        return False
 
 @retry_db_operation()
 def stop_active_session():
@@ -543,3 +516,65 @@ def get_students_with_attendance_data():
     finally:
         if conn:
             conn.close()
+            
+def create_session_profile(profile_name, room_type, building, capacity):
+    """Create a new session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO session_profiles (profile_name, room_type, building, capacity, created_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+        ''', (profile_name, room_type, building, capacity))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        return False
+
+def get_session_profile_by_id(profile_id):
+    """Get session profile by ID"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM session_profiles WHERE id = ?', (profile_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return dict(result) if result else None
+    except Exception as e:
+        return None
+
+def update_session_profile(profile_id, data):
+    """Update session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE session_profiles 
+            SET profile_name = ?, room_type = ?, building = ?, capacity = ?
+            WHERE id = ?
+        ''', (data.get('profile_name'), data.get('room_type'), 
+              data.get('building'), data.get('capacity'), profile_id))
+        
+        conn.commit()
+        affected_rows = cursor.rowcount
+        conn.close()
+        return affected_rows > 0
+    except Exception as e:
+        return False
+
+def delete_session_profile(profile_id):
+    """Delete session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM session_profiles WHERE id = ?', (profile_id,))
+        conn.commit()
+        affected_rows = cursor.rowcount
+        conn.close()
+        return affected_rows > 0
+    except Exception as e:
+        return False

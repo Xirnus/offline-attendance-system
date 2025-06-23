@@ -301,17 +301,23 @@ def create_session():
         session_name = data.get('session_name')
         start_time = data.get('start_time')
         end_time = data.get('end_time')
+        profile_id = data.get('profile_id')  # New field for profile-based sessions
         
         if not all([session_name, start_time, end_time]):
             return jsonify(status='error', message='Missing required fields')
         
-        result = create_attendance_session(session_name, start_time, end_time)
+        # If profile_id is provided, you can store it with the session for reference
+        result = create_attendance_session(session_name, start_time, end_time, profile_id)
         if result:
-            return jsonify(status='success', message='Attendance session created')
+            message = 'Attendance session created'
+            if profile_id:
+                message += ' using session profile'
+            return jsonify(status='success', message=message)
         else:
             return jsonify(status='error', message='Failed to create session')
     except Exception as e:
         return jsonify(status='error', message=str(e))
+
 
 @api_bp.route('/api/stop_session', methods=['POST'])
 def stop_session():
@@ -340,5 +346,114 @@ def get_students_with_attendance():
     try:
         students = get_students_with_attendance_data()
         return jsonify({'students': students})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/session_profiles', methods=['GET'])
+def get_session_profiles():
+    """Get all session profiles"""
+    try:
+        from database.operations import get_all_data
+        profiles = get_all_data('session_profiles')
+        return jsonify({'profiles': profiles})
+    except Exception as e:
+        return jsonify({'profiles': [], 'error': str(e)})
+
+@api_bp.route('/api/session_profiles', methods=['POST'])
+def create_session_profile():
+    """Create a new session profile"""
+    try:
+        data = request.json or {}
+        profile_name = data.get('profile_name')
+        room_type = data.get('room_type')
+        building = data.get('building', '')
+        capacity = data.get('capacity', 0)
+        
+        if not all([profile_name, room_type]):
+            return jsonify({'error': 'Profile name and room type are required'}), 400
+        
+        # Insert directly into database since we might not have the helper function yet
+        from database.operations import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO session_profiles (profile_name, room_type, building, capacity, created_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+        ''', (profile_name, room_type, building, capacity))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'message': 'Session profile created successfully'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/session_profiles/<int:profile_id>', methods=['DELETE'])
+def delete_session_profile(profile_id):
+    """Delete a session profile"""
+    try:
+        from database.operations import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM session_profiles WHERE id = ?', (profile_id,))
+        conn.commit()
+        affected_rows = cursor.rowcount
+        conn.close()
+        
+        if affected_rows > 0:
+            return jsonify({'status': 'success', 'message': 'Profile deleted successfully'})
+        else:
+            return jsonify({'error': 'Profile not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/api/session_profiles/<int:profile_id>', methods=['PUT'])
+def update_session_profile(profile_id):
+    """Update a session profile"""
+    try:
+        data = request.json or {}
+        from database.operations import update_session_profile
+        result = update_session_profile(profile_id, data)
+        
+        if result:
+            return jsonify({'status': 'success', 'message': 'Profile updated successfully'})
+        else:
+            return jsonify({'error': 'Profile not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/use_session_profile/<int:profile_id>', methods=['POST'])
+def use_session_profile(profile_id):
+    """Use a session profile to create an attendance session"""
+    try:
+        data = request.json or {}
+        session_name = data.get('session_name')
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        
+        from database.operations import get_session_profile_by_id
+        profile = get_session_profile_by_id(profile_id)
+        
+        if not profile:
+            return jsonify({'error': 'Profile not found'}), 404
+        
+        # Use profile name if no session name provided
+        if not session_name:
+            session_name = f"{profile['profile_name']} - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        result = create_attendance_session(session_name, start_time, end_time)
+        
+        if result:
+            return jsonify({'status': 'success', 'message': f'Session created using {profile["profile_name"]} profile'})
+        else:
+            return jsonify({'error': 'Failed to create session'}), 500
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -72,6 +72,20 @@ def students():
 def dashboard():
     return render_template('dashboard.html')
 
+@app.route('/sessions')
+def sessions():
+    return render_template('sessions.html')
+
+@app.route('/api/session_profiles/<int:profile_id>', methods=['PUT'])
+def update_session_profile(profile_id):
+    try:
+        data = request.get_json()
+        # Update profile in database
+        # Return success response
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
 if __name__ == '__main__':
     print("Starting Flask Attendance System")
     print("=" * 40)

@@ -62,13 +62,26 @@ TABLES = {
         )
     ''',
     'attendance_sessions': '''
-        CREATE TABLE IF NOT EXISTS attendance_sessions (
+            CREATE TABLE IF NOT EXISTS attendance_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_name TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                profile_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (profile_id) REFERENCES session_profiles (id)
+            )
+    ''',
+    'session_profiles': '''
+        CREATE TABLE IF NOT EXISTS session_profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_name TEXT NOT NULL,
-            start_time TEXT NOT NULL,
-            end_time TEXT NOT NULL,
-            is_active BOOLEAN DEFAULT TRUE,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            profile_name TEXT NOT NULL,
+            room_type TEXT NOT NULL,
+            building TEXT,
+            capacity INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''',
     'active_tokens': '''
