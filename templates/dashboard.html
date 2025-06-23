@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Admin Dashboard</title>
-  <style>
+  <title>Admin Dashboard</title>  <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -19,6 +18,74 @@
     .success { background-color: green; }
     .error { background-color: red; }
     .info { background-color: blue; }
+    
+    /* Export & Reports Styles */
+    .export-section, .report-section, .email-section, .analytics-section, .schedule-section, .data-management {
+      margin: 20px 0;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    
+    .export-btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .export-btn:hover {
+      background-color: #45a049;
+    }
+    
+    .analytics-preview {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .analytics-stat {
+      display: inline-block;
+      margin: 10px;
+      padding: 10px;
+      background-color: #e7f3ff;
+      border-radius: 4px;
+      min-width: 120px;
+      text-align: center;
+    }
+    
+    .analytics-stat h4 {
+      margin: 0 0 5px 0;
+      color: #333;
+    }
+    
+    .analytics-stat .value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #0066cc;
+    }
+    
+    input[type="email"], input[type="time"] {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 5px;
+    }
+    
+    select {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin: 5px;
+      background-color: white;
+    }
   </style>
 
   <script src="static/js/dashboard.js"></script>
@@ -142,12 +209,69 @@
       </tbody>
     </table>
   </div>
-
-  <!-- Export Data -->
+  <!-- Export & Reports -->
   <div>
-    <h2>Data Management</h2>
-    <button id="export-data">Export All Data</button>
-    <button id="clear-old-data">Clear Old Data</button>
+    <h2>Export & Reports</h2>
+    
+    <!-- Export Buttons -->
+    <div class="export-section">
+      <h3>Data Export</h3>
+      <button id="export-pdf" class="export-btn">📄 Export PDF Report</button>
+      <button id="export-excel" class="export-btn">📊 Export Excel</button>
+      <button id="export-csv" class="export-btn">📋 Export CSV</button>
+      <button id="export-data">🗂️ Export All Data (JSON)</button>
+    </div>
+    
+    <!-- Report Types -->
+    <div class="report-section">
+      <h3>Professional Reports</h3>
+      <select id="report-type">
+        <option value="comprehensive">Comprehensive Report</option>
+        <option value="summary">Summary Report</option>
+        <option value="detailed">Detailed Report</option>
+      </select>
+      <button id="generate-report" class="export-btn">📋 Generate Report</button>
+    </div>
+    
+    <!-- Email Reports -->
+    <div class="email-section">
+      <h3>Email Reports</h3>
+      <input type="email" id="recipient-email" placeholder="Enter recipient email">
+      <select id="email-report-type">
+        <option value="pdf">PDF Report</option>
+        <option value="excel">Excel Report</option>
+        <option value="csv">CSV Data</option>
+      </select>
+      <button id="send-email-report" class="export-btn">📧 Send Email Report</button>
+    </div>
+    
+    <!-- Analytics Preview -->
+    <div class="analytics-section">
+      <h3>Analytics Preview</h3>
+      <button id="view-analytics" class="export-btn">📈 View Analytics</button>
+      <div id="analytics-preview" class="hidden">
+        <div id="analytics-content"></div>
+      </div>
+    </div>
+    
+    <!-- Scheduled Reports -->
+    <div class="schedule-section">
+      <h3>Scheduled Reports</h3>
+      <input type="email" id="schedule-email" placeholder="Recipient email">
+      <select id="schedule-frequency">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <input type="time" id="schedule-time" value="09:00">
+      <button id="setup-schedule" class="export-btn">⏰ Schedule Reports</button>
+    </div>
+    
+    <!-- Data Management -->
+    <div class="data-management">
+      <h3>Data Management</h3>
+      <button id="clear-old-data">🗑️ Clear Old Data</button>
+    </div>
   </div>
 </body>
 </html>
