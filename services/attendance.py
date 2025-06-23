@@ -1,3 +1,35 @@
+"""
+Attendance Service Module for Offline Attendance System
+
+This module provides core attendance business logic and device fingerprint management for the SQLite-based attendance tracking system. It handles device usage validation, fingerprint storage, and attendance policy enforcement.
+
+Main Features:
+- Device Fingerprint Validation: Check if devices are allowed to check in
+- Usage Limit Enforcement: Prevent multiple check-ins from same device
+- Time Window Management: Control device usage within specified time periods
+- Device Tracking: Store and update device fingerprint information
+- Security Policy: Configurable blocking and validation rules
+
+Key Functions:
+- is_fingerprint_allowed(): Validates device fingerprints against usage policies
+- store_device_fingerprint(): Records and updates device usage information
+
+Business Logic:
+- Configurable device usage limits per time window
+- Automatic device fingerprint tracking and counting
+- Time-based usage restrictions (e.g., max 1 use per 24 hours)
+- Graceful error handling to prevent system disruption
+
+Security Features:
+- Device fingerprint-based duplicate prevention
+- Configurable blocking policies via system settings
+- Usage counting and time window enforcement
+- Historical device usage tracking
+
+Used by: API routes, check-in validation, attendance recording
+Dependencies: Database operations, system settings, device fingerprinting
+"""
+
 import time
 from database.operations import get_settings, get_db_connection
 from datetime import datetime
@@ -25,11 +57,10 @@ def is_fingerprint_allowed(fingerprint_hash):
         
         if usage_count >= settings['max_uses_per_device']:
             hours = settings['time_window_minutes'] // 60
-            return False, f"Device used {usage_count} times in last {hours} hours"
+            return False, f"Device already used {usage_count} times in the last {hours} hours, Please use another device"
         
         return True, "Device allowed"
     except Exception as e:
-        print(f"Error checking fingerprint: {e}")
         return True, "Error checking fingerprint"
 
 def store_device_fingerprint(fingerprint_hash, device_info):
@@ -58,9 +89,4 @@ def store_device_fingerprint(fingerprint_hash, device_info):
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Error storing fingerprint: {e}")
-
-def validate_attendance_data(data):
-    """Validate attendance form data"""
-    required = ['token', 'fingerprint_hash', 'name', 'course', 'year']
-    return all(data.get(field) for field in required)
+        pass  # Silently handle errors to avoid breaking the main flow

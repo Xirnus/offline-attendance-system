@@ -1,3 +1,43 @@
+"""
+Network Utilities Module for Offline Attendance System
+
+This module provides network interface detection and IP address management for the
+attendance system, with special focus on Windows hotspot detection and mobile hotspot connectivity. It ensures the system can properly detect and display the correct IP addresses for QR code access across different network configurations.
+
+Main Features:
+- Windows Hotspot Detection: Automatically detect Microsoft Wi-Fi Direct Virtual Adapter
+- IP Address Resolution: Get system's active IP addresses for QR code URLs
+- Multi-Interface Support: Handle multiple network interfaces and configurations
+- Cross-Platform Compatibility: Fallback methods for different operating systems
+- Common Hotspot Recognition: Detect standard mobile hotspot IP ranges
+
+Key Functions:
+- get_hotspot_ip(): Detect Windows hotspot IP address specifically
+- get_default_ip(): Get primary network interface IP using socket connection
+- get_all_network_interfaces(): Retrieve all available network interface IPs
+
+Network Detection Logic:
+- Windows: Parse ipconfig output for Wi-Fi Direct Virtual Adapter
+- Fallback: Use socket connection to external server for IP detection
+- Common Ranges: Recognize standard hotspot IP ranges (192.168.137.x, etc.)
+- Error Handling: Graceful fallback to localhost on network errors
+
+Use Cases:
+- Mobile Hotspot QR Code Access: Students connecting via phone hotspots
+- Classroom Network Setup: Teachers sharing internet via Windows hotspot
+- Multi-Network Environments: Systems with multiple active interfaces
+- Network Troubleshooting: Display all possible connection IPs
+
+Technical Details:
+- Windows ipconfig parsing for adapter detection
+- Socket-based IP resolution for reliable connectivity
+- Standard hotspot IP range recognition
+- Cross-platform fallback mechanisms
+
+Used by: Flask app initialization, QR code URL generation, network display
+Dependencies: Standard library (socket, subprocess, platform)
+"""
+
 import socket
 import subprocess
 import platform
