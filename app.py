@@ -85,7 +85,7 @@ def update_session_profile(profile_id):
         return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
 if __name__ == '__main__':
     print("Starting Flask Attendance System")
     print("=" * 40)

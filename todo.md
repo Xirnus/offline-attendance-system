@@ -40,11 +40,10 @@ flask run
 - [ ] **Session Templates**: Pre-configured attendance sessions
 
 #### Student Management
-- [ ] **Bulk Import**: Excel/CSV student data import with validation
-- [ ] **Class Groups**: Organize students by classes/sections
+- [x] **Bulk Import**: Excel/CSV student data import with validation
 - [x] **Session Profiles**: Allows Profs/Admins to add classroom session profiles
 - [x] **Student Profiles**: Extended student information and photos
-- [ ] **Manual Override**: Admin ability to modify attendance records
+- [x] **Manual Override**: Admin ability to modify attendance records
 
 ### 📊 Analytics & Reporting
 #### Data Analysis
