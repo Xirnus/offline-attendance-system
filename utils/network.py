@@ -48,7 +48,7 @@ def get_all_network_interfaces():
     interfaces = [get_hotspot_ip()]
     
     # Add common hotspot IPs if not already included
-    common_ips = ['192.168.137.1', '192.168.173.1', '192.168.43.1']
+    common_ips = ['192.168.137.1', '192.168.173.1', '192.168.43.1', '10.42.0.1']
     for ip in common_ips:
         if ip not in interfaces:
             interfaces.append(ip)

@@ -220,3 +220,5 @@ myenv/Scripts/python.exe
 myenv/Scripts/pythonw.exe
 myenv/Scripts/qr.exe
 myenv/Scripts/tests.exe
+
+ofas/
