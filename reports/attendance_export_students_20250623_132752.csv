@@ -1,6 +1,0 @@
-student_id,name,course,year,last_check_in,status,absent_count,created_at
-2021-003,Alice Johnson,Computer Engineering,3,,absent,1,
-2021-004,Bob Brown,Software Engineering,4,,absent,1,
-2021-005,Charlie Davis,Information Systems,2,,absent,1,
-2021-002,Jane Smith,Information Technology,1,,absent,1,
-2021-001,John Doe,Computer Science,2,2025-06-23 04:02:22,present,0,

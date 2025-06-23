@@ -10,7 +10,7 @@ import traceback
 from datetime import datetime
 
 # Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_reports_basics():
     """Test basic reports functionality without database dependency"""

@@ -10,7 +10,7 @@ import traceback
 from datetime import datetime
 
 # Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.reports import ReportsService
 from database.operations import get_all_data, get_students_with_attendance_data
