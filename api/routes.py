@@ -40,7 +40,7 @@ from database.operations import (
     get_settings, update_settings, create_token, get_token, 
     update_token, record_attendance, record_denied_attempt, get_all_data
 )
-from services import reports_service
+from services.reports import reports_service
 from services.fingerprint import generate_comprehensive_fingerprint, create_fingerprint_hash
 from services.attendance import is_fingerprint_allowed, store_device_fingerprint
 from services.token import generate_token, validate_token_access
