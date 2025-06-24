@@ -352,15 +352,13 @@ Attendance System"""
                 schedule_config['recipient_email'],
                 schedule_config.get('report_type', 'pdf'),
                 schedule_config.get('smtp_config')
-            )
-        
+            )        
         if schedule_config['frequency'] == 'daily':
             schedule.every().day.at(schedule_config['time']).do(send_scheduled_report)
         elif schedule_config['frequency'] == 'weekly':
             schedule.every().week.do(send_scheduled_report)
         elif schedule_config['frequency'] == 'monthly':
-            # Use a workaround for monthly scheduling since schedule library doesn't support it directly
-            schedule.every(30).days.do(send_scheduled_report)
+            schedule.every().month.do(send_scheduled_report)
         
         def run_scheduler():
             while True:
