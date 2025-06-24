@@ -34,9 +34,9 @@ from database.operations import (
 EMAIL_CONFIG = {
     'smtp_server': 'smtp.gmail.com',
     'smtp_port': 587,
-    'sender_email': 'your-email@gmail.com',
-    'sender_password': 'your-app-password',
-    'sender_name': 'Attendance System'
+    'sender_email': 'ofasccs@gmail.com',
+    'sender_password': 'hclrcrjgjkywydnr',
+    'sender_name': 'Attendance-System'
 }
 
 class ReportsService:
