@@ -41,6 +41,8 @@ from services.attendance import is_fingerprint_allowed, store_device_fingerprint
 from services.token import generate_token, validate_token_access
 from services.rate_limiting import is_rate_limited, get_client_ip
 from utils.qr_generator import generate_qr_code, build_qr_url
+from services.reports import reports_service
+import os
 
 api_bp = Blueprint('api', __name__)
 
@@ -389,7 +391,136 @@ def get_students_with_attendance():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Export and reporting endpoints
+@api_bp.route('/api/export/pdf')
+def export_pdf():
+    """Generate and download PDF report"""
+    try:
+        report_type = request.args.get('type', 'comprehensive')
+        date_range = None
+        
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        if start_date and end_date:
+            date_range = (start_date, end_date)
+        
+        pdf_path = reports_service.generate_pdf_report(report_type, date_range)
+        return send_file(pdf_path, as_attachment=True, download_name=os.path.basename(pdf_path))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/api/export/excel')
+def export_excel():
+    """Generate and download Excel report"""
+    try:
+        excel_path = reports_service.export_to_excel()
+        return send_file(excel_path, as_attachment=True, download_name=os.path.basename(excel_path))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/export/csv')
+def export_csv():
+    """Generate and download CSV export"""
+    try:
+        data_type = request.args.get('type', 'all')
+        csv_path = reports_service.export_to_csv(data_type)
+        
+        if data_type == 'all':
+            # Return info about generated files
+            return jsonify({
+                'message': 'CSV files generated successfully',
+                'files': [
+                    f"{csv_path}_students.csv",
+                    f"{csv_path}_attendance.csv", 
+                    f"{csv_path}_sessions.csv"
+                ]
+            })
+        else:
+            return send_file(csv_path, as_attachment=True, download_name=os.path.basename(csv_path))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/reports/analytics')
+def get_analytics():
+    """Get comprehensive attendance analytics"""
+    try:
+        analytics = reports_service.get_attendance_analytics()
+        return jsonify(analytics)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/reports/email', methods=['POST'])
+def send_email_report():
+    """Send email report to specified recipient"""
+    try:
+        data = request.json or {}
+        recipient_email = data.get('recipient_email')
+        report_type = data.get('report_type', 'pdf')
+        smtp_config = data.get('smtp_config')
+        
+        if not recipient_email:
+            return jsonify({'error': 'Recipient email is required'}), 400
+        
+        success = reports_service.send_email_report(recipient_email, report_type, smtp_config)
+        
+        if success:
+            return jsonify({'message': 'Email report sent successfully'})
+        else:
+            return jsonify({'error': 'Failed to send email report'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/reports/schedule', methods=['POST'])
+def schedule_reports():
+    """Schedule automated email reports"""
+    try:
+        schedule_config = request.json or {}
+        
+        required_fields = ['recipient_email', 'frequency', 'time']
+        if not all(field in schedule_config for field in required_fields):
+            return jsonify({'error': 'Missing required scheduling fields'}), 400
+        
+        reports_service.schedule_reports(schedule_config)
+        return jsonify({'message': 'Report scheduling configured successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/api/reports/preview')
+def preview_report():
+    """Preview report data without generating file"""
+    try:
+        report_type = request.args.get('type', 'summary')
+        
+        if report_type == 'analytics':
+            data = reports_service.get_attendance_analytics()
+        else:
+            # Return basic preview data
+            from database.operations import get_students_with_attendance_data, get_all_data
+            students_data = get_students_with_attendance_data()
+            attendance_data = get_all_data('attendances')
+            
+            data = {
+                'summary': {
+                    'total_students': len(students_data),
+                    'total_checkins': len(attendance_data),
+                    'generated_at': datetime.utcnow().isoformat()
+                },
+                'recent_attendance': attendance_data[-10:] if attendance_data else [],
+                'student_count_by_course': {}
+            }
+            
+            # Group students by course
+            for student in students_data:
+                course = student.get('course', 'Unknown')
+                if course not in data['student_count_by_course']:
+                    data['student_count_by_course'][course] = 0
+                data['student_count_by_course'][course] += 1
+        
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Session profiles endpoints
 @api_bp.route('/api/session_profiles', methods=['GET'])
 def get_session_profiles():
     """Get all session profiles"""
@@ -452,7 +583,6 @@ def delete_session_profile(profile_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @api_bp.route('/api/session_profiles/<int:profile_id>', methods=['PUT'])
 def update_session_profile(profile_id):
     """Update a session profile"""
@@ -498,6 +628,7 @@ def use_session_profile(profile_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Student management endpoints  
 @api_bp.route('/api/students/<student_id>', methods=['GET'])
 def get_student(student_id):
     """Get a single student with detailed information"""
@@ -829,4 +960,3 @@ def update_student_attendance_manual(student_id):
     except Exception as e:
         print(f"Error updating attendance for student {student_id}: {e}")
         return jsonify({'error': str(e)}), 500
-

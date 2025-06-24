@@ -92,8 +92,23 @@ function setupEventListeners() {
     'export-data': exportData,
     'clear-old-data': clearOldData
   };
-
   Object.entries(elements).forEach(([id, handler]) => {
+    const element = document.getElementById(id);
+    if (element) element.addEventListener('click', handler);
+  });
+  
+  // Export & Reports Event Listeners
+  const exportElements = {
+    'export-pdf': exportPDF,
+    'export-excel': exportExcel,
+    'export-csv': exportCSV,
+    'generate-report': generateCustomReport,
+    'send-email-report': sendEmailReport,
+    'view-analytics': viewAnalytics,
+    'setup-schedule': setupScheduledReports
+  };
+
+  Object.entries(exportElements).forEach(([id, handler]) => {
     const element = document.getElementById(id);
     if (element) element.addEventListener('click', handler);
   });
@@ -897,10 +912,361 @@ function showNotification(message, type = 'info') {
   `;
   
   document.body.appendChild(notification);
-  
-  setTimeout(() => {
+    setTimeout(() => {
     if (document.body.contains(notification)) {
       document.body.removeChild(notification);
     }
   }, 3000);
+}
+
+async function createAttendanceSession() {
+  try {
+    const btn = document.getElementById('create-session-btn');
+    const status = document.getElementById('session-status');
+    
+    // Simple session creation - starts now, ends in 2 hours
+    const now = new Date();
+    const endTime = new Date(now.getTime() + (2 * 60 * 60 * 1000)); // 2 hours from now
+    
+    const sessionData = {
+      session_name: `Session ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`,
+      start_time: now.toISOString(),
+      end_time: endTime.toISOString()
+    };
+    
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    status.textContent = 'Creating attendance session...';
+    
+    const response = await fetch('/api/create_session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(sessionData)
+    });
+    
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      status.textContent = `Session active until ${endTime.toLocaleTimeString()}`;
+      showNotification('Attendance session created successfully!', 'success');
+    } else {
+      throw new Error(result.message || 'Failed to create session');
+    }
+    
+  } catch (error) {
+    console.error('Error creating session:', error);
+    document.getElementById('session-status').textContent = 'Error creating session';
+    showNotification('Error creating attendance session', 'error');
+  } finally {
+    const btn = document.getElementById('create-session-btn');
+    btn.disabled = false;
+    btn.textContent = 'Create Attendance Session';
+  }
+}
+
+// Export and reporting functions
+async function exportPDF() {
+  try {
+    showNotification('Generating PDF report...', 'info');
+    const reportType = document.getElementById('report-type').value;
+    const response = await fetch(`/api/export/pdf?type=${reportType}`);
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_report_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showNotification('PDF report downloaded successfully', 'success');
+    } else {
+      throw new Error('Failed to generate PDF report');
+    }
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    showNotification('Error generating PDF report', 'error');
+  }
+}
+
+async function exportExcel() {
+  try {
+    showNotification('Generating Excel report...', 'info');
+    const response = await fetch('/api/export/excel');
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_data_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showNotification('Excel report downloaded successfully', 'success');
+    } else {
+      throw new Error('Failed to generate Excel report');
+    }
+  } catch (error) {
+    console.error('Error exporting Excel:', error);
+    showNotification('Error generating Excel report', 'error');
+  }
+}
+
+async function exportCSV() {
+  try {
+    showNotification('Generating CSV export...', 'info');
+    const response = await fetch('/api/export/csv?type=all');
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.files) {
+        showNotification(`CSV files generated: ${result.files.length} files`, 'success');
+        // For 'all' type, we get info about generated files
+        console.log('Generated CSV files:', result.files);
+      } else {
+        // Single file download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_data_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showNotification('CSV export downloaded successfully', 'success');
+      }
+    } else {
+      throw new Error('Failed to generate CSV export');
+    }
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
+    showNotification('Error generating CSV export', 'error');
+  }
+}
+
+async function generateCustomReport() {
+  try {
+    const reportType = document.getElementById('report-type').value;
+    showNotification(`Generating ${reportType} report...`, 'info');
+    
+    // For now, use PDF export with selected type
+    const response = await fetch(`/api/export/pdf?type=${reportType}`);
+    
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showNotification(`${reportType} report downloaded successfully`, 'success');
+    } else {
+      throw new Error('Failed to generate custom report');
+    }
+  } catch (error) {
+    console.error('Error generating custom report:', error);
+    showNotification('Error generating custom report', 'error');
+  }
+}
+
+async function sendEmailReport() {
+  try {
+    const recipientEmail = document.getElementById('recipient-email').value;
+    const reportType = document.getElementById('email-report-type').value;
+    
+    if (!recipientEmail) {
+      showNotification('Please enter recipient email address', 'error');
+      return;
+    }
+    
+    if (!isValidEmail(recipientEmail)) {
+      showNotification('Please enter a valid email address', 'error');
+      return;
+    }
+    
+    showNotification('Sending email report...', 'info');
+    
+    const response = await fetch('/api/reports/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipient_email: recipientEmail,
+        report_type: reportType
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      showNotification('Email report sent successfully', 'success');
+      document.getElementById('recipient-email').value = ''; // Clear input
+    } else {
+      throw new Error(result.error || 'Failed to send email report');
+    }
+  } catch (error) {
+    console.error('Error sending email report:', error);
+    showNotification('Error sending email report', 'error');
+  }
+}
+
+async function viewAnalytics() {
+  try {
+    showNotification('Loading analytics...', 'info');
+    const response = await fetch('/api/reports/analytics');
+    
+    if (response.ok) {
+      const analytics = await response.json();
+      displayAnalytics(analytics);
+      document.getElementById('analytics-preview').classList.remove('hidden');
+      showNotification('Analytics loaded successfully', 'success');
+    } else {
+      throw new Error('Failed to load analytics');
+    }
+  } catch (error) {
+    console.error('Error loading analytics:', error);
+    showNotification('Error loading analytics', 'error');
+  }
+}
+
+function displayAnalytics(analytics) {
+  const content = document.getElementById('analytics-content');
+  
+  let html = '<h4>Attendance Overview</h4>';
+  html += '<div class="analytics-stats">';
+  
+  // Overview stats
+  const overview = analytics.overview;
+  html += `
+    <div class="analytics-stat">
+      <h4>Total Students</h4>
+      <div class="value">${overview.total_students}</div>
+    </div>
+    <div class="analytics-stat">
+      <h4>Total Sessions</h4>
+      <div class="value">${overview.total_sessions}</div>
+    </div>
+    <div class="analytics-stat">
+      <h4>Total Check-ins</h4>
+      <div class="value">${overview.total_checkins}</div>
+    </div>
+    <div class="analytics-stat">
+      <h4>Active Sessions</h4>
+      <div class="value">${overview.active_sessions}</div>
+    </div>
+  `;
+  
+  html += '</div>';
+  
+  // Course breakdown
+  if (analytics.course_breakdown && Object.keys(analytics.course_breakdown).length > 0) {
+    html += '<h4>Students by Course</h4>';
+    html += '<div class="analytics-stats">';
+    
+    for (const [course, data] of Object.entries(analytics.course_breakdown)) {
+      html += `
+        <div class="analytics-stat">
+          <h4>${course}</h4>
+          <div class="value">${data.students} students</div>
+          <small>${data.checkins} check-ins</small>
+        </div>
+      `;
+    }
+    
+    html += '</div>';
+  }
+  
+  // Top attendance rates
+  if (analytics.attendance_rates && Object.keys(analytics.attendance_rates).length > 0) {
+    html += '<h4>Top Attendance Rates</h4>';
+    html += '<table style="width: 100%; margin-top: 10px;">';
+    html += '<tr><th>Student</th><th>Rate</th><th>Present</th><th>Absent</th></tr>';
+    
+    const sortedRates = Object.entries(analytics.attendance_rates)
+      .sort(([,a], [,b]) => b.rate - a.rate)
+      .slice(0, 10); // Top 10
+    
+    for (const [studentId, data] of sortedRates) {
+      html += `
+        <tr>
+          <td>${data.name}</td>
+          <td>${data.rate}%</td>
+          <td>${data.present}</td>
+          <td>${data.absent}</td>
+        </tr>
+      `;
+    }
+    
+    html += '</table>';
+  }
+  
+  content.innerHTML = html;
+}
+
+async function setupScheduledReports() {
+  try {
+    const email = document.getElementById('schedule-email').value;
+    const frequency = document.getElementById('schedule-frequency').value;
+    const time = document.getElementById('schedule-time').value;
+    
+    if (!email) {
+      showNotification('Please enter recipient email address', 'error');
+      return;
+    }
+    
+    if (!isValidEmail(email)) {
+      showNotification('Please enter a valid email address', 'error');
+      return;
+    }
+    
+    if (!time) {
+      showNotification('Please select a time for scheduled reports', 'error');
+      return;
+    }
+    
+    showNotification('Setting up scheduled reports...', 'info');
+    
+    const response = await fetch('/api/reports/schedule', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        recipient_email: email,
+        frequency: frequency,
+        time: time,
+        report_type: 'pdf'
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok) {
+      showNotification(`Scheduled ${frequency} reports set up successfully`, 'success');
+      // Clear form
+      document.getElementById('schedule-email').value = '';
+      document.getElementById('schedule-time').value = '09:00';
+    } else {
+      throw new Error(result.error || 'Failed to setup scheduled reports');
+    }
+  } catch (error) {
+    console.error('Error setting up scheduled reports:', error);
+    showNotification('Error setting up scheduled reports', 'error');
+  }
+}
+
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
 }
