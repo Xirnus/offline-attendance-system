@@ -72,6 +72,7 @@ TABLES = {
             room_type TEXT NOT NULL,
             building TEXT,
             capacity INTEGER,
+            organizer TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )

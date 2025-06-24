@@ -5,6 +5,7 @@ let deviceFingerprints = [];
 let sessionProfiles = [];
 let lastUpdateTime = 0;
 let loadDataTimeout;
+let classList = [];
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
@@ -134,7 +135,18 @@ function setupEventListeners() {
   }
 }
 
-function showSessionCreationModal() {
+async function showSessionCreationModal() {
+  // Fetch class list for the dropdown
+  if (classList.length === 0) {
+    try {
+      const res = await fetch('/api/classes');
+      const data = await res.json();
+      classList = data.classes || [];
+    } catch (e) {
+      classList = [];
+    }
+  }
+
   const modalHTML = `
     <div id="createSessionModal" style="
       position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
@@ -165,6 +177,10 @@ function showSessionCreationModal() {
               padding: 10px 20px; border: 2px solid #007bff; background: white; 
               color: #007bff; border-radius: 5px; cursor: pointer;
             ">Use Profile</button>
+            <button id="classSessionBtn" onclick="selectSessionType('class')" style="
+              padding: 10px 20px; border: 2px solid #007bff; background: white; 
+              color: #007bff; border-radius: 5px; cursor: pointer;
+            ">Class</button>
           </div>
         </div>
         
@@ -216,6 +232,26 @@ function showSessionCreationModal() {
                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
           </div>
         </div>
+
+        <!-- Class Session Form -->
+        <div id="classSessionForm" style="display: none;">
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Select Class:</label>
+            <select id="classSelect" style="
+              width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;
+            ">
+              <option value="">Choose a class...</option>
+              ${classList.map(cls => `
+                <option value="${cls.table_name}">${escapeHtml(cls.display_name)}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">End Time:</label>
+            <input type="time" id="classEndTime" value="${getDefaultEndTime()}" 
+                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+          </div>
+        </div>
         
         <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
           <button onclick="closeCreateSessionModal()" style="
@@ -232,24 +268,39 @@ function showSessionCreationModal() {
   `;
   
   document.body.insertAdjacentHTML('beforeend', modalHTML);
+  // Default to manual
+  selectSessionType('manual');
 }
 
 function selectSessionType(type) {
   const manualBtn = document.getElementById('manualSessionBtn');
   const profileBtn = document.getElementById('profileSessionBtn');
+  const classBtn = document.getElementById('classSessionBtn');
   const manualForm = document.getElementById('manualSessionForm');
   const profileForm = document.getElementById('profileSessionForm');
+  const classForm = document.getElementById('classSessionForm');
   
   if (type === 'manual') {
     manualBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: #007bff; color: white; border-radius: 5px; cursor: pointer;';
     profileBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
+    classBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
     manualForm.style.display = 'block';
     profileForm.style.display = 'none';
-  } else {
+    classForm.style.display = 'none';
+  } else if (type === 'profile') {
     profileBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: #007bff; color: white; border-radius: 5px; cursor: pointer;';
     manualBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
+    classBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
     profileForm.style.display = 'block';
     manualForm.style.display = 'none';
+    classForm.style.display = 'none';
+  } else if (type === 'class') {
+    classBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: #007bff; color: white; border-radius: 5px; cursor: pointer;';
+    manualBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
+    profileBtn.style.cssText = 'padding: 10px 20px; border: 2px solid #007bff; background: white; color: #007bff; border-radius: 5px; cursor: pointer;';
+    classForm.style.display = 'block';
+    manualForm.style.display = 'none';
+    profileForm.style.display = 'none';
   }
 }
 
@@ -270,9 +321,10 @@ function updateProfilePreview() {
   
   if (profile) {
     profileDetails.innerHTML = `
-      <p><strong>Room:</strong> ${escapeHtml(profile.profile_name)}</p>
+      <p><strong>Session Name:</strong> ${escapeHtml(profile.profile_name)}</p>
+            <p><strong>Organizer:</strong> ${escapeHtml(profile.organizer || 'Not specified')}</p>
       <p><strong>Type:</strong> ${escapeHtml(profile.room_type.replace('-', ' ').toUpperCase())}</p>
-      <p><strong>Building:</strong> ${escapeHtml(profile.building || 'Not specified')}</p>
+      <p><strong>Venue:</strong> ${escapeHtml(profile.building || 'Not specified')}</p>
       <p><strong>Capacity:</strong> ${profile.capacity || 'Not specified'} students</p>
     `;
     profileSessionName.placeholder = `${profile.profile_name} - ${new Date().toLocaleDateString()}`;
@@ -287,63 +339,79 @@ function closeCreateSessionModal() {
 
 async function executeCreateSession() {
   const manualForm = document.getElementById('manualSessionForm');
-  let sessionName, endTime, profileId = null;
-  
+  const profileForm = document.getElementById('profileSessionForm');
+  const classForm = document.getElementById('classSessionForm');
+  let sessionName, endTime, profileId = null, classTable = null;
+
   if (manualForm.style.display !== 'none') {
     // Manual session
     sessionName = document.getElementById('manualSessionName').value;
     endTime = document.getElementById('manualEndTime').value;
-    
     if (!sessionName || !endTime) {
       alert('Please fill in all fields');
       return;
     }
-  } else {
+  } else if (profileForm.style.display !== 'none') {
     // Profile-based session
     const profileSelect = document.getElementById('profileSelect');
     profileId = profileSelect.value;
     sessionName = document.getElementById('profileSessionName').value;
     endTime = document.getElementById('profileEndTime').value;
-    
     if (!profileId || !endTime) {
       alert('Please select a profile and set end time');
       return;
     }
-    
     if (!sessionName) {
       const profile = sessionProfiles.find(p => p.id == profileId);
       sessionName = `${profile.profile_name} - ${new Date().toLocaleDateString()}`;
     }
+  } else if (classForm.style.display !== 'none') {
+    // Class session
+    const classSelect = document.getElementById('classSelect');
+    classTable = classSelect.value;
+    endTime = document.getElementById('classEndTime').value;
+    if (!classTable || !endTime) {
+      alert('Please select a class and set end time');
+      return;
+    }
+    // Find display name for session name
+    const cls = classList.find(c => c.table_name === classTable);
+    sessionName = cls ? cls.display_name : classTable;
   }
-  
+
   // Create end time
   const now = new Date();
   const endDateTime = new Date();
   const [hours, minutes] = endTime.split(':');
   endDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-  
+
   if (endDateTime <= now) {
     endDateTime.setDate(endDateTime.getDate() + 1);
   }
-  
+
   closeCreateSessionModal();
-  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId);
+
+  // Add class_table to request if class session
+  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId, classTable);
 }
 
-function createSession(sessionName, startTime, endTime, profileId = null) {
+function createSession(sessionName, startTime, endTime, profileId = null, classTable = null) {
   const createBtn = document.getElementById('create-session-btn');
-  const originalText = createBtn.textContent;
-  createBtn.disabled = true;
-  createBtn.textContent = 'Creating Session...';
-  
+  const originalText = createBtn ? createBtn.textContent : '';
+  if (createBtn) {
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating Session...';
+  }
+
   const requestBody = {
     session_name: sessionName,
     start_time: startTime,
     end_time: endTime
   };
-  
+
   if (profileId) requestBody.profile_id = parseInt(profileId);
-  
+  if (classTable) requestBody.class_table = classTable;
+
   fetch('/api/create_session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -357,27 +425,36 @@ function createSession(sessionName, startTime, endTime, profileId = null) {
         const profile = sessionProfiles.find(p => p.id == profileId);
         if (profile) message += ` using ${profile.profile_name} profile`;
       }
+      if (classTable) {
+        const cls = classList.find(c => c.table_name === classTable);
+        if (cls) message += ` for class ${cls.display_name}`;
+      }
       showNotification(message, 'success');
-      
+
       const sessionData = {
         session_name: sessionName,
         start_time: startTime,
         end_time: endTime,
-        profile_id: profileId
+        profile_id: profileId,
+        class_table: classTable
       };
       updateButtonVisibility(true, sessionName);
       displaySessionDetails(sessionData);
     } else {
       showNotification('Error creating session: ' + data.message, 'error');
-      createBtn.disabled = false;
-      createBtn.textContent = originalText;
+      if (createBtn) {
+        createBtn.disabled = false;
+        createBtn.textContent = originalText;
+      }
     }
   })
   .catch(error => {
     showNotification('Error creating session', 'error');
     console.error('Error:', error);
-    createBtn.disabled = false;
-    createBtn.textContent = originalText;
+    if (createBtn) {
+      createBtn.disabled = false;
+      createBtn.textContent = originalText;
+    }
   });
 }
 

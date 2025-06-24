@@ -320,62 +320,84 @@ def update_student_attendance(student_id, status):
 
             
 @retry_db_operation()
-def mark_students_absent():
-    """Mark students as absent if they didn't check in during active session"""
+def mark_students_absent(session_id=None, cursor=None):
+    """Mark students as absent if they didn't check in during active session.
+    If class_table is set, only mark students from that class as absent.
+    Otherwise, mark all students as absent if they didn't check in."""
     conn = None
     try:
-        conn = get_db_connection_with_retry()
-        cursor = conn.cursor()
-        
-        # Get active session
-        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1')
-        session = cursor.fetchone()
-        
-        if not session:
-            return 0
-        
-        session_id = session[0]
-        
-        # Get students who haven't checked in for this session
-        cursor.execute('''
-            SELECT student_id FROM students 
-            WHERE student_id NOT IN (
-                SELECT DISTINCT student_id 
-                FROM students 
-                WHERE session_id = ? AND status = 'present'
-            )
-            AND (status IS NULL OR status != 'present')
-        ''', (session_id,))
-        
-        students_to_mark = cursor.fetchall()
-        
-        if not students_to_mark:
-            return 0
-        
-        # Mark students as absent AND increment absent count
-        for (student_id,) in students_to_mark:
-            cursor.execute('''
-                UPDATE students 
-                SET status = 'absent',
-                    absent_count = COALESCE(absent_count, 0) + 1
-                WHERE student_id = ?
-            ''', (student_id,))
-            
-            # Record in attendance history
-            cursor.execute('''
-                INSERT INTO students 
-                (student_id, status, session_id, recorded_at)
-                VALUES (?, 'absent', ?, datetime('now'))
-            ''', (student_id, session_id))
-        
-        absent_count = len(students_to_mark)
-        conn.commit()
-        
+        if cursor is None:
+            conn = get_db_connection_with_retry()
+            cursor = conn.cursor()
+        if session_id is None:
+            cursor.execute('SELECT id, class_table FROM attendance_sessions WHERE is_active = 1')
+            session = cursor.fetchone()
+            if not session:
+                if conn:
+                    conn.close()
+                return 0
+            session_id, class_table = session
+        else:
+            cursor.execute('SELECT class_table FROM attendance_sessions WHERE id = ?', (session_id,))
+            class_table_row = cursor.fetchone()
+            class_table = class_table_row[0] if class_table_row else None
+
+        absent_count = 0
+
+        if class_table:  # Class session: only mark students from that class
+            import sqlite3
+            class_db_conn = sqlite3.connect('classes.db')
+            class_cursor = class_db_conn.cursor()
+            class_cursor.execute(f'SELECT student_id FROM "{class_table}"')
+            class_student_ids = [row[0] for row in class_cursor.fetchall()]
+            class_db_conn.close()
+
+            for student_id in class_student_ids:
+                cursor.execute('''
+                    SELECT 1 FROM attendances WHERE student_id = ? AND session_id = ?
+                ''', (student_id, session_id))
+                checked_in = cursor.fetchone()
+                cursor.execute('SELECT status FROM students WHERE student_id = ?', (student_id,))
+                student_row = cursor.fetchone()
+                status = student_row[0] if student_row else None
+                if not checked_in and (status is None or status != 'present'):
+                    cursor.execute('''
+                        UPDATE students 
+                        SET status = 'absent',
+                            absent_count = COALESCE(absent_count, 0) + 1,
+                            last_session_id = ?
+                        WHERE student_id = ?
+                    ''', (session_id, student_id))
+                    absent_count += 1
+        else:  # Manual/User session: mark all students who didn't check in
+            cursor.execute('SELECT student_id FROM students')
+            all_student_ids = [row[0] for row in cursor.fetchall()]
+            for student_id in all_student_ids:
+                cursor.execute('''
+                    SELECT 1 FROM attendances WHERE student_id = ? AND session_id = ?
+                ''', (student_id, session_id))
+                checked_in = cursor.fetchone()
+                cursor.execute('SELECT status FROM students WHERE student_id = ?', (student_id,))
+                student_row = cursor.fetchone()
+                status = student_row[0] if student_row else None
+                if not checked_in and (status is None or status != 'present'):
+                    cursor.execute('''
+                        UPDATE students 
+                        SET status = 'absent',
+                            absent_count = COALESCE(absent_count, 0) + 1,
+                            last_session_id = ?
+                        WHERE student_id = ?
+                    ''', (session_id, student_id))
+                    absent_count += 1
+
+        if conn:
+            conn.commit()
+            conn.close()
         return absent_count
-        
     except Exception as e:
         if conn:
             conn.rollback()
+            conn.close()
         raise e
     finally:
         if conn:
@@ -399,18 +421,15 @@ def get_active_session():
     except Exception:
         return None
 
-def create_attendance_session(session_name, start_time, end_time, profile_id=None):
-    """Create attendance session, optionally from a profile"""
+def create_attendance_session(session_name, start_time, end_time, profile_id=None, class_table=None):
+    """Create attendance session, optionally from a profile and class_table"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # You might want to add profile_id to your sessions table
         cursor.execute('''
-            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, profile_id, created_at)
-            VALUES (?, ?, ?, 1, ?, datetime('now'))
-        ''', (session_name, start_time, end_time, profile_id))
-        
+            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, profile_id, class_table, created_at)
+            VALUES (?, ?, ?, 1, ?, ?, datetime('now'))
+        ''', (session_name, start_time, end_time, profile_id, class_table))
         conn.commit()
         conn.close()
         return True

@@ -43,9 +43,13 @@ Used by: Direct execution for running the attendance system
 Dependencies: Flask, database modules, network utilities, API blueprints
 """
 
-from flask import Flask, render_template, request, jsonify, current_app
+from flask import Flask, render_template, request, jsonify
+from flask import current_app as app
 from database import init_db, migrate_database
 from utils.network import get_all_network_interfaces
+from sqlalchemy import Table, Column, Integer, String, MetaData
+from sqlalchemy.exc import SQLAlchemyError
+import re
 
 app = Flask(__name__)
 
@@ -76,6 +80,10 @@ def dashboard():
 def sessions():
     return render_template('sessions.html')
 
+@app.route('/class_upload')
+def class_upload():
+    return render_template('class_upload.html')
+
 @app.route('/api/session_profiles/<int:profile_id>', methods=['PUT'])
 def update_session_profile(profile_id):
     try:
@@ -85,6 +93,56 @@ def update_session_profile(profile_id):
         return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/save_class_upload', methods=['POST'])
+def save_class_upload():
+    data = request.get_json()
+    sheet_name = data.get('sheet_name')
+    records = data.get('data')
+
+    # Sanitize table name
+    table_name = re.sub(r'\W|^(?=\d)', '_', sheet_name.lower())
+
+    # Define columns
+    columns = [
+        Column('id', Integer, primary_key=True, autoincrement=True),
+        Column('professor_name', String(128)),
+        Column('room_type', String(64)),
+        Column('venue', String(128)),
+        Column('student_id', String(64)),
+        Column('student_name', String(128)),
+        Column('year_level', String(32)),
+        Column('course', String(64)),
+    ]
+
+    metadata = MetaData(bind=app.db.engine)
+    # Drop table if exists (optional)
+    # if app.db.engine.has_table(table_name):
+    #     Table(table_name, metadata, autoload_with=app.db.engine).drop(app.db.engine)
+
+    # Create table dynamically
+    table = Table(table_name, metadata, *columns)
+    metadata.create_all(app.db.engine, tables=[table])
+
+    # Insert data
+    insert_data = []
+    for row in records:
+        insert_data.append({
+            'professor_name': row.get('Professor Name', ''),
+            'room_type': row.get('Room Type', ''),
+            'venue': row.get('Venue (Building & Room No.)', ''),
+            'student_id': row.get('Student ID', ''),
+            'student_name': row.get('Student Name', ''),
+            'year_level': row.get('Year Level', ''),
+            'course': row.get('Course', ''),
+        })
+
+    try:
+        with app.db.engine.connect() as conn:
+            conn.execute(table.insert(), insert_data)
+        return jsonify({'success': True})
+    except SQLAlchemyError as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting Flask Attendance System")

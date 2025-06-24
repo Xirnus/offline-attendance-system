@@ -1,0 +1,110 @@
+/* Class cards */
+.class-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.class-card-header {
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+}
+
+.class-card-header h3 {
+    margin: 0;
+    color: #343a40;
+}
+
+.toggle-icon {
+    font-size: 14px;
+    margin-left: 10px;
+}
+
+.student-count {
+    background: #6c757d;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+}
+
+.class-card-body {
+    padding: 0;
+    display: none;
+}
+
+/* Student table */
+.student-table-container {
+    overflow-x: auto;
+}
+
+.student-table-container table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.student-table-container th,
+.student-table-container td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.student-table-container th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.student-table-container tr:hover {
+    background-color: #f5f5f5;
+}
+
+/* File requirements */
+.file-requirements {
+    margin-top: 10px;
+    color: #6c757d;
+    font-size: 14px;
+}
+
+/* Delete button styles */
+.delete-table-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    margin-left: 8px;
+    color: #dc3545;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.delete-table-btn:hover {
+    opacity: 1;
+    background-color: rgba(220, 53, 69, 0.1);
+}
+
+.delete-table-btn svg {
+    pointer-events: none;
+}
+
+/* Card header adjustments */
+.card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.student-count {
+    font-size: 0.9em;
+    color: white;
+}
