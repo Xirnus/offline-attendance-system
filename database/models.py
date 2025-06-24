@@ -1,12 +1,12 @@
 """
 Database Models Module for Offline Attendance System
 
-This module defines all database table schemas and handles database initialization, migrations, and structural changes for the SQLite-based attendance tracking system.
+This module defines all database table schemas and handles database initialization
+for the SQLite-based attendance tracking system.
 
 Main Features:
 - Table Definitions: Complete schema definitions for all database tables
 - Database Initialization: Creates tables and sets up initial configuration
-- Migration System: Handles schema changes and column additions
 - Data Integrity: Foreign key relationships and constraints
 - Default Settings: Initializes system configuration values
 
@@ -14,6 +14,7 @@ Database Tables:
 - students: Student information and attendance status
 - student_attendance_history: Historical attendance records per session
 - attendance_sessions: Session management and timing
+- session_profiles: Reusable session templates
 - active_tokens: QR code tokens and validation
 - attendances: Successful attendance check-ins
 - denied_attempts: Failed check-in attempts with reasons
@@ -22,12 +23,6 @@ Database Tables:
 
 Key Functions:
 - create_all_tables(): Initialize complete database schema
-- migrate_tables(): Apply structural changes and updates
-
-Migration System:
-- Automatic column additions for schema evolution
-- Backward compatibility maintenance
-- Safe migration execution with error handling
 
 Used by: Database connection module, initialization scripts
 Dependencies: SQLite3, config settings
@@ -47,20 +42,16 @@ TABLES = {
             last_check_in TEXT,
             status TEXT DEFAULT NULL,
             absent_count INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''',
-    'student_attendance_history': '''
-        CREATE TABLE IF NOT EXISTS student_attendance_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT NOT NULL,
-            status TEXT NOT NULL,
+            present_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             session_id INTEGER,
+            last_session_id INTEGER,
+            total_sessions INTEGER DEFAULT 0,
             recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
             FOREIGN KEY (session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL
         )
     ''',
+    
     'attendance_sessions': '''
         CREATE TABLE IF NOT EXISTS attendance_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,9 +59,24 @@ TABLES = {
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
             is_active BOOLEAN DEFAULT TRUE,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            profile_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (profile_id) REFERENCES session_profiles (id)
         )
     ''',
+    
+    'session_profiles': '''
+        CREATE TABLE IF NOT EXISTS session_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_name TEXT NOT NULL,
+            room_type TEXT NOT NULL,
+            building TEXT,
+            capacity INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''',
+    
     'active_tokens': '''
         CREATE TABLE IF NOT EXISTS active_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +89,7 @@ TABLES = {
             created_at TEXT NOT NULL
         )
     ''',
+    
     'attendances': '''
         CREATE TABLE IF NOT EXISTS attendances (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +105,7 @@ TABLES = {
             device_signature TEXT
         )
     ''',
+    
     'denied_attempts': '''
         CREATE TABLE IF NOT EXISTS denied_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,9 +117,11 @@ TABLES = {
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year TEXT NOT NULL,
-            device_info TEXT
+            device_info TEXT,
+            device_signature TEXT
         )
     ''',
+    
     'device_fingerprints': '''
         CREATE TABLE IF NOT EXISTS device_fingerprints (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +132,7 @@ TABLES = {
             device_info TEXT
         )
     ''',
+    
     'settings': '''
         CREATE TABLE IF NOT EXISTS settings (
             id TEXT PRIMARY KEY,
@@ -133,61 +144,117 @@ TABLES = {
 }
 
 def create_all_tables():
-    """Create all database tables"""
+    """
+    Create all database tables with complete schema.
+    
+    This function initializes the entire database structure including:
+    - All table definitions with proper constraints
+    - Foreign key relationships
+    - Default system settings
+    
+    Returns:
+        bool: True if successful, False if error occurred
+    """
     try:
         conn = sqlite3.connect(Config.DATABASE_PATH)
         cursor = conn.cursor()
         
+        # Enable foreign key constraints
+        cursor.execute('PRAGMA foreign_keys = ON')
+        
+        # Create all tables
         for table_name, query in TABLES.items():
+            print(f"Creating table: {table_name}")
             cursor.execute(query)
         
-        # Insert default settings
+        # Insert default settings if not exists
         cursor.execute('SELECT * FROM settings WHERE id = ?', ('config',))
         if not cursor.fetchone():
+            print("Inserting default settings...")
             cursor.execute('''
                 INSERT INTO settings (id, max_uses_per_device, time_window_minutes, enable_fingerprint_blocking)
                 VALUES (?, ?, ?, ?)
-            ''', ('config', DEFAULT_SETTINGS['max_uses_per_device'], 
-                  DEFAULT_SETTINGS['time_window_minutes'], 
-                  DEFAULT_SETTINGS['enable_fingerprint_blocking']))
+            ''', (
+                'config', 
+                DEFAULT_SETTINGS['max_uses_per_device'], 
+                DEFAULT_SETTINGS['time_window_minutes'], 
+                DEFAULT_SETTINGS['enable_fingerprint_blocking']
+            ))
         
         conn.commit()
         conn.close()
         
-        # Run migrations after table creation
-        migrate_tables()
+        print("Database tables created successfully!")
+        return True
         
     except Exception as e:
         print(f"Database initialization error: {e}")
+        return False
 
-def migrate_tables():
-    """Apply database migrations"""
-    conn = sqlite3.connect(Config.DATABASE_PATH)
-    cursor = conn.cursor()
+def get_table_info(table_name):
+    """
+    Get information about a specific table structure.
     
-    migrations = [
-        ('attendances', 'fingerprint_hash', 'ALTER TABLE attendances ADD COLUMN fingerprint_hash TEXT'),
-        ('denied_attempts', 'fingerprint_hash', 'ALTER TABLE denied_attempts ADD COLUMN fingerprint_hash TEXT'),
-        ('active_tokens', 'fingerprint_hash', 'ALTER TABLE active_tokens ADD COLUMN fingerprint_hash TEXT'),
-        ('active_tokens', 'device_signature', 'ALTER TABLE active_tokens ADD COLUMN device_signature TEXT'),
-        ('attendances', 'device_signature', 'ALTER TABLE attendances ADD COLUMN device_signature TEXT'),
-        ('denied_attempts', 'device_signature', 'ALTER TABLE denied_attempts ADD COLUMN device_signature TEXT'),
-        ('students', 'year', 'ALTER TABLE students ADD COLUMN year TEXT'),
-        ('students', 'last_check_in', 'ALTER TABLE students ADD COLUMN last_check_in TEXT'),
-        ('students', 'status', 'ALTER TABLE students ADD COLUMN status TEXT DEFAULT NULL'),
-        ('students', 'absent_count', 'ALTER TABLE students ADD COLUMN absent_count INTEGER DEFAULT 0'),
-        ('students', 'present_count', 'ALTER TABLE students ADD COLUMN present_count INTEGER DEFAULT 0'),
-        ('attendances', 'student_id', 'ALTER TABLE attendances ADD COLUMN student_id TEXT'),
-    ]
+    Args:
+        table_name (str): Name of the table to inspect
+        
+    Returns:
+        list: List of column information tuples
+    """
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns = cursor.fetchall()
+        
+        conn.close()
+        return columns
+        
+    except Exception as e:
+        print(f"Error getting table info for {table_name}: {e}")
+        return []
+
+def verify_database_integrity():
+    """
+    Verify database integrity and check for any issues.
     
-    for table, column, query in migrations:
-        try:
-            cursor.execute(f"PRAGMA table_info({table})")
-            columns = [col[1] for col in cursor.fetchall()]
-            if column not in columns:
-                cursor.execute(query)
-        except Exception as e:
-            continue  # Skip failed migrations silently
-    
-    conn.commit()
-    conn.close()
+    Returns:
+        dict: Dictionary containing integrity check results
+    """
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Check PRAGMA integrity
+        cursor.execute('PRAGMA integrity_check')
+        integrity_result = cursor.fetchone()[0]
+        
+        # Check foreign key integrity
+        cursor.execute('PRAGMA foreign_key_check')
+        foreign_key_issues = cursor.fetchall()
+        
+        # Get table counts
+        table_counts = {}
+        for table_name in TABLES.keys():
+            cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
+            table_counts[table_name] = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'integrity_ok': integrity_result == 'ok',
+            'integrity_result': integrity_result,
+            'foreign_key_issues': foreign_key_issues,
+            'table_counts': table_counts
+        }
+        
+    except Exception as e:
+        print(f"Error verifying database integrity: {e}")
+        return {
+            'integrity_ok': False,
+            'error': str(e)
+        }
+
+# Export table names for external use
+TABLE_NAMES = list(TABLES.keys())
