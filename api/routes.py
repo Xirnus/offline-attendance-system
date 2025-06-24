@@ -409,25 +409,26 @@ def create_session_profile():
         room_type = data.get('room_type')
         building = data.get('building', '')
         capacity = data.get('capacity', 0)
-        
+        organizer = data.get('organizer', '')  # <-- Add this line
+
         if not all([profile_name, room_type]):
             return jsonify({'error': 'Profile name and room type are required'}), 400
-        
+
         # Insert directly into database since we might not have the helper function yet
         from database.operations import get_db_connection
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute('''
-            INSERT INTO session_profiles (profile_name, room_type, building, capacity, created_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-        ''', (profile_name, room_type, building, capacity))
-        
+            INSERT INTO session_profiles (profile_name, room_type, building, capacity, organizer, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ''', (profile_name, room_type, building, capacity, organizer))  # <-- Add organizer here
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({'status': 'success', 'message': 'Session profile created successfully'})
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

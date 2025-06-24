@@ -255,9 +255,10 @@ function updateProfilePreview() {
   
   if (profile) {
     profileDetails.innerHTML = `
-      <p><strong>Room:</strong> ${escapeHtml(profile.profile_name)}</p>
+      <p><strong>Session Name:</strong> ${escapeHtml(profile.profile_name)}</p>
+            <p><strong>Organizer:</strong> ${escapeHtml(profile.organizer || 'Not specified')}</p>
       <p><strong>Type:</strong> ${escapeHtml(profile.room_type.replace('-', ' ').toUpperCase())}</p>
-      <p><strong>Building:</strong> ${escapeHtml(profile.building || 'Not specified')}</p>
+      <p><strong>Venue:</strong> ${escapeHtml(profile.building || 'Not specified')}</p>
       <p><strong>Capacity:</strong> ${profile.capacity || 'Not specified'} students</p>
     `;
     profileSessionName.placeholder = `${profile.profile_name} - ${new Date().toLocaleDateString()}`;

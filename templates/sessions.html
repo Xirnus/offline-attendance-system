@@ -179,8 +179,8 @@
             <form>
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="profileName">Profile Name</label>
-                        <input type="text" id="profileName"  placeholder="e.g., Room 210">
+                        <label for="profileName">Session Name</label>
+                        <input type="text" id="profileName"  placeholder="Software Engineering, Data Science, etc.">
                     </div>
                     <div class="form-group">
                         <label for="roomType">Room Type</label>
@@ -197,15 +197,20 @@
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="building">Building</label>
-                        <input type="text" id="building" placeholder="e.g., Main Building">
+                        <label for="building">Building & Room No.</label>
+                        <input type="text" id="building" placeholder="e.g., Main Building -  Room 210">
                     </div>
                     <div class="form-group">
                         <label for="capacity">Room Capacity</label>
                         <input type="number" id="capacity" placeholder="Number of students">
                     </div>
                 </div>
-
+                <div class="form-row">
+                    <div class="form-group" style="width: 100%;">
+                        <label for="organizer">Professor / Organizer / Speaker</label>
+                        <input type="text" id="organizer" placeholder="e.g., Dr. Smith, Prof. Lee, Guest Speaker">
+                    </div>
+                </div>
                 <button type="submit" class="btn btn-success">Create Profile</button>
             </form>
         </div>

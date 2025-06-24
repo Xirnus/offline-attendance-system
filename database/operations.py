@@ -320,62 +320,57 @@ def update_student_attendance(student_id, status):
 
             
 @retry_db_operation()
-def mark_students_absent():
+def mark_students_absent(session_id=None, cursor=None):
     """Mark students as absent if they didn't check in during active session"""
     conn = None
     try:
-        conn = get_db_connection_with_retry()
-        cursor = conn.cursor()
-        
-        # Get active session
-        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1')
-        session = cursor.fetchone()
-        
-        if not session:
-            return 0
-        
-        session_id = session[0]
-        
+        # If cursor is not provided, create a new connection/cursor
+        if cursor is None:
+            conn = get_db_connection_with_retry()
+            cursor = conn.cursor()
+        # If session_id is not provided, fetch it
+        if session_id is None:
+            cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1')
+            session = cursor.fetchone()
+            if not session:
+                if conn:
+                    conn.close()
+                return 0
+            session_id = session[0]
         # Get students who haven't checked in for this session
         cursor.execute('''
             SELECT student_id FROM students 
             WHERE student_id NOT IN (
                 SELECT DISTINCT student_id 
-                FROM students 
-                WHERE session_id = ? AND status = 'present'
+                FROM attendances 
+                WHERE session_id = ?
             )
             AND (status IS NULL OR status != 'present')
         ''', (session_id,))
-        
         students_to_mark = cursor.fetchall()
-        
         if not students_to_mark:
+            if conn:
+                conn.close()
             return 0
-        
         # Mark students as absent AND increment absent count
         for (student_id,) in students_to_mark:
             cursor.execute('''
                 UPDATE students 
                 SET status = 'absent',
-                    absent_count = COALESCE(absent_count, 0) + 1
+                    absent_count = COALESCE(absent_count, 0) + 1,
+                    last_session_id = ?
                 WHERE student_id = ?
-            ''', (student_id,))
-            
-            # Record in attendance history
-            cursor.execute('''
-                INSERT INTO students 
-                (student_id, status, session_id, recorded_at)
-                VALUES (?, 'absent', ?, datetime('now'))
-            ''', (student_id, session_id))
-        
+            ''', (session_id, student_id))
+            # Optionally, insert into an attendance history table here if you have one
         absent_count = len(students_to_mark)
-        conn.commit()
-        
+        if conn:
+            conn.commit()
+            conn.close()
         return absent_count
-        
     except Exception as e:
         if conn:
             conn.rollback()
+            conn.close()
         raise e
     finally:
         if conn:

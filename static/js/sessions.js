@@ -27,7 +27,8 @@ async function createSessionProfile() {
     const roomType = document.getElementById('roomType').value;
     const building = document.getElementById('building').value;
     const capacity = document.getElementById('capacity').value;
-    
+    const organizer = document.getElementById('organizer').value; // Directly get the value
+
     if (!profileName || !roomType) {
         alert('Profile name and room type are required');
         return;
@@ -43,7 +44,8 @@ async function createSessionProfile() {
                 profile_name: profileName,
                 room_type: roomType,
                 building: building || '',
-                capacity: parseInt(capacity) || 0
+                capacity: parseInt(capacity) || 0,
+                organizer: organizer || '' // Ensure this is included
             })
         });
         
@@ -52,7 +54,7 @@ async function createSessionProfile() {
         if (response.ok) {
             alert('Session profile created successfully!');
             document.querySelector('.add-profile form').reset();
-            loadSessionProfiles();
+            loadSessionProfiles(); // Reload to show the new profile
         } else {
             alert('Error: ' + (result.error || 'Unknown error'));
         }
@@ -98,12 +100,18 @@ function displayProfiles(profiles) {
             <div class="profile-type">${escapeHtml(profile.room_type.replace('-', ' ').toUpperCase())}</div>
             <div class="profile-details">
                 <div class="detail-item">
-                    <span><strong>Building:</strong></span>
-                    <span>${escapeHtml(profile.building || 'Not specified')}</span>
+                    <span><strong>Venue:</strong></span>
+                    <span>${escapeHtml(
+                        (profile.building ? profile.building : 'Not specified')
+                    )}</span>
                 </div>
                 <div class="detail-item">
                     <span><strong>Capacity:</strong></span>
                     <span>${profile.capacity || 'Not specified'} students</span>
+                </div>
+                <div class="detail-item">
+                    <span><strong>Professor:</strong></span>
+                    <span>${escapeHtml(profile.organizer || 'Not specified')}</span>
                 </div>
                 <div class="detail-item">
                     <span><strong>Created:</strong></span>
@@ -351,7 +359,7 @@ function showEditProfileModal(profile) {
                 
                 <form id="editProfileForm">
                     <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Profile Name *</label>
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Session Name *</label>
                         <input type="text" id="editProfileName" value="${escapeHtml(profile.profile_name)}" required
                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
                     </div>
@@ -373,9 +381,16 @@ function showEditProfileModal(profile) {
                     </div>
                     
                     <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Building</label>
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Building & Room No.</label>
                         <input type="text" id="editBuilding" value="${escapeHtml(profile.building || '')}" 
                                placeholder="e.g., Engineering Building, Science Block"
+                               style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Professor</label>
+                        <input type="text" id="editOrganizer" value="${escapeHtml(profile.organizer || '')}" 
+                               placeholder="e.g., Dr. Smith, Prof. Lee, Guest Speaker"
                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
                     </div>
                     
@@ -432,6 +447,7 @@ async function updateProfile(profileId) {
     const roomType = document.getElementById('editRoomType').value;
     const building = document.getElementById('editBuilding').value.trim();
     const capacity = document.getElementById('editCapacity').value;
+    const organizer = document.getElementById('editOrganizer').value.trim();
     
     if (!profileName || !roomType) {
         alert('Profile name and room type are required');
@@ -448,7 +464,8 @@ async function updateProfile(profileId) {
                 profile_name: profileName,
                 room_type: roomType,
                 building: building || '',
-                capacity: parseInt(capacity) || 0
+                capacity: parseInt(capacity) || 0,
+                organizer: organizer || ''
             })
         });
         
