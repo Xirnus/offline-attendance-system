@@ -26,9 +26,13 @@ Security Features:
 - Session validation and access control
 """
 
+import os
+import sqlite3
 from flask import Blueprint, request, render_template, send_file, jsonify
 import json
 from datetime import datetime
+
+import openpyxl
 from database.operations import (
     get_student_by_id, update_student_attendance, 
     get_active_session, mark_students_absent, create_attendance_session, 
@@ -41,6 +45,7 @@ from services.attendance import is_fingerprint_allowed, store_device_fingerprint
 from services.token import generate_token, validate_token_access
 from services.rate_limiting import is_rate_limited, get_client_ip
 from utils.qr_generator import generate_qr_code, build_qr_url
+from database.class_table_manager import create_class_table, insert_students
 
 api_bp = Blueprint('api', __name__)
 
@@ -341,13 +346,14 @@ def create_session():
         session_name = data.get('session_name')
         start_time = data.get('start_time')
         end_time = data.get('end_time')
-        profile_id = data.get('profile_id')  # New field for profile-based sessions
-        
+        profile_id = data.get('profile_id')
+        class_table = data.get('class_table')  # This can be None
+
         if not all([session_name, start_time, end_time]):
             return jsonify(status='error', message='Missing required fields')
-        
-        # If profile_id is provided, you can store it with the session for reference
-        result = create_attendance_session(session_name, start_time, end_time, profile_id)
+        # class_table can be None for non-class sessions
+
+        result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table)
         if result:
             message = 'Attendance session created'
             if profile_id:
@@ -559,9 +565,9 @@ def get_student(student_id):
             'history_absent_count': absent_from_history,
             'attendance_records_count': attendance_count,
             'last_recorded': last_recorded
-        }
+        };
         
-        return jsonify(student_data)
+        return jsonify(student_data);
         
     except Exception as e:
         print(f"Error getting student {student_id}: {e}")
@@ -678,7 +684,7 @@ def update_student(student_id):
         
         print(f"Rows affected: {rows_affected}")  # Debug log
         
-        conn.commit()
+        conn.commit();
         
         # Verify the update by fetching the student again
         cursor.execute('''
@@ -831,3 +837,282 @@ def update_student_attendance_manual(student_id):
         print(f"Error updating attendance for student {student_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/upload_class_record', methods=['POST'])
+def upload_class_record():
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part in the request'}), 400
+            
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            return jsonify({'error': 'Only Excel files (.xlsx, .xls) are allowed'}), 400
+
+        # Read the Excel file
+        wb = openpyxl.load_workbook(file)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        
+        if len(rows) < 5:  # At least metadata + headers + 1 student
+            return jsonify({'error': 'Invalid file format - not enough rows'}), 400
+
+        # Extract metadata (first few rows)
+        metadata = {}
+        current_header = None
+        
+        for row in rows[:5]:  # Check first 5 rows for metadata
+            if not any(row):  # Skip empty rows
+                continue
+                
+            # Check if this is a metadata header row
+            if row[0] and any(x in str(row[0]).lower() for x in ['professor', 'room', 'venue']):
+                # This is likely a header row for metadata
+                current_header = {
+                    'professor': 0,
+                    'room_type': 1 if len(row) > 1 and 'room type' in str(row[1]).lower() else None,
+                    'venue': 2 if len(row) > 2 and 'venue' in str(row[2]).lower() else None
+                }
+                continue
+                
+            # If we have headers, extract values
+            if current_header:
+                if 'professor' in current_header and row[current_header['professor']]:
+                    metadata['professor'] = str(row[current_header['professor']]).strip()
+                if 'room_type' in current_header and current_header['room_type'] is not None and len(row) > current_header['room_type'] and row[current_header['room_type']]:
+                    metadata['room_type'] = str(row[current_header['room_type']]).strip()
+                if 'venue' in current_header and current_header['venue'] is not None and len(row) > current_header['venue'] and row[current_header['venue']]:
+                    metadata['venue'] = str(row[current_header['venue']]).strip()
+                break
+
+        # Set defaults if not found
+        professor_name = metadata.get('professor', 'Unknown Professor')
+        room_type = metadata.get('room_type', 'Unknown Room Type')
+        venue = metadata.get('venue', 'Unknown Venue')
+
+        # Find the row with student headers
+        student_data_start = None
+        for i, row in enumerate(rows):
+            if row and row[0] and 'student id' in str(row[0]).lower():
+                student_data_start = i
+                break
+                
+        if student_data_start is None:
+            return jsonify({'error': 'Could not find student data headers'}), 400
+
+        # Process headers
+        headers = [str(h).strip().lower().replace(' ', '_') for h in rows[student_data_start]]
+        required_columns = {'student_id', 'student_name', 'year_level', 'course'}
+        
+        # Validate headers
+        missing_columns = required_columns - set(headers)
+        if missing_columns:
+            return jsonify({
+                'error': f'Missing required columns: {", ".join(missing_columns)}. Found columns: {", ".join(headers)}'
+            }), 400
+
+        # Process student data (rows after headers)
+        student_data = []
+        new_students_for_attendance = []  # For attendance.db (only new students)
+        existing_student_ids = set()  # To track existing student IDs in attendance.db
+
+        # First get all existing student IDs from attendance.db
+        try:
+            attendance_conn = sqlite3.connect('attendance.db')
+            attendance_cursor = attendance_conn.cursor()
+            attendance_cursor.execute("SELECT student_id FROM students")
+            existing_student_ids = {row[0] for row in attendance_cursor.fetchall()}
+        except Exception as e:
+            print(f"Warning: Could not check existing students in attendance.db: {str(e)}")
+            existing_student_ids = set()
+        
+        for row in rows[student_data_start+1:]:
+            # Skip empty rows or rows with empty student_id
+            if not row or not row[0] or not str(row[0]).strip():
+                continue
+                
+            student = dict(zip(headers, row))
+            student_id = str(student.get('student_id', '')).strip()
+            
+            student_data.append({
+                'studentId': student_id,
+                'studentName': str(student.get('student_name', '')).strip(),
+                'yearLevel': str(student.get('year_level', '')).strip(),
+                'course': str(student.get('course', '')).strip()
+            })
+            
+            # Only add to attendance.db if student_id doesn't exist
+            if student_id not in existing_student_ids:
+                new_students_for_attendance.append((
+                    student_id,
+                    str(student.get('student_name', '')).strip(),
+                    str(student.get('year_level', '')).strip(),
+                    str(student.get('course', '')).strip()
+                ))
+                existing_student_ids.add(student_id)  # Add to set to prevent duplicates in this batch
+
+        if not student_data:
+            return jsonify({'error': 'No valid student data found in the file'}), 400
+
+        # Create display name from filename (without extension) and professor name
+        file_name = file.filename
+        if file_name.lower().endswith('.xlsx'):
+            file_name = file_name[:-5]
+        elif file_name.lower().endswith('.xls'):
+            file_name = file_name[:-4]
+            
+        # Ensure there's exactly one " - " between filename and professor name
+        file_name = file_name.rstrip(' -')  # Remove any existing dashes or spaces at the end
+        professor_name = professor_name.lstrip(' -')  # Remove any existing dashes or spaces at the start
+        display_name = f"{file_name} - {professor_name}"
+
+        # Create table name (sanitized version for database)
+        # Ensure there's exactly one "_" between filename and professor name in table name
+        sanitized_file_name = file_name.replace(' ', '_').rstrip('_')
+        sanitized_professor = professor_name.replace(' ', '_').lstrip('_')
+        table_name = f"{sanitized_file_name}___{sanitized_professor}"
+        table_name = ''.join(c for c in table_name if c.isalnum() or c == '_')
+
+        # Database operations for classes.db
+        columns = [
+            ('student_id', 'TEXT'),
+            ('student_name', 'TEXT'),
+            ('year_level', 'TEXT'),
+            ('course', 'TEXT')
+        ]
+        
+        create_class_table(table_name, columns, db_path='classes.db')
+        insert_students(table_name, student_data, db_path='classes.db')
+        
+        # Database operations for attendance.db (only for new students)
+        if new_students_for_attendance:
+            try:
+                attendance_conn = sqlite3.connect('attendance.db')
+                attendance_cursor = attendance_conn.cursor()
+                
+                # Insert only new students into attendance.db
+                attendance_cursor.executemany(
+                    "INSERT INTO students (student_id, name, year, course) VALUES (?, ?, ?, ?)",
+                    new_students_for_attendance
+                )
+                
+                attendance_conn.commit()
+                attendance_conn.close()
+                print(f"Added {len(new_students_for_attendance)} new students to attendance.db")
+            except Exception as e:
+                print(f"Warning: Could not insert into attendance.db: {str(e)}")
+                # Continue even if attendance.db insertion fails
+
+        return jsonify({
+            'message': f'Successfully imported {len(student_data)} students',
+            'new_students_added_to_attendance': len(new_students_for_attendance),
+            'display_name': display_name,
+            'professor': professor_name,
+            'room_type': room_type,
+            'venue': venue,
+            'student_data': student_data
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Server error: {str(e)}'
+        }), 500
+@api_bp.route('/api/class_tables', methods=['GET'])
+def get_class_tables():
+    try:
+        db_path = 'classes.db'
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get all user tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        result = []
+        for table in tables:
+            # Get all students from each table
+            cursor.execute(f'SELECT * FROM "{table}"')  # Note the quotes around table name
+            columns = [desc[0] for desc in cursor.description]
+            students = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            # Reconstruct display name from table name
+            display_name = table.replace('_', ' ').replace('-', ' - ')
+            
+            result.append({
+                'table_name': table,
+                'display_name': display_name,
+                'students': students,
+                'can_delete': True  # Flag to indicate deletable tables
+            })
+            
+        conn.close()
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to retrieve class tables: {str(e)}'
+        }), 500
+    
+
+@api_bp.route('/api/delete_class_table', methods=['POST'])
+def delete_class_table():
+    try:
+        data = request.json or {}
+        table_name = data.get('table_name')
+        
+        if not table_name:
+            return jsonify({'error': 'Table name is required'}), 400
+            
+        db_path = 'classes.db'
+        
+        # Connect to the database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check if table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'Table not found'}), 404
+            
+        # Delete the table
+        cursor.execute(f'DROP TABLE "{table_name}"')
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Table {table_name} deleted successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to delete table: {str(e)}'
+        }), 500
+
+@api_bp.route('/api/classes')
+def get_classes():
+    import sqlite3
+    db_path = 'classes.db'
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # Get all user tables (each table is a class)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+    tables = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    # Reconstruct display names (match your upload logic)
+    class_list = []
+    for table in tables:
+        parts = table.split('___')
+        if len(parts) == 2:
+            file_part = parts[0].replace('_', ' ')
+            prof_part = parts[1].replace('_', ' ')
+            display_name = f"{file_part} - {prof_part}"
+        else:
+            display_name = table
+        class_list.append({'table_name': table, 'display_name': display_name})
+    return jsonify({'classes': class_list})
