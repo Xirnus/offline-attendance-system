@@ -1416,7 +1416,6 @@ def get_classes():
         class_list.append({'table_name': table, 'display_name': display_name})
     return jsonify({'classes': class_list})
 
-<<<<<<< HEAD
 # Analytics endpoints
 @api_bp.route('/api/analytics/overview')
 def analytics_overview():
