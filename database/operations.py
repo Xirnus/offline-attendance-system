@@ -207,25 +207,46 @@ def get_all_data(table_name, limit=100):
     return [dict(row) for row in rows]
 
 def insert_students(rows):
-    """Insert students from CSV/Excel data"""
+    """Insert students from CSV/Excel data or manual input"""
     conn = get_db_connection()
     cursor = conn.cursor()
     count = 0
     
     for row in rows:
-        if len(row) >= 4:  # student_id, name, course, year
+        # Handle both list and tuple inputs
+        if isinstance(row, (list, tuple)):
+            row_data = row
+        else:
+            # If it's a dictionary (manual input), convert to list
+            row_data = [
+                row.get('student_id', ''),
+                row.get('name', ''),
+                row.get('course', ''),
+                row.get('year', 1)
+            ]
+        
+        if len(row_data) >= 4:  # student_id, name, course, year
             try:
+                # Extract numeric year if it's a string
+                year_value = row_data[3]
+                if isinstance(year_value, str):
+                    # Handle "1st Year", "2nd Year" format
+                    year_value = ''.join(filter(str.isdigit, year_value))
+                    if not year_value:
+                        year_value = 1
+                
                 cursor.execute('''
                     INSERT OR REPLACE INTO students (student_id, name, course, year)
                     VALUES (?, ?, ?, ?)
                 ''', (
-                    str(row[0]).strip(),  # student_id
-                    str(row[1]).strip(),  # name
-                    str(row[2]).strip(),  # course
-                    int(row[3])           # year
+                    str(row_data[0]).strip(),  # student_id
+                    str(row_data[1]).strip(),  # name
+                    str(row_data[2]).strip(),  # course
+                    int(year_value)            # year
                 ))
                 count += 1
-            except Exception:
+            except Exception as e:
+                print(f"Error inserting student: {e}")
                 continue
     
     conn.commit()

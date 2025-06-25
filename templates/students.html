@@ -6,6 +6,44 @@
     <script src="/static/js/students.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
+<!-- Add Student Modal -->
+<div id="addStudentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3 style="margin: 0;">Add New Student</h3>
+            <button id="closeAddModal" style="border: none; background: #ccc; border-radius: 50%; width: 30px; height: 30px; cursor: pointer;">×</button>
+        </div>
+        <form id="addStudentForm">
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Student ID *</label>
+                <input type="text" id="newStudentId" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name *</label>
+                <input type="text" id="newStudentName" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Course *</label>
+                <input type="text" id="newStudentCourse" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Year *</label>
+                <select id="newStudentYear" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                    <option value="">Select year</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
+                    <option value="5">5th Year</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" id="cancelAddStudent" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
+                <button type="submit" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Add Student</button>
+            </div>
+        </form>
+    </div>
+</div>
 <body>
     <header>
         <nav>
@@ -21,6 +59,7 @@
     <div>
         <button id="import-csv">Import CSV/Excel</button>
         <button id="clear-table">Clear All Students</button>
+        <button id="add-student">Add Student</button>
         <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
     </div>
 

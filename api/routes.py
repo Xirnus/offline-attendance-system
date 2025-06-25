@@ -46,7 +46,7 @@ from services.attendance import is_fingerprint_allowed, store_device_fingerprint
 from services.token import generate_token, validate_token_access
 from services.rate_limiting import is_rate_limited, get_client_ip
 from utils.qr_generator import generate_qr_code, build_qr_url
-from database.class_table_manager import create_class_table, insert_students
+from database.class_table_manager import create_class_table, insert_students as insert_class_students
 
 api_bp = Blueprint('api', __name__)
 
@@ -1170,7 +1170,7 @@ def upload_class_record():
         ]
         
         create_class_table(table_name, columns, db_path='classes.db')
-        insert_students(table_name, student_data, db_path='classes.db')
+        insert_class_students(table_name, student_data, db_path='classes.db')
         
         # Database operations for attendance.db (only for new students)
         if new_students_for_attendance:
@@ -1303,3 +1303,26 @@ def get_classes():
         class_list.append({'table_name': table, 'display_name': display_name})
     return jsonify({'classes': class_list})
 
+@api_bp.route('/api/add_student', methods=['POST'])
+def add_single_student():
+    try:
+        data = request.json
+        student_id = data.get('student_id', '').strip()
+        name = data.get('name', '').strip()
+        course = data.get('course', '').strip()
+        year = data.get('year', 1)
+        
+        if not all([student_id, name, course]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Use the correct insert_students function
+        from database.operations import insert_students
+        count = insert_students([[student_id, name, course, year]])
+        
+        if count == 1:
+            return jsonify({'message': 'Student added successfully'})
+        else:
+            return jsonify({'error': 'Failed to add student'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
