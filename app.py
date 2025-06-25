@@ -84,6 +84,10 @@ def sessions():
 def reports():
     return render_template('reports.html')
 
+@app.route('/analytics')
+def analytics():
+    return render_template('analytics.html')
+
 @app.route('/class_upload')
 def class_upload():
     return render_template('class_upload.html')
