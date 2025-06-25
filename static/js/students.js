@@ -77,6 +77,69 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Add to DOMContentLoaded function
+    const addStudentBtn = document.getElementById('add-student');
+    const addStudentModal = document.getElementById('addStudentModal');
+
+    // Add Student Button Event
+    addStudentBtn.addEventListener('click', () => {
+        addStudentModal.style.display = 'flex';
+    });
+
+    // Close Modal Events
+    document.getElementById('closeAddModal').addEventListener('click', closeAddModal);
+    document.getElementById('cancelAddStudent').addEventListener('click', closeAddModal);
+
+    function closeAddModal() {
+        addStudentModal.style.display = 'none';
+        document.getElementById('addStudentForm').reset();
+    }
+
+    // Form Submission
+    document.getElementById('addStudentForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addNewStudent();
+    });
+
+    function addNewStudent() {
+        const studentId = document.getElementById('newStudentId').value.trim();
+        const name = document.getElementById('newStudentName').value.trim();
+        const course = document.getElementById('newStudentCourse').value.trim();
+        const year = document.getElementById('newStudentYear').value;
+    
+        if (!studentId || !name || !course || !year) {
+            alert('Please fill all required fields');
+            return;
+        }
+    
+        fetch('/api/add_student', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                student_id: studentId,
+                name: name,
+                course: course,
+                year: parseInt(year)
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                alert('Student added successfully!');
+                closeAddModal();
+                loadStudents();
+            }
+        })
+        .catch(error => {
+            console.error('Error adding student:', error);
+            alert('Error adding student: ' + error.message);
+        });
+    }
+
     function formatYear(yearNumber) {
         const yearMap = {
             1: '1st Year',

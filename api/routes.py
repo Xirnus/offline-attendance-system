@@ -31,6 +31,10 @@ import sqlite3
 from flask import Blueprint, request, render_template, send_file, jsonify
 import json
 from datetime import datetime
+import re
+from io import StringIO
+import csv
+import pandas as pd
 
 import openpyxl
 from database.operations import (
@@ -46,7 +50,7 @@ from services.attendance import is_fingerprint_allowed, store_device_fingerprint
 from services.token import generate_token, validate_token_access
 from services.rate_limiting import is_rate_limited, get_client_ip
 from utils.qr_generator import generate_qr_code, build_qr_url
-from database.class_table_manager import create_class_table, insert_students
+from database.class_table_manager import create_class_table, insert_students as insert_class_students
 
 api_bp = Blueprint('api', __name__)
 
@@ -271,84 +275,193 @@ def export_data():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+def normalize_header(name: str) -> str:
+    """
+    Normalize a header name by:
+    - Converting to string
+    - Stripping whitespace
+    - Removing underscores and spaces (and you could remove other non-alphanumerics if desired)
+    - Lowercasing
+    E.g. "School ID" -> "schoolid", "Year_Level" -> "yearlevel"
+    """
+    if name is None:
+        return ""
+    # Keep only alphanumeric characters, or remove underscores/spaces:
+    # Here: remove anything that's not a letter or digit.
+    s = str(name).strip().lower()
+    # Remove spaces and underscores:
+    s = re.sub(r'[\s_]+', '', s)
+    # If you want to also remove other punctuation, you could:
+    # s = re.sub(r'[^a-z0-9]', '', s)
+    return s
+
 @api_bp.route('/upload_students', methods=['POST'])
 def upload_students():
+    """
+    Upload students via Excel (.xlsx/.xls) or CSV.
+    Required columns (case-insensitive, underscore/space-insensitive) are:
+      School_ID, Name, Course, Year_Level
+    """
     try:
-        file = request.files['file']
+        file = request.files.get('file')
         if not file:
-            return jsonify({'error': 'No file provided'})
-        
-        filename = file.filename.lower()
-        
-        if filename.endswith(('.xlsx', '.xls')):
-            import pandas as pd
-            df = pd.read_excel(file)
-            required_columns = ['School_ID', 'Name', 'Course', 'Year_Level']
-            df = df[required_columns] 
-            df.columns = ['student_id', 'name', 'course', 'year'] 
-            # Extract numeric year from strings like "3rd Year", "1st Year", etc.
-            def extract_year(year_str):
-                import re
-                if pd.isna(year_str):
-                    return 1  # Default to 1st year
-                
-                year_str = str(year_str).strip()
-                
-                # Extract number from strings like "3rd Year", "1st Year", "2nd Year"
-                match = re.search(r'(\d+)', year_str)
+            return jsonify({'error': 'No file provided'}), 400
+
+        filename = file.filename or ""
+        filename_lower = filename.lower()
+
+        # Canonical required columns
+        required_columns = ['School_ID', 'Name', 'Course', 'Year_Level']
+        # Build normalized forms for required columns
+        normalized_required = { normalize_header(col): col for col in required_columns }
+        # normalized_required maps e.g. "schoolid" -> "School_ID"
+
+        rows = None
+
+        # --- Excel files ---
+        if filename_lower.endswith(('.xlsx', '.xls')):
+            try:
+                df = pd.read_excel(file)
+            except Exception as e:
+                return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 400
+
+            df_cols = list(df.columns)
+            # Map normalized -> actual column name
+            df_normalized_map = {}
+            for col in df_cols:
+                norm = normalize_header(col)
+                # If duplicate normalized keys appear, first one is kept
+                if norm not in df_normalized_map:
+                    df_normalized_map[norm] = col
+
+            # Check for missing required columns
+            missing = []
+            actual_cols = {}
+            for norm_req, canon in normalized_required.items():
+                if norm_req not in df_normalized_map:
+                    missing.append(canon)
+                else:
+                    actual_cols[canon] = df_normalized_map[norm_req]
+            if missing:
+                return jsonify({
+                    'error': 'Missing required columns in Excel (case-insensitive, underscore/space-insensitive): '
+                             + ', '.join(missing),
+                    'found_columns': df_cols
+                }), 400
+
+            # Extract and rename
+            df_selected = df[
+                [
+                    actual_cols['School_ID'],
+                    actual_cols['Name'],
+                    actual_cols['Course'],
+                    actual_cols['Year_Level']
+                ]
+            ].copy()
+            df_selected.columns = ['student_id', 'name', 'course', 'year_raw']
+
+            # Parse year_raw into integer 1–5, default 1
+            def extract_year(val):
+                if pd.isna(val):
+                    return 1
+                s = str(val).strip()
+                match = re.search(r'(\d+)', s)
                 if match:
-                    year_num = int(match.group(1))
-                    # Validate year range (1-5 for typical college years)
-                    return year_num if 1 <= year_num <= 5 else 1
-                
-                # If no number found, try to parse as direct integer
+                    y = int(match.group(1))
+                    return y if 1 <= y <= 5 else 1
                 try:
-                    return int(float(year_str))
-                except (ValueError, TypeError):
-                    return 1  # Default fallback
-            
-            df['year'] = df['year'].apply(extract_year)
-            rows = df.values.tolist()
-        elif filename.endswith('.csv'):
-            import csv
-            from io import StringIO
-            content = file.read().decode('utf-8')
+                    y2 = int(float(s))
+                    return y2 if 1 <= y2 <= 5 else 1
+                except Exception:
+                    return 1
+
+            df_selected['year'] = df_selected['year_raw'].apply(extract_year)
+            rows = df_selected[['student_id', 'name', 'course', 'year']].values.tolist()
+
+        # --- CSV files ---
+        elif filename_lower.endswith('.csv'):
+            try:
+                content = file.read().decode('utf-8')
+            except Exception as e:
+                return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
+
             reader = csv.reader(StringIO(content))
-            rows = list(reader)
-            if len(rows) > 1:
-                # Process CSV rows to extract year numbers
-                header = rows[0]
-                data_rows = rows[1:]
-                
-                # Find year column index
-                year_col_idx = None
-                for i, col in enumerate(header):
-                    if 'year' in col.lower():
-                        year_col_idx = i
-                        break
-                
-                if year_col_idx is not None:
-                    for row in data_rows:
-                        if len(row) > year_col_idx:
-                            # Extract numeric year from year string
-                            import re
-                            year_str = str(row[year_col_idx]).strip()
-                            match = re.search(r'(\d+)', year_str)
-                            if match:
-                                row[year_col_idx] = int(match.group(1))
-                            else:
-                                row[year_col_idx] = 1  # Default
-                
-                rows = data_rows
-            else:
-                rows = []
-        
+            all_rows = list(reader)
+            if not all_rows or len(all_rows) < 2:
+                return jsonify({'error': 'CSV must have at least header and one data row'}), 400
+
+            header = all_rows[0]
+            # Build normalized header -> index map
+            header_map = {}
+            for idx, col in enumerate(header):
+                norm = normalize_header(col)
+                if norm not in header_map:
+                    header_map[norm] = idx
+
+            # Check required columns
+            missing = []
+            actual_indices = {}
+            for norm_req, canon in normalized_required.items():
+                if norm_req not in header_map:
+                    missing.append(canon)
+                else:
+                    actual_indices[canon] = header_map[norm_req]
+            if missing:
+                return jsonify({
+                    'error': 'Missing required columns in CSV (case-insensitive, underscore/space-insensitive): '
+                             + ', '.join(missing),
+                    'found_columns': header
+                }), 400
+
+            # Process rows
+            processed_rows = []
+            for row in all_rows[1:]:
+                # student_id index
+                idx_id = actual_indices['School_ID']
+                if idx_id >= len(row):
+                    continue
+                student_id_val = row[idx_id].strip()
+                if not student_id_val:
+                    continue
+                # other fields
+                idx_name = actual_indices['Name']
+                idx_course = actual_indices['Course']
+                idx_year = actual_indices['Year_Level']
+
+                name_val = row[idx_name].strip() if idx_name < len(row) else ""
+                course_val = row[idx_course].strip() if idx_course < len(row) else ""
+                year_raw = row[idx_year].strip() if idx_year < len(row) else ""
+
+                match = re.search(r'(\d+)', year_raw)
+                if match:
+                    y = int(match.group(1))
+                    year_int = y if 1 <= y <= 5 else 1
+                else:
+                    try:
+                        y2 = int(float(year_raw))
+                        year_int = y2 if 1 <= y2 <= 5 else 1
+                    except Exception:
+                        year_int = 1
+
+                processed_rows.append([student_id_val, name_val, course_val, year_int])
+
+            rows = processed_rows
+
+        else:
+            return jsonify({'error': 'Unsupported file type. Only .xlsx, .xls, .csv allowed.'}), 400
+
+        if rows is None:
+            return jsonify({'error': 'No rows parsed from file.'}), 400
+
+        # Call existing operations.insert_students; no changes needed there
         from database.operations import insert_students
         count = insert_students(rows)
-        return jsonify({'message': f'Successfully imported {count} students'})
-        
+        return jsonify({'message': f'Successfully imported {count} students'}), 200
+
     except Exception as e:
-        return jsonify({'error': str(e)})
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @api_bp.route('/get_students')
 def get_students():
@@ -1170,7 +1283,7 @@ def upload_class_record():
         ]
         
         create_class_table(table_name, columns, db_path='classes.db')
-        insert_students(table_name, student_data, db_path='classes.db')
+        insert_class_students(table_name, student_data, db_path='classes.db')
         
         # Database operations for attendance.db (only for new students)
         if new_students_for_attendance:
@@ -1303,6 +1416,7 @@ def get_classes():
         class_list.append({'table_name': table, 'display_name': display_name})
     return jsonify({'classes': class_list})
 
+<<<<<<< HEAD
 # Analytics endpoints
 @api_bp.route('/api/analytics/overview')
 def analytics_overview():
@@ -1516,3 +1630,26 @@ def analytics_issues():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/api/add_student', methods=['POST'])
+def add_single_student():
+    try:
+        data = request.json
+        student_id = data.get('student_id', '').strip()
+        name = data.get('name', '').strip()
+        course = data.get('course', '').strip()
+        year = data.get('year', 1)
+        
+        if not all([student_id, name, course]):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Use the correct insert_students function
+        from database.operations import insert_students
+        count = insert_students([[student_id, name, course, year]])
+        
+        if count == 1:
+            return jsonify({'message': 'Student added successfully'})
+        else:
+            return jsonify({'error': 'Failed to add student'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
