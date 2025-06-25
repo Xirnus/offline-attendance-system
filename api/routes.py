@@ -348,23 +348,34 @@ def create_session():
         start_time = data.get('start_time')
         end_time = data.get('end_time')
         profile_id = data.get('profile_id')
-        class_table = data.get('class_table')  # This can be None
+        class_table = data.get('class_table')
+        reset_status = data.get('reset_status', True)  # Default to True
 
         if not all([session_name, start_time, end_time]):
             return jsonify(status='error', message='Missing required fields')
-        # class_table can be None for non-class sessions
+
+        # Reset student status before creating new session if requested
+        if reset_status:
+            from database.operations import get_db_connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE students SET status = NULL')
+            conn.commit()
+            conn.close()
+            print("Reset all student status to null before creating session")
 
         result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table)
         if result:
             message = 'Attendance session created'
             if profile_id:
                 message += ' using session profile'
+            if reset_status:
+                message += '. Student status reset.'
             return jsonify(status='success', message=message)
         else:
             return jsonify(status='error', message='Failed to create session')
     except Exception as e:
         return jsonify(status='error', message=str(e))
-
 
 @api_bp.route('/api/stop_session', methods=['POST'])
 def stop_session():
@@ -1246,3 +1257,4 @@ def get_classes():
             display_name = table
         class_list.append({'table_name': table, 'display_name': display_name})
     return jsonify({'classes': class_list})
+
