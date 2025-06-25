@@ -40,6 +40,7 @@ from .connection import get_db_connection, get_db_connection_with_retry, retry_d
 from config import DEFAULT_SETTINGS
 import time
 from datetime import datetime
+import sqlite3
 
 def row_to_dict(row):
     """Convert sqlite3.Row to dict, return None if row is None"""
@@ -128,8 +129,8 @@ def record_attendance(data):
         
         cursor.execute('''
             INSERT INTO attendances 
-            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature, student_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature, student_id, session_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('token'),
             data.get('fingerprint_hash'),
@@ -140,7 +141,8 @@ def record_attendance(data):
             data.get('year'),
             data.get('device_info'),
             data.get('device_signature'),
-            data.get('student_id')
+            data.get('student_id'),
+            data.get('session_id')
         ))
         
         conn.commit()
@@ -573,4 +575,60 @@ def delete_session_profile(profile_id):
         conn.close()
         return affected_rows > 0
     except Exception as e:
+        return False
+
+def is_device_already_used_in_session(fingerprint_hash, session_id):
+    """Check if a device fingerprint has already been used to check in for a specific session"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) as count 
+            FROM attendances 
+            WHERE fingerprint_hash = ? AND session_id = ?
+        ''', (fingerprint_hash, session_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result['count'] > 0 if result else False
+    except Exception as e:
+        print(f"Error checking device usage in session: {e}")
+        return False
+
+def is_student_in_class(student_id, class_table):
+    """Check if a student is enrolled in a specific class table"""
+    try:
+        # Connect to classes.db
+        conn = sqlite3.connect('classes.db')
+        cursor = conn.cursor()
+        
+        # Check if the table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (class_table,))
+        if not cursor.fetchone():
+            conn.close()
+            return False
+        
+        # Check if student exists in the class table
+        cursor.execute(f'SELECT COUNT(*) as count FROM "{class_table}" WHERE student_id = ?', (student_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] > 0 if result else False
+    except Exception as e:
+        print(f"Error checking student in class: {e}")
+        return False
+
+def is_student_already_checked_in_session(student_id, session_id):
+    """Check if a student has already checked in for a specific session (with any device)"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) as count 
+            FROM attendances 
+            WHERE student_id = ? AND session_id = ?
+        ''', (student_id, session_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result['count'] > 0 if result else False
+    except Exception as e:
+        print(f"Error checking student session attendance: {e}")
         return False

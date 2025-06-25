@@ -799,6 +799,7 @@
     </div>
   </div>
 
+<<<<<<< HEAD
   <script>
     document.getElementById('clear-all-data').addEventListener('click', function() {
       showCustomModal('Clear All Data', 'Are you sure you want to delete all attendance, denied attempts, and device data? This action cannot be undone.', function() {
@@ -819,5 +820,80 @@
       });
     });
   </script>
+=======
+  <!-- Successful Check-ins -->
+  <div>
+    <h2>Successful Check-ins</h2>
+    <button id="refresh-data">Refresh Data</button>
+    <button id="delete-old-data" style="background-color: #dc3545; color: white; border: 1px solid #dc3545; margin-left: 10px;" 
+            onmouseover="this.style.backgroundColor='#c82333'" 
+            onmouseout="this.style.backgroundColor='#dc3545'"
+            title="⚠️ Warning: This will permanently delete ALL attendance data">
+      🗑️ Delete All Data
+    </button>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Name</th>
+          <th>Course</th>
+          <th>Year</th>
+          <th>Device</th>
+          <th>Token</th>
+        </tr>
+      </thead>
+      <tbody id="attendances">
+        <tr>
+          <td colspan="6">Loading attendance data...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Failed Attempts -->
+  <div>
+    <h2>Failed Check-in Attempts</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Name</th>
+          <th>Course</th>
+          <th>Year</th>
+          <th>Reason</th>
+          <th>Token</th>
+        </tr>
+      </thead>
+      <tbody id="denied-attendances">
+        <tr>
+          <td colspan="6">No failed attempts</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Device Fingerprints -->
+  <div>
+    <h2>Device Tracking</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Device ID</th>
+          <th>First Seen</th>
+          <th>Last Seen</th>
+          <th>Usage Count</th>
+          <th>Device Info</th>
+        </tr>
+      </thead>
+      <tbody id="device-fingerprints">
+        <tr>
+          <td colspan="5">No device data available</td>
+        </tr>
+      </tbody>
+  </div>  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  
+>>>>>>> 76684a7e83464f742ceca0d5eafb2756f3a4b5c3
 </body>
 </html>

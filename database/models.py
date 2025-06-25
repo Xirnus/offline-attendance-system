@@ -120,6 +120,8 @@ TABLES = {
             created_at TEXT NOT NULL,
             reason TEXT NOT NULL,
             name TEXT NOT NULL,
+            course TEXT NOT NULL,
+            year TEXT NOT NULL,
             device_info TEXT,
             device_signature TEXT
         )
