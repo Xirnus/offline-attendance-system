@@ -64,9 +64,9 @@ except Exception as e:
     exit(1)
 
 # Define your template routes BEFORE app.run()
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
 
 @app.route('/students')
 def students():
