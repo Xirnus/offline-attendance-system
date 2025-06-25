@@ -28,7 +28,8 @@
         <a href="/dashboard">Dashboard</a> |
         <a href="/students">Students</a> |
         <a href="/sessions">Sessions</a> |
-        <a href="/class_upload">Class Upload</a>
+        <a href="/reports">Courses</a> |
+        <a href="/class_upload">Classes</a>
     </nav>
 </header>
   <h1>Attendance Dashboard</h1>
@@ -52,61 +53,8 @@
       <strong id="recent-activity">0</strong><br>
       Last Hour
     </div>
-    <div class="stat-box">
-      <strong id="total-students">0</strong><br>
-      Total Students
-    </div>
-    <div class="stat-box">
-      <strong id="total-sessions">0</strong><br>
-      Total Sessions
-    </div>
-    <div class="stat-box">
-      <strong id="active-sessions">0</strong><br>
-      Active Sessions
-    </div>
-    <div class="stat-box">
-      <strong id="avg-attendance-rate">0%</strong><br>
-      Average Attendance Rate
-    </div>
   </div>
-   <!-- Combined Attendance Charts Container -->
-  <div id="combinedChartsContainer" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px;">
-    <!-- Attendance Pie Chart -->
-    <div id="attendancePieChartContainer" style="flex: 1 1 300px; max-width: 300px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance by Course</h2>
-      <canvas id="attendancePieChart" style="width: 100%; height: 100%;"></canvas>
-    </div>
-
-    <!-- Attendance Trends Line Graph -->
-    <div id="attendanceTrendsContainer" style="flex: 1 1 400px; max-width: 400px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance Trends Over Time</h2>
-      <canvas id="attendanceTrendsChart" style="width: 100%; height: 100%;"></canvas>
-    </div>
-
-    <!-- Attendance Status Stacked Bar Chart -->
-    <div id="attendanceStatusContainer" style="flex: 1 1 400px; max-width: 400px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance Status Breakdown</h2>
-      <canvas id="attendanceStatusChart" style="width: 100%; height: 100%;"></canvas>
-    </div>
-
-    <!-- Heatmap -->
-    <div id="heatmapContainer" style="flex: 1 1 400px; max-width: 400px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance Heatmap</h2>
-      <canvas id="attendanceHeatmap" style="width: 100%; height: 100%;"></canvas>
-    </div>
-
-    <!-- Calendar View / Time Series Plot -->
-    <div id="calendarViewContainer" style="flex: 1 1 400px; max-width: 400px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance Calendar View</h2>
-      <canvas id="attendanceCalendarView" style="width: 100%; height: 100%;"></canvas>
-    </div>
-
-    <!-- Scatter Plot -->
-    <div id="scatterPlotContainer" style="flex: 1 1 400px; max-width: 400px; height: 300px; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
-      <h2>Attendance vs Grades Scatter Plot</h2>
-      <canvas id="attendanceScatterPlot" style="width: 100%; height: 100%;"></canvas>
-    </div>
-  </div>
+  
   
   <div class="session-control">
       <button id="create-session-btn" class="btn btn-primary" style="display: inline-block;">Create Attendance Session</button>
@@ -193,19 +141,6 @@
           <td colspan="5">No device data available</td>
         </tr>
       </tbody>
-  </div>
-  
- 
-
-  <!-- Navigation Buttons Below Charts -->
-  <div style="margin: 40px 0 20px 0; text-align: center;">
-    <a href="/reports" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 0 10px;">📊 Reports & Exports</a>
-    <a href="/students" style="display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; margin: 0 10px;">👥 Students</a>
-    <a href="/sessions" style="display: inline-block; padding: 10px 20px; background-color: #17a2b8; color: white; text-decoration: none; border-radius: 5px; margin: 0 10px;">📋 Sessions</a>
-  </div>
-  
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  
+    </table>  </div>
 </body>
 </html>
