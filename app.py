@@ -53,15 +53,24 @@ import re
 
 app = Flask(__name__)
 
-# Register API blueprint
+# Register all route blueprints
 try:
-    from api.routes import api_bp
-    app.register_blueprint(api_bp)
+    from api.routes_new import register_routes
+    register_routes(app)
+    print("All route blueprints registered successfully")
 except Exception as e:
-    print(f"ERROR importing/registering api_bp: {e}")
+    print(f"ERROR importing/registering route blueprints: {e}")
     import traceback
     traceback.print_exc()
-    exit(1)
+    # Fallback to original routes if new structure fails
+    try:
+        print("Falling back to original routes structure...")
+        from api.old_routes import api_bp
+        app.register_blueprint(api_bp)
+        print("Original routes structure loaded successfully")
+    except Exception as e2:
+        print(f"ERROR with fallback routes: {e2}")
+        exit(1)
 
 # Define your template routes BEFORE app.run()
 @app.route('/')

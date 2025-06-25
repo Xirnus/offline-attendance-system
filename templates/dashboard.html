@@ -96,6 +96,12 @@
   <div>
     <h2>Successful Check-ins</h2>
     <button id="refresh-data">Refresh Data</button>
+    <button id="delete-old-data" style="background-color: #dc3545; color: white; border: 1px solid #dc3545; margin-left: 10px;" 
+            onmouseover="this.style.backgroundColor='#c82333'" 
+            onmouseout="this.style.backgroundColor='#dc3545'"
+            title="⚠️ Warning: This will permanently delete ALL attendance data">
+      🗑️ Delete All Data
+    </button>
     <table>
       <thead>
         <tr>
@@ -123,6 +129,8 @@
         <tr>
           <th>Time</th>
           <th>Name</th>
+          <th>Course</th>
+          <th>Year</th>
           <th>Reason</th>
           <th>Token</th>
         </tr>

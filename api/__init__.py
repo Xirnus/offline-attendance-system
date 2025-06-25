@@ -5,7 +5,7 @@ def create_app():
     app = Flask(__name__)
     
     # Register API routes
-    from .routes import api_bp
+    from .old_routes import api_bp
     app.register_blueprint(api_bp)
     
     return app

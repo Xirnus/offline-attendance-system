@@ -89,7 +89,8 @@ function setupEventListeners() {
   const elements = {
     'generate-btn': generateQR,
     'save-settings': saveSettings,
-    'refresh-data': loadData
+    'refresh-data': loadData,
+    'delete-old-data': deleteAllData
   };
   Object.entries(elements).forEach(([id, handler]) => {
     const element = document.getElementById(id);
@@ -676,6 +677,69 @@ async function saveSettings() {
   }
 }
 
+// Delete all dashboard data
+async function deleteAllData() {
+  // Show confirmation dialog with detailed warning
+  const confirmMessage = `⚠️ WARNING: This will permanently delete ALL data from the dashboard including:
+
+• All successful check-ins (attendances)
+• All failed check-in attempts (denied attempts) 
+• All device fingerprint records
+
+This action CANNOT be undone!
+
+Are you absolutely sure you want to proceed?`;
+
+  if (!confirm(confirmMessage)) {
+    return; // User cancelled
+  }
+
+  // Show second confirmation
+  if (!confirm('Last chance! This will delete ALL attendance data. Continue?')) {
+    return; // User cancelled
+  }
+
+  try {
+    // Show loading notification
+    showNotification('Deleting all data...', 'info');
+    
+    const response = await fetch('/api/delete_all_data', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      }
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.status === 'success') {
+      // Show success message with details
+      const counts = result.deleted_counts;
+      const successMessage = `✅ Successfully deleted all data:
+      
+• ${counts.attendances} attendance records
+• ${counts.denied_attempts} failed attempts  
+• ${counts.device_fingerprints} device records
+
+${result.message}`;
+
+      showNotification(successMessage, 'success');
+      
+      // Refresh the data to show empty tables
+      setTimeout(() => {
+        loadData();
+      }, 1000);
+      
+    } else {
+      throw new Error(result.message || 'Unknown error occurred');
+    }
+    
+  } catch (error) {
+    console.error('Error deleting data:', error);
+    showNotification(`❌ Failed to delete data: ${error.message}`, 'error');
+  }
+}
+
 function showDetailedDeviceInfo(deviceInfoStr) {
   try {
     if (!deviceInfoStr) return;
@@ -917,7 +981,13 @@ function escapeHtml(text) {
 
 function showNotification(message, type = 'info') {
   const notification = document.createElement('div');
-  notification.textContent = message;
+  
+  // Handle multiline messages
+  if (message.includes('\n')) {
+    notification.innerHTML = message.replace(/\n/g, '<br>');
+  } else {
+    notification.textContent = message;
+  }
   
   const colors = {
     success: '#28a745',
@@ -927,9 +997,11 @@ function showNotification(message, type = 'info') {
   };
   
   notification.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 10px 20px;
-    border-radius: 4px; color: white; z-index: 1000; font-weight: bold;
+    position: fixed; top: 20px; right: 20px; padding: 15px 20px;
+    border-radius: 8px; color: white; z-index: 1000; font-weight: bold;
     background-color: ${colors[type] || colors.default};
+    max-width: 400px; line-height: 1.4; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    border: 2px solid ${colors[type] || colors.default};
   `;
   
   document.body.appendChild(notification);
