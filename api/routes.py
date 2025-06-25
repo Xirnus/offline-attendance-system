@@ -283,7 +283,7 @@ def upload_students():
         if filename.endswith(('.xlsx', '.xls')):
             import pandas as pd
             df = pd.read_excel(file)
-            required_columns = ['School_ID', 'Name', 'Course', 'Year_Level']
+            required_columns = ['Student_ID', 'Name', 'Course', 'Year_Level']
             df = df[required_columns] 
             df.columns = ['student_id', 'name', 'course', 'year'] 
             # Extract numeric year from strings like "3rd Year", "1st Year", etc.
