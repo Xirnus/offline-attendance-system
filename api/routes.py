@@ -1312,8 +1312,8 @@ def analytics_overview():
         from services.reports import reports_service
         
         students = get_all_students()
-        attendances = get_all_data('attendances')
-        sessions = get_all_data('attendance_sessions')
+        attendances = get_all_data('attendances', limit=10000)  # Get all attendance records
+        sessions = get_all_data('attendance_sessions', limit=1000)  # Get all sessions
         
         # Calculate metrics
         total_students = len(students)
