@@ -2,85 +2,341 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title>Students</title>
+    <title>Students - ComSci Attendance System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 200px;
+            background: #28156E;
+            color: white;
+            padding: 20px 0;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 0 20px;
+        }
+        
+        .logo img {
+            width: 144px;
+            height: 144px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+        
+        .logo h3 {
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-item {
+            margin: 0;
+        }
+        
+        .nav-link {
+            display: block;
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 8px 15px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border-radius: 25px;
+            background: #ffc107;
+            color: #333;
+            text-align: center;
+            border: 4px solid transparent;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background: #ffc107;
+            color: #333;
+            border: 4px solid white;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 0;
+        }
+        
+        /* Header */
+        .header {
+            background: #ffc107;
+            color: #333;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .header-actions button {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+            transition: background 0.3s ease;
+        }
+        
+        .header-actions button:hover {
+            background: rgba(0,0,0,0.1);
+        }
+        
+        /* Content Area */
+        .content {
+            padding: 30px 0;
+            max-width: none;
+        }
+        
+        .actions-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #ffc107;
+            color: #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary:hover {
+            background: #e0a800;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        }
+        
+        .btn-secondary {
+            background: #28156E;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-secondary:hover {
+            background: #1e0f52;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        }
+        
+        /* Table Section */
+        .table-section {
+            background: white;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            text-align: left;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            border-right: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        th:last-child, td:last-child {
+            border-right: none;
+        }
+        
+        td {
+            padding: 12px;
+            background: white;
+            font-size: 14px;
+        }
+        
+        tr:hover td {
+            background: #f8f9fa;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+    </style>
     <script src="/static/js/students.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
-<!-- Add Student Modal -->
-<div id="addStudentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background: white; padding: 30px; border-radius: 10px; width: 90%; max-width: 500px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h3 style="margin: 0;">Add New Student</h3>
-            <button id="closeAddModal" style="border: none; background: #ccc; border-radius: 50%; width: 30px; height: 30px; cursor: pointer;">×</button>
-        </div>
-        <form id="addStudentForm">
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Student ID *</label>
-                <input type="text" id="newStudentId" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
-            </div>
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name *</label>
-                <input type="text" id="newStudentName" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
-            </div>
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Course *</label>
-                <input type="text" id="newStudentCourse" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
-            </div>
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Year *</label>
-                <select id="newStudentYear" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
-                    <option value="">Select year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
-                    <option value="5">5th Year</option>
-                </select>
-            </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                <button type="button" id="cancelAddStudent" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
-                <button type="submit" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Add Student</button>
-            </div>
-        </form>
-    </div>
-</div>
 <body>
-    <header>
-        <nav>
-            <a href="/dashboard">Dashboard</a> |
-            <a href="/students">Students</a> |
-            <a href="/sessions">Sessions</a> |
-            <a href="/analytics">Analytics</a> |
-            <a href="/reports">Reports</a> |
-            <a href="/class_upload">Classes</a>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <img src="/static/images/perps.png" alt="Logo" />
+                <h3>ComSci Attendance System</h3>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/students" class="nav-link active">Students</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/sessions" class="nav-link">Sessions</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/analytics" class="nav-link">Analytics</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/reports" class="nav-link">Reports</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/class_upload" class="nav-link">Classes</a>
+                </li>
+            </ul>
         </nav>
-    </header>
-    <h1>Students Dashboard</h1>
-    
-    <div>
-        <button id="import-csv">Import CSV/Excel</button>
-        <button id="clear-table">Clear All Students</button>
-        <button id="add-student">Add Student</button>
-        <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <h1>Students Dashboard</h1>
+                <div class="header-actions">
+                    <button>🔔</button>
+                    <button>⚙️</button>
+                    <button>❌</button>
+                </div>
+            </header>
+
+            <!-- Content -->
+            <div class="content">
+                <!-- Actions Bar -->
+                <div class="actions-bar" style="padding: 0 30px;">
+                    <button id="import-csv" class="btn btn-primary">Import CSV/Excel</button>
+                    <button id="clear-table" class="btn btn-danger">Clear All Students</button>
+                    <button id="add-student" class="btn btn-primary">Add Students</button>
+                    <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
+                </div>
+
+                <!-- Students Table -->
+                <div class="table-section">
+                    <table id="student-table">
+                        <thead>
+                            <tr>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Student ID</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Name</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Year</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Status</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Last Check-in</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Presents</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Absents</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Actions</th>
+                                <th style="background: #ffc107; color: #333; padding: 12px; font-weight: 600;">Attendance Ratio</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <!-- Rows will be added here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <table id="student-table">
-        <thead>
-            <tr>
-                <th>Student ID</th>
-                <th>Name</th>
-                <th>Student Year</th>
-                <th>Status</th>
-                <th>Last Check-in</th>
-                <th>Presents</th>
-                <th>Absents</th>
-                <th>Attendance Ratio</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="table-body">
-            <!-- Rows will be added here dynamically -->
-        </tbody>
-    </table>
+    <!-- Add Student Modal -->
+    <div id="addStudentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(40, 21, 110, 0.8); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 500px; border: 3px solid #28156E;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 style="margin: 0; color: #28156E;">Add New Student</h3>
+                <button id="closeAddModal" style="border: none; background: #28156E; color: white; border-radius: 50%; width: 30px; height: 30px; cursor: pointer;">×</button>
+            </div>
+            <form id="addStudentForm">
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Student ID *</label>
+                    <input type="text" id="newStudentId" required style="width: 100%; padding: 10px 15px; border: 2px solid #28156E; border-radius: 20px; outline: none;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Name *</label>
+                    <input type="text" id="newStudentName" required style="width: 100%; padding: 10px 15px; border: 2px solid #28156E; border-radius: 20px; outline: none;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Course *</label>
+                    <input type="text" id="newStudentCourse" required style="width: 100%; padding: 10px 15px; border: 2px solid #28156E; border-radius: 20px; outline: none;">
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Year *</label>
+                    <select id="newStudentYear" required style="width: 100%; padding: 10px 15px; border: 2px solid #28156E; border-radius: 20px; outline: none;">
+                        <option value="">Select year</option>
+                        <option value="1">1st Year</option>
+                        <option value="2">2nd Year</option>
+                        <option value="3">3rd Year</option>
+                        <option value="4">4th Year</option>
+                        <option value="5">5th Year</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 15px; justify-content: center;">
+                    <button type="button" id="cancelAddStudent" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Student</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>

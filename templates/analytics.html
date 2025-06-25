@@ -6,357 +6,522 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        .header {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
-        }
-        
-        .navigation {
-            margin-bottom: 20px;
-        }
-        
-        .nav-link {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-right: 10px;
-            background-color: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-        
-        .nav-link:hover {
-            background-color: #0056b3;
+            min-height: 100vh;
+            color: #333;
         }
         
         .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
+            display: flex;
+            min-height: 100vh;
         }
         
+        /* Sidebar */
+        .sidebar {
+            width: 200px;
+            background: #28156E;
+            color: white;
+            padding: 20px 0;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 0 20px;
+        }
+        
+        .logo img {
+            width: 144px;
+            height: 144px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+        
+        .logo h3 {
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-item {
+            margin: 0;
+        }
+        
+        .nav-link {
+            display: block;
+            color: white;
+            text-decoration: none;
+            padding: 12px 20px;
+            margin: 8px 15px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border-radius: 25px;
+            background: #ffc107;
+            color: #333;
+            text-align: center;
+            border: 4px solid transparent;
+        }
+        
+        .nav-link:hover, .nav-link.active {
+            background: #ffc107;
+            color: #333;
+            border: 4px solid white;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 0;
+        }
+        
+        /* Header */
+        .header {
+            background: #ffc107;
+            color: #333;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            font-size: 14px;
+            margin: 5px 0 0 0;
+            opacity: 0.8;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .header-actions button {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 4px;
+            transition: background 0.3s ease;
+        }
+        
+        .header-actions button:hover {
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* Content Area */
+        .content {
+            padding: 30px;
+            max-width: 1400px;
+        }
+
+        /* Page-specific styles for analytics */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid #28156E;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #28156E;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid #28156E;
+        }
+
+        .chart-title {
+            color: #28156E;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ffc107;
+            padding-bottom: 8px;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 24px;
+            margin-bottom: 30px;
+        }
+
+        .controls-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid #28156E;
+        }
+
+        .controls-title {
+            color: #28156E;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-control {
+            padding: 8px 12px;
+            border: 2px solid #28156E;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: #ffc107;
+            color: #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary:hover {
+            background: #e0a800;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+        }
+
         .card {
             background: white;
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid #28156E;
         }
-        
-        .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-        }
-        
+
         .card h2 {
-            margin-top: 0;
-            color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-            font-size: 1.4em;
+            color: #28156E;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ffc107;
+            padding-bottom: 8px;
         }
-        
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+        }
+
         .full-width {
             grid-column: 1 / -1;
         }
-        
-        .chart-container {
+
+        .chart-canvas-container {
             position: relative;
             height: 300px;
             margin-top: 20px;
         }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        
-        .stat-item {
-            text-align: center;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-        }
-        
-        .stat-item h4 {
-            margin: 0 0 5px 0;
-            color: #666;
-            font-size: 0.9em;
-        }
-        
-        .stat-item .value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #007bff;
-        }
-        
-        .btn {
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            margin: 8px 5px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        
-        .form-control {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #333;
-        }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
         }
-        
+
         th, td {
-            border: 1px solid #e0e0e0;
-            padding: 8px 12px;
+            border: 1px solid #f1f3f4;
+            padding: 12px;
             text-align: left;
         }
-        
+
         th {
-            background-color: #f8f9fa;
-            font-weight: 600;
+            background: #ffc107;
             color: #333;
+            font-weight: 600;
         }
-        
+
         .loading {
             text-align: center;
             padding: 20px;
             color: #666;
         }
-        
-        .loading-spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #007bff;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
+
         .trend-up {
             color: #28a745;
         }
-        
+
         .trend-down {
             color: #dc3545;
         }
-        
+
         .trend-neutral {
             color: #6c757d;
         }
-        
+
         @media (max-width: 768px) {
             .container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+            }
+            
+            .chart-grid, .analytics-grid {
                 grid-template-columns: 1fr;
             }
             
-            .header h1 {
-                font-size: 2em;
-            }
-            
-            body {
-                padding: 10px;
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 Analytics Dashboard</h1>
-        <p>Comprehensive attendance analytics, trends, and insights</p>
-    </div>
-    
-    <div class="navigation">
-        <a href="/dashboard" class="nav-link">🏠 Dashboard</a>
-        <a href="/students" class="nav-link">👥 Students</a>
-        <a href="/sessions" class="nav-link">📋 Sessions</a>
-        <a href="/analytics" class="nav-link">📊 Analytics</a>
-        <a href="/reports" class="nav-link">📄 Reports</a>
-        <a href="/class_upload" class="nav-link">📚 Classes</a>
-    </div>
-    
     <div class="container">
-        <!-- Overview Stats -->
-        <div class="card full-width">
-            <h2>📈 Overview Statistics</h2>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <h4>Total Students</h4>
-                    <div class="value" id="total-students">-</div>
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/perps.png') }}" alt="Logo" />
+                <h3>ComSci Attendance System</h3>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/students" class="nav-link">Students</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/sessions" class="nav-link">Sessions</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/analytics" class="nav-link active">Analytics</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/reports" class="nav-link">Reports</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/class_upload" class="nav-link">Classes</a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div>
+                    <h1>Analytics Dashboard</h1>
+                    <p>Comprehensive insights into attendance patterns and trends</p>
                 </div>
-                <div class="stat-item">
-                    <h4>Average Attendance</h4>
-                    <div class="value" id="avg-attendance">-</div>
+                <div class="header-actions">
+                    <button>🔔</button>
+                    <button>⚙️</button>
+                    <button>❌</button>
                 </div>
-                <div class="stat-item">
-                    <h4>Active Courses</h4>
-                    <div class="value" id="active-courses">-</div>
+            </header>
+
+            <!-- Content -->
+            <div class="content">
+                <!-- Overview Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-students">-</div>
+                        <div class="stat-label">Total Students</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avg-attendance">-</div>
+                        <div class="stat-label">Average Attendance</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="active-courses">-</div>
+                        <div class="stat-label">Active Courses</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="weekly-trend">-</div>
+                        <div class="stat-label">This Week's Trend</div>
+                    </div>
                 </div>
-                <div class="stat-item">
-                    <h4>This Week's Trend</h4>
-                    <div class="value" id="weekly-trend">-</div>
+
+                <!-- Analytics Grid -->
+                <div class="analytics-grid">
+                    <!-- Attendance Trends -->
+                    <div class="card full-width">
+                        <h2>📊 Attendance Trends</h2>
+                        <div class="form-group">
+                            <label for="trend-period">Time Period:</label>
+                            <select id="trend-period" class="form-control" style="width: 200px; display: inline-block;">
+                                <option value="weekly">Last 4 Weeks</option>
+                                <option value="monthly">Last 6 Months</option>
+                                <option value="daily">Last 30 Days</option>
+                            </select>
+                            <button id="refresh-trends" class="btn btn-primary">Refresh Trends</button>
+                        </div>
+                        <div class="chart-canvas-container">
+                            <canvas id="trendsChart"></canvas>
+                            <button id="refresh-trends-graph" class="btn btn-primary" style="position:absolute;top:10px;right:10px;z-index:2;">⟳</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Late Arrival Stats -->
+                    <div class="card">
+                        <h2>⏰ Late Arrival Analysis</h2>
+                        <div class="stats-grid" style="margin-bottom: 20px;">
+                            <div class="stat-card" style="border: 1px solid #f1f3f4; margin: 0;">
+                                <div class="stat-value" style="font-size: 1.5em;" id="late-today">-</div>
+                                <div class="stat-label" style="font-size: 0.8em;">Late Students Today</div>
+                            </div>
+                            <div class="stat-card" style="border: 1px solid #f1f3f4; margin: 0;">
+                                <div class="stat-value" style="font-size: 1.5em;" id="avg-late-time">-</div>
+                                <div class="stat-label" style="font-size: 0.8em;">Average Late Time</div>
+                            </div>
+                        </div>
+                        <div class="chart-canvas-container">
+                            <canvas id="lateChart"></canvas>
+                            <button id="refresh-late-graph" class="btn btn-primary" style="position:absolute;top:10px;right:10px;z-index:2;">⟳</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Course Comparison -->
+                    <div class="card">
+                        <h2>🎓 Course Comparison</h2>
+                        <button id="refresh-courses" class="btn btn-primary">Refresh Data</button>
+                        <div class="chart-canvas-container">
+                            <canvas id="courseChart"></canvas>
+                            <button id="refresh-course-graph" class="btn btn-primary" style="position:absolute;top:10px;right:10px;z-index:2;">⟳</button>
+                        </div>
+                        <div id="course-details" class="loading">
+                            <p>Loading course data...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Weekly Patterns -->
+                    <div class="card">
+                        <h2>📅 Weekly Attendance Patterns</h2>
+                        <div class="chart-canvas-container">
+                            <canvas id="weeklyChart"></canvas>
+                            <button id="refresh-weekly-graph" class="btn btn-primary" style="position:absolute;top:10px;right:10px;z-index:2;">⟳</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Top Performers -->
+                    <div class="card">
+                        <h2>🏆 Top Performers
+                            <button id="refresh-top-performers-table" class="btn btn-primary" style="float:right;margin-left:10px;">⟳</button>
+                        </h2>
+                        <table id="top-performers-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Student</th>
+                                    <th>Course</th>
+                                    <th>Attendance Rate</th>
+                                    <th>Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="loading">Loading top performers...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Attendance Issues -->
+                    <div class="card">
+                        <h2>⚠️ Attendance Issues
+                            <button id="refresh-issues-table" class="btn btn-primary" style="float:right;margin-left:10px;">⟳</button>
+                        </h2>
+                        <table id="issues-table">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Course</th>
+                                    <th>Issue Type</th>
+                                    <th>Severity</th>
+                                    <th>Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5" class="loading">Analyzing attendance issues...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Attendance Trends -->
-        <div class="card full-width">
-            <h2>📊 Attendance Trends</h2>
-            <div class="form-group">
-                <label for="trend-period">Time Period:</label>
-                <select id="trend-period" class="form-control" style="width: 200px; display: inline-block;">
-                    <option value="weekly">Last 4 Weeks</option>
-                    <option value="monthly">Last 6 Months</option>
-                    <option value="daily">Last 30 Days</option>
-                </select>
-                <button id="refresh-trends" class="btn">Refresh Trends</button>
-            </div>
-            <div class="chart-container">
-                <canvas id="trendsChart"></canvas>
-            </div>
-        </div>
-        
-        <!-- Late Arrival Stats -->
-        <div class="card">
-            <h2>⏰ Late Arrival Analysis</h2>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <h4>Late Students Today</h4>
-                    <div class="value" id="late-today">-</div>
-                </div>
-                <div class="stat-item">
-                    <h4>Average Late Time</h4>
-                    <div class="value" id="avg-late-time">-</div>
-                </div>
-                <div class="stat-item">
-                    <h4>Chronic Late Students</h4>
-                    <div class="value" id="chronic-late">-</div>
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="lateChart"></canvas>
-            </div>
-        </div>
-        
-        <!-- Course Comparison -->
-        <div class="card">
-            <h2>🎓 Course Comparison</h2>
-            <button id="refresh-courses" class="btn">Refresh Data</button>
-            <div class="chart-container">
-                <canvas id="courseChart"></canvas>
-            </div>
-            <div id="course-details" class="loading">
-                <div class="loading-spinner"></div>
-                <p>Loading course data...</p>
-            </div>
-        </div>
-        
-        <!-- Weekly Patterns -->
-        <div class="card">
-            <h2>📅 Weekly Attendance Patterns</h2>
-            <div class="chart-container">
-                <canvas id="weeklyChart"></canvas>
-            </div>
-        </div>
-        
-        <!-- Top Performers -->
-        <div class="card">
-            <h2>🏆 Top Performers</h2>
-            <table id="top-performers-table">
-                <thead>
-                    <tr>
-                        <th>Rank</th>
-                        <th>Student</th>
-                        <th>Course</th>
-                        <th>Attendance Rate</th>
-                        <th>Trend</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="5" class="loading">Loading top performers...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- Attendance Issues -->
-        <div class="card">
-            <h2>⚠️ Attendance Issues</h2>
-            <table id="issues-table">
-                <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Course</th>
-                        <th>Issue Type</th>
-                        <th>Severity</th>
-                        <th>Last Seen</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="5" class="loading">Analyzing attendance issues...</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+        </main>
     </div>
     
     <script src="{{ url_for('static', filename='js/analytics.js') }}"></script>

@@ -124,8 +124,8 @@
     
     /* Content Area */
     .content {
-      padding: 30px;
-      max-width: 1200px;
+      padding: 30px 0;
+      max-width: none;
     }
     
     /* Main Grid Container */
@@ -133,7 +133,7 @@
       display: grid;
       grid-template-columns: 400px 1fr;
       gap: 30px;
-      margin-bottom: 30px;
+      margin: 0 30px 30px 30px;
       align-items: stretch;
     }
 
@@ -576,6 +576,31 @@
   </style>
 
   <script src="static/js/dashboard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var clearBtn = document.getElementById('clear-all-data');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+          showCustomModal('Clear All Data', 'Are you sure you want to delete all attendance, denied attempts, and device data? This action cannot be undone.', function() {
+            fetch('/api/clear_all_data', { method: 'POST' })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  showNotification('All data cleared successfully.', 'success');
+                  document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+                  document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+                  document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+                } else {
+                  showNotification('Failed to clear data.', 'error');
+                }
+              })
+              .catch(() => showNotification('Failed to clear data.', 'error'));
+          });
+        });
+      }
+    });
+  </script>
 </head>
 <body>
   <div class="container">
@@ -689,6 +714,7 @@
             <div style="display: flex; align-items: center; gap: 15px;">
               <h3>Successful Check-ins</h3>
               <button id="refresh-data" class="btn btn-refresh">Refresh</button>
+              <button id="clear-all-data" class="btn btn-danger" style="margin-left: 10px;">Clear All Data</button>
             </div>
           </div>
           <table>
@@ -773,6 +799,25 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    document.getElementById('clear-all-data').addEventListener('click', function() {
+      showCustomModal('Clear All Data', 'Are you sure you want to delete all attendance, denied attempts, and device data? This action cannot be undone.', function() {
+        fetch('/api/clear_all_data', { method: 'POST' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              showNotification('All data cleared successfully.', 'success');
+              // Optionally refresh tables
+              document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+              document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+              document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+            } else {
+              showNotification('Failed to clear data.', 'error');
+            }
+          })
+          .catch(() => showNotification('Failed to clear data.', 'error'));
+      });
+    });
+  </script>
 </body>
 </html>

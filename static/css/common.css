@@ -1,0 +1,231 @@
+/* Common Layout Styles for All Pages */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body { 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  color: #333;
+}
+
+.container {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 200px;
+  background: #28156E;
+  color: white;
+  padding: 20px 0;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 0 20px;
+}
+
+.logo img {
+  width: 144px;
+  height: 144px;
+  border-radius: 50%;
+  margin-bottom: 10px;
+}
+
+.logo h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nav-menu {
+  list-style: none;
+}
+
+.nav-item {
+  margin: 0;
+}
+
+.nav-link {
+  display: block;
+  color: white;
+  text-decoration: none;
+  padding: 12px 20px;
+  margin: 8px 15px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border-radius: 25px;
+  background: #ffc107;
+  color: #333;
+  text-align: center;
+  border: 4px solid transparent;
+}
+
+.nav-link:hover, .nav-link.active {
+  background: #ffc107;
+  color: #333;
+  border: 4px solid white;
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  background: #f8f9fa;
+  padding: 0;
+}
+
+/* Header */
+.header {
+  background: #ffc107;
+  color: #333;
+  padding: 15px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.header-actions button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+.header-actions button:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+/* Content Area */
+.content {
+  padding: 30px;
+  max-width: 1200px;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 25px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #ffc107;
+  color: #333;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-primary:hover {
+  background: #e0a800;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+}
+
+.btn-secondary {
+  background: #28156E;
+  color: white;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-secondary:hover {
+  background: #1e0f52;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-danger:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+th {
+  background: #ffc107;
+  color: #333;
+  padding: 12px 15px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+td {
+  padding: 12px 15px;
+  border-bottom: 1px solid #f1f3f4;
+  font-size: 14px;
+}
+
+tr:hover td {
+  background: #f8f9fa;
+}
+
+/* Form Elements */
+input, select, textarea {
+  padding: 10px 15px;
+  border: 2px solid #28156E;
+  border-radius: 20px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.3s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #ffc107;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+  }
+  
+  .content {
+    padding: 20px;
+  }
+}

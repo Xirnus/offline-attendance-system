@@ -4,138 +4,436 @@
   <title>Reports & Exports - Attendance System</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+    
+    .container {
+      display: flex;
+      min-height: 100vh;
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      width: 200px;
+      background: #28156E;
+      color: white;
+      padding: 20px 0;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+    
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+      padding: 0 20px;
+    }
+    
+    .logo img {
+      width: 144px;
+      height: 144px;
+      border-radius: 50%;
+      margin-bottom: 10px;
+    }
+    
+    .logo h3 {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    
+    .nav-menu {
+      list-style: none;
+    }
+    
+    .nav-item {
+      margin: 0;
+    }
+    
+    .nav-link {
+      display: block;
+      color: white;
+      text-decoration: none;
+      padding: 12px 20px;
+      margin: 8px 15px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      border-radius: 25px;
+      background: #ffc107;
+      color: #333;
+      text-align: center;
+      border: 4px solid transparent;
+    }
+    
+    .nav-link:hover, .nav-link.active {
+      background: #ffc107;
+      color: #333;
+      border: 4px solid white;
+    }
+    
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      background: #f8f9fa;
+      padding: 0;
+    }
+    
+    /* Header */
+    .header {
+      background: #ffc107;
+      color: #333;
+      padding: 15px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .header p {
+      font-size: 14px;
+      margin: 5px 0 0 0;
+      opacity: 0.8;
+    }
+
+    /* Content Area */
+    .content {
+      padding: 30px;
+      max-width: 1200px;
+    }
+
+    /* Page-specific styles */
+    .section-card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border: 2px solid #28156E;
+    }
+
+    .section-title {
+      color: #28156E;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #ffc107;
+      padding-bottom: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid #28156E;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 20px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: inline-block;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+
+    .btn-primary {
+      background: #ffc107;
+      color: #333;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    .btn-primary:hover {
+      background: #e0a800;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+    }
+
+    .btn-secondary {
+      background: #28156E;
+      color: white;
+      border: 2px solid #28156E;
+    }
+
+    .btn-secondary:hover {
+      background: #1e0f52;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-2, .grid-3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .status-message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 16px;
+      font-weight: 500;
+    }
+
+    .status-success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status-error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status-info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+  </style>
 </head>
 <body>
-  <h1>Reports & Exports</h1>
-  <p>Generate comprehensive reports, export data, and manage automated reporting</p>
-  
-<header>
-    <nav>
-        <a href="/dashboard">Dashboard</a> |
-        <a href="/students">Students</a> |
-        <a href="/sessions">Sessions</a> |
-        <a href="/analytics">Analytics</a> |
-        <a href="/reports">Reports</a> |
-        <a href="/class_upload">Classes</a>
-    </nav>
-</header>
-  
-  <!-- Quick Export Section -->
-  <section>
-    <h2>Quick Export</h2>
-    <p>Generate and download reports instantly</p>
-    
-    <label for="report-type">Report Type:</label>
-    <select id="report-type">
-      <option value="comprehensive">Comprehensive Report</option>
-      <option value="summary">Summary Report</option>
-      <option value="detailed">Detailed Report</option>
-    </select>
-    
-    <button id="export-pdf">Export PDF Report</button>
-    <button id="export-excel">Export Excel</button>
-    <button id="export-csv">Export CSV</button>
-  </section>
-  
-  <!-- Email Reports Section -->
-  <section>
-    <h2>Email Reports</h2>
-    <p>Send reports directly to email addresses</p>
-    
-    <label for="recipient-email">Recipient Email:</label>
-    <input type="email" id="recipient-email" placeholder="Enter recipient email">
-    
-    <label for="email-report-type">Report Format:</label>
-    <select id="email-report-type">
-      <option value="pdf">PDF Report</option>
-      <option value="excel">Excel Report</option>
-      <option value="csv">CSV Data</option>
-    </select>
-    
-    <button id="send-email-report">Send Email Report</button>
-  </section>
-  
-  <!-- Analytics Section -->
-  <section>
-    <h2>Analytics Dashboard</h2>
-    <p>View comprehensive attendance analytics and insights</p>
-    
-    <button id="view-analytics">View Analytics</button>
-    <button id="refresh-analytics">Refresh Data</button>
-    
-    <div id="analytics-preview" hidden>
-      <div id="analytics-loading">
-        <p>Loading analytics...</p>
+  <div class="container">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="logo">
+        <img src="{{ url_for('static', filename='images/perps.png') }}" alt="Logo" />
+        <h3>ComSci Attendance System</h3>
       </div>
-      <div id="analytics-content"></div>
-    </div>
-  </section>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <a href="/dashboard" class="nav-link">Dashboard</a>
+        </li>
+        <li class="nav-item">
+          <a href="/students" class="nav-link">Students</a>
+        </li>
+        <li class="nav-item">
+          <a href="/sessions" class="nav-link">Sessions</a>
+        </li>
+        <li class="nav-item">
+          <a href="/analytics" class="nav-link">Analytics</a>
+        </li>
+        <li class="nav-item">
+          <a href="/reports" class="nav-link active">Reports</a>
+        </li>
+        <li class="nav-item">
+          <a href="/class_upload" class="nav-link">Classes</a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="header">
+        <div>
+          <h1>Reports & Exports</h1>
+          <p>Generate comprehensive reports, export data, and manage automated reporting</p>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <div class="content">
   
-  <!-- Scheduled Reports Section -->
-  <section>
-    <h2>Scheduled Reports</h2>
-    <p>Set up automated report delivery</p>
-    
-    <label for="schedule-email">Recipient Email:</label>
-    <input type="email" id="schedule-email" placeholder="Enter recipient email">
-    
-    <label for="schedule-frequency">Frequency:</label>
-    <select id="schedule-frequency">
-      <option value="daily">Daily</option>
-      <option value="weekly">Weekly</option>
-      <option value="monthly">Monthly</option>
-    </select>
-    
-    <label for="schedule-time">Delivery Time:</label>
-    <input type="time" id="schedule-time" value="09:00">
-    
-    <label for="schedule-report-type">Report Type:</label>
-    <select id="schedule-report-type">
-      <option value="pdf">PDF Report</option>
-      <option value="excel">Excel Report</option>
-      <option value="csv">CSV Data</option>
-    </select>
-    
-    <button id="setup-schedule">Schedule Reports</button>
-    <button id="view-schedules">View Active Schedules</button>
-  </section>
+        <!-- Quick Export Section -->
+        <div class="section-card">
+          <h2 class="section-title">Quick Export</h2>
+          <p>Generate and download reports instantly</p>
+          
+          <div class="form-group">
+            <label for="report-type">Report Type:</label>
+            <select id="report-type" class="form-control">
+              <option value="comprehensive">Comprehensive Report</option>
+              <option value="summary">Summary Report</option>
+              <option value="detailed">Detailed Report</option>
+            </select>
+          </div>
+          
+          <div>
+            <button id="export-pdf" class="btn btn-primary">Export PDF Report</button>
+            <button id="export-excel" class="btn btn-primary">Export Excel</button>
+            <button id="export-csv" class="btn btn-primary">Export CSV</button>
+          </div>
+        </div>
   
-  <!-- Advanced Export Options -->
-  <section>
-    <h2>Advanced Options</h2>
-    <p>Custom export settings and data management</p>
-    
-    <label for="date-range-start">Start Date:</label>
-    <input type="date" id="date-range-start">
-    
-    <label for="date-range-end">End Date:</label>
-    <input type="date" id="date-range-end">
-    
-    <label for="export-format">Export Format:</label>
-    <select id="export-format">
-      <option value="all">All Data</option>
-      <option value="students">Students Only</option>
-      <option value="attendance">Attendance Records</option>
-      <option value="sessions">Sessions Only</option>
-    </select>
-    
-    <button id="export-custom">Custom Export</button>
-    <button id="export-json">Export JSON</button>
-  </section>
+        <!-- Email Reports Section -->
+        <div class="section-card">
+          <h2 class="section-title">Email Reports</h2>
+          <p>Send reports directly to email addresses</p>
+          
+          <div class="form-group">
+            <label for="recipient-email">Recipient Email:</label>
+            <input type="email" id="recipient-email" class="form-control" placeholder="Enter recipient email">
+          </div>
+          
+          <div class="form-group">
+            <label for="email-report-type">Report Format:</label>
+            <select id="email-report-type" class="form-control">
+              <option value="pdf">PDF Report</option>
+              <option value="excel">Excel Report</option>
+              <option value="csv">CSV Data</option>
+            </select>
+          </div>
+          
+          <button id="send-email-report" class="btn btn-primary">Send Email Report</button>
+        </div>
   
-  <!-- Data Management Section -->
-  <section>
-    <h2>Data Management</h2>
-    <p>Manage and maintain your attendance data</p>
-    
-    <button id="backup-data">Backup All Data</button>
-    <button id="clear-old-data">Clear Old Data</button>
-    <button id="verify-data">Verify Data Integrity</button>
-    
-    <label for="cleanup-days">Clear data older than (days):</label>
-    <input type="number" id="cleanup-days" value="90" min="1" max="365">
-  </section>
+        <!-- Analytics Section -->
+        <div class="section-card">
+          <h2 class="section-title">Analytics Dashboard</h2>
+          <p>View comprehensive attendance analytics and insights</p>
+          
+          <div>
+            <button id="view-analytics" class="btn btn-secondary">View Analytics</button>
+            <button id="refresh-analytics" class="btn btn-primary">Refresh Data</button>
+          </div>
+          
+          <div id="analytics-preview" hidden>
+            <div id="analytics-loading">
+              <p>Loading analytics...</p>
+            </div>
+            <div id="analytics-content"></div>
+          </div>
+        </div>
   
+        <!-- Scheduled Reports Section -->
+        <div class="section-card">
+          <h2 class="section-title">Scheduled Reports</h2>
+          <p>Set up automated report delivery</p>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="schedule-email">Recipient Email:</label>
+              <input type="email" id="schedule-email" class="form-control" placeholder="Enter recipient email">
+            </div>
+            
+            <div class="form-group">
+              <label for="schedule-frequency">Frequency:</label>
+              <select id="schedule-frequency" class="form-control">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="schedule-time">Delivery Time:</label>
+              <input type="time" id="schedule-time" class="form-control" value="09:00">
+            </div>
+            
+            <div class="form-group">
+              <label for="schedule-report-type">Report Type:</label>
+              <select id="schedule-report-type" class="form-control">
+                <option value="pdf">PDF Report</option>
+                <option value="excel">Excel Report</option>
+                <option value="csv">CSV Data</option>
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <button id="setup-schedule" class="btn btn-primary">Schedule Reports</button>
+            <button id="view-schedules" class="btn btn-secondary">View Active Schedules</button>
+          </div>
+        </div>
+  
+        <!-- Advanced Export Options -->
+        <div class="section-card">
+          <h2 class="section-title">Advanced Options</h2>
+          <p>Custom export settings and data management</p>
+          
+          <div class="grid-2">
+            <div class="form-group">
+              <label for="date-range-start">Start Date:</label>
+              <input type="date" id="date-range-start" class="form-control">
+            </div>
+            
+            <div class="form-group">
+              <label for="date-range-end">End Date:</label>
+              <input type="date" id="date-range-end" class="form-control">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="export-format">Export Format:</label>
+            <select id="export-format" class="form-control">
+              <option value="all">All Data</option>
+              <option value="students">Students Only</option>
+              <option value="attendance">Attendance Records</option>
+              <option value="sessions">Sessions Only</option>
+            </select>
+          </div>
+          
+          <div>
+            <button id="export-custom" class="btn btn-primary">Custom Export</button>
+            <button id="export-json" class="btn btn-secondary">Export JSON</button>
+          </div>
+        </div>
+  
+        <!-- Data Management Section -->
+        <div class="section-card">
+          <h2 class="section-title">Data Management</h2>
+          <p>Manage and maintain your attendance data</p>
+          
+          <div>
+            <button id="backup-data" class="btn btn-primary">Backup All Data</button>
+            <button id="clear-old-data" class="btn btn-secondary">Clear Old Data</button>
+            <button id="verify-data" class="btn btn-secondary">Verify Data Integrity</button>
+          </div>
+          
+          <div class="form-group">
+            <label for="cleanup-days">Clear data older than (days):</label>
+            <input type="number" id="cleanup-days" class="form-control" value="90" min="1" max="365" style="width: 200px;">
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
   <script src="/static/js/reports.js"></script>
 </body>
 </html>

@@ -12,6 +12,18 @@ function setupEventListeners() {
     document.getElementById('refresh-trends').addEventListener('click', refreshTrends);
     document.getElementById('refresh-courses').addEventListener('click', refreshCourseData);
     document.getElementById('trend-period').addEventListener('change', refreshTrends);
+
+    // New refresh buttons for each graph
+    document.getElementById('refresh-trends-graph').addEventListener('click', refreshTrends);
+    document.getElementById('refresh-late-graph').addEventListener('click', loadLateArrivalData);
+    document.getElementById('refresh-course-graph').addEventListener('click', loadCourseComparison);
+    document.getElementById('refresh-weekly-graph').addEventListener('click', loadWeeklyPatterns);
+    document.getElementById('refresh-top-performers').addEventListener('click', loadTopPerformers);
+    document.getElementById('refresh-issues').addEventListener('click', loadAttendanceIssues);
+
+    // New refresh buttons for tables
+    document.getElementById('refresh-top-performers-table').addEventListener('click', loadTopPerformers);
+    document.getElementById('refresh-issues-table').addEventListener('click', loadAttendanceIssues);
 }
 
 function initializeCharts() {
