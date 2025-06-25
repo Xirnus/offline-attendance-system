@@ -39,6 +39,7 @@ TABLES = {
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year INTEGER NOT NULL,
+            class_table TEXT,
             last_check_in TEXT,
             status TEXT DEFAULT NULL,
             absent_count INTEGER DEFAULT 0,
@@ -60,6 +61,7 @@ TABLES = {
             end_time TEXT NOT NULL,
             is_active BOOLEAN DEFAULT TRUE,
             profile_id INTEGER,
+            class_table TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (profile_id) REFERENCES session_profiles (id)
         )
@@ -103,7 +105,9 @@ TABLES = {
             course TEXT NOT NULL,
             year TEXT NOT NULL,
             device_info TEXT,
-            device_signature TEXT
+            device_signature TEXT,
+            session_id INTEGER,
+            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id)
         )
     ''',
     
