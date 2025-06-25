@@ -80,6 +80,10 @@ def dashboard():
 def sessions():
     return render_template('sessions.html')
 
+@app.route('/reports')
+def reports():
+    return render_template('reports.html')
+
 @app.route('/class_upload')
 def class_upload():
     return render_template('class_upload.html')

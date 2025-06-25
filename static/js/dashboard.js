@@ -98,22 +98,6 @@ function setupEventListeners() {
     if (element) element.addEventListener('click', handler);
   });
   
-  // Export & Reports Event Listeners
-  const exportElements = {
-    'export-pdf': exportPDF,
-    'export-excel': exportExcel,
-    'export-csv': exportCSV,
-    'generate-report': generateCustomReport,
-    'send-email-report': sendEmailReport,
-    'view-analytics': viewAnalytics,
-    'setup-schedule': setupScheduledReports
-  };
-
-  Object.entries(exportElements).forEach(([id, handler]) => {
-    const element = document.getElementById(id);
-    if (element) element.addEventListener('click', handler);
-  });
-  
   // Session event listeners
   const createSessionBtn = document.getElementById('create-session-btn');
   const stopSessionBtn = document.getElementById('stop-session-btn');

@@ -255,5 +255,21 @@ def verify_database_integrity():
             'error': str(e)
         }
 
+def migrate_tables():
+    """Apply database migrations and updates"""
+    try:
+        from .connection import get_db_connection
+        print("Running database migrations...")
+        
+        # For now, just ensure all tables exist
+        create_all_tables()
+        
+        print("Database migrations completed successfully!")
+        return True
+        
+    except Exception as e:
+        print(f"Error during database migration: {e}")
+        return False
+
 # Export table names for external use
 TABLE_NAMES = list(TABLES.keys())
