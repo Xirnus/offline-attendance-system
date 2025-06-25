@@ -745,17 +745,234 @@ function showDeviceModal(content) {
   });
 }
 
-function updateStatistics() {
-  const now = Date.now() / 1000;
-  const oneHourAgo = now - 3600;
+document.addEventListener('DOMContentLoaded', function() {
+  // Wrap updateStatistics to ensure DOM is loaded
+  function updateStatistics() {
+    const now = Date.now() / 1000;
+    const oneHourAgo = now - 3600;
+    
+    const recentActivity = attendanceData.filter(a => a.timestamp > oneHourAgo).length;
+    const uniqueDevices = new Set(attendanceData.map(a => a.fingerprint_hash)).size;
+    
+    document.getElementById('total-attendances').textContent = attendanceData.length;
+    document.getElementById('total-denied').textContent = deniedAttempts.length;
+    document.getElementById('unique-devices').textContent = uniqueDevices;
+    document.getElementById('recent-activity').textContent = recentActivity;
   
-  const recentActivity = attendanceData.filter(a => a.timestamp > oneHourAgo).length;
-  const uniqueDevices = new Set(attendanceData.map(a => a.fingerprint_hash)).size;
+    // Fetch and update attendance analytics
+    fetch('/api/reports/analytics')
+      .then(response => response.json())
+      .then(analytics => {
+        console.log('Analytics data:', analytics);
+        const overview = analytics.overview || {};
+        document.getElementById('total-students').textContent = overview.total_students || 0;
+        document.getElementById('total-sessions').textContent = overview.total_sessions || 0;
+        document.getElementById('active-sessions').textContent = overview.active_sessions || 0;
   
-  document.getElementById('total-attendances').textContent = attendanceData.length;
-  document.getElementById('total-denied').textContent = deniedAttempts.length;
-  document.getElementById('unique-devices').textContent = uniqueDevices;
-  document.getElementById('recent-activity').textContent = recentActivity;
+        // Calculate average attendance rate
+        const totalCheckins = overview.total_checkins || 0;
+        const totalStudents = overview.total_students || 1;
+        const avgRate = totalStudents > 0 ? ((totalCheckins / totalStudents) * 100).toFixed(1) : '0.0';
+        document.getElementById('avg-attendance-rate').textContent = `${avgRate}%`;
+  
+        // Render attendance pie chart for course breakdown
+      if (window.attendancePieChart && typeof window.attendancePieChart.destroy === 'function') {
+        window.attendancePieChart.destroy();
+      }
+  
+      const courseBreakdown = analytics.course_breakdown || {};
+      const labels = Object.keys(courseBreakdown);
+      const data = labels.map(course => courseBreakdown[course].students);
+
+      // Aggregate small categories into "Others"
+      // Aggregate small categories into "Others"
+      const totalStudentsAgg = data.reduce((sum, val) => sum + val, 0);
+      const threshold = totalStudentsAgg * 0.05; // 5% threshold
+      let othersCount = 0;
+      const filteredLabels = [];
+      const filteredData = [];
+
+      for (let i = 0; i < labels.length; i++) {
+        if (data[i] < threshold) {
+          othersCount += data[i];
+        } else {
+          filteredLabels.push(labels[i]);
+          filteredData.push(data[i]);
+        }
+      }
+
+      if (othersCount > 0) {
+        filteredLabels.push('Others');
+        filteredData.push(othersCount);
+      }
+
+      const ctx = document.getElementById('attendancePieChart').getContext('2d');
+      window.attendancePieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: filteredLabels,
+          datasets: [{
+            label: 'Students by Course',
+            data: filteredData,
+            backgroundColor: generateColors(filteredLabels.length),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+            },
+            title: {
+              display: true,
+              text: 'Attendance by Course'
+            }
+          }
+        }
+      });
+
+      // Render Attendance Trends Over Time Line Chart
+      if (window.attendanceTrendsChart && typeof window.attendanceTrendsChart.destroy === 'function') {
+        window.attendanceTrendsChart.destroy();
+      }
+      const trendsCtx = document.getElementById('attendanceTrendsChart').getContext('2d');
+      const trendsData = analytics.attendance_trends || {};
+      const trendLabels = Object.keys(trendsData);
+      const trendValues = trendLabels.map(label => trendsData[label]);
+
+      window.attendanceTrendsChart = new Chart(trendsCtx, {
+        type: 'line',
+        data: {
+          labels: trendLabels,
+          datasets: [{
+            label: 'Attendance Over Time',
+            data: trendValues,
+            fill: false,
+            borderColor: '#36A2EB',
+            backgroundColor: '#36A2EB',
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: 'Time'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Attendance Count'
+              },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            title: {
+              display: true,
+              text: 'Attendance Trends Over Time'
+            }
+          }
+        }
+      });
+
+      // Render Attendance Status Breakdown Stacked Bar Chart
+      if (window.attendanceStatusChart && typeof window.attendanceStatusChart.destroy === 'function') {
+        window.attendanceStatusChart.destroy();
+      }
+      const statusCtx = document.getElementById('attendanceStatusChart').getContext('2d');
+      const statusData = analytics.attendance_status_breakdown || {};
+      const statusLabels = Object.keys(statusData);
+      const presentData = statusLabels.map(label => statusData[label].present || 0);
+      const absentData = statusLabels.map(label => statusData[label].absent || 0);
+      const lateData = statusLabels.map(label => statusData[label].late || 0);
+
+      window.attendanceStatusChart = new Chart(statusCtx, {
+        type: 'bar',
+        data: {
+          labels: statusLabels,
+          datasets: [
+            {
+              label: 'Present',
+              data: presentData,
+              backgroundColor: '#28a745'
+            },
+            {
+              label: 'Absent',
+              data: absentData,
+              backgroundColor: '#dc3545'
+            },
+            {
+              label: 'Late',
+              data: lateData,
+              backgroundColor: '#ffc107'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              title: {
+                display: true,
+                text: 'Status'
+              }
+            },
+            y: {
+              stacked: true,
+              title: {
+                display: true,
+                text: 'Count'
+              },
+              beginAtZero: true
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            title: {
+              display: true,
+              text: 'Attendance Status Breakdown'
+            }
+          }
+        }
+      });
+      })
+      .catch(error => {
+        console.error('Error fetching attendance analytics:', error);
+      });
+  }
+
+  // Call updateStatistics initially and on data load
+  updateStatistics();
+
+  // Expose updateStatistics globally if needed
+  window.updateStatistics = updateStatistics;
+});
+
+// Helper function to generate distinct colors for the chart
+function generateColors(count) {
+  const colors = [
+    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+    '#FF9F40', '#E7E9ED', '#76B041', '#D72631', '#1B998B'
+  ];
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    result.push(colors[i % colors.length]);
+  }
+  return result;
 }
 
 function updateAttendanceTable() {
@@ -1027,32 +1244,215 @@ async function createAttendanceSession() {
   }
 }
 
-// Export and reporting functions
-async function exportPDF() {
-  try {
-    showNotification('Generating PDF report...', 'info');
-    const reportType = document.getElementById('report-type').value;
-    const response = await fetch(`/api/export/pdf?type=${reportType}`);
-    
-    if (response.ok) {
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `attendance_report_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      showNotification('PDF report downloaded successfully', 'success');
-    } else {
-      throw new Error('Failed to generate PDF report');
+  // Export and reporting functions
+  async function exportPDF() {
+    try {
+      showNotification('Generating PDF report...', 'info');
+      const reportType = document.getElementById('report-type').value;
+      const response = await fetch(`/api/export/pdf?type=${reportType}`);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_report_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        showNotification('PDF report downloaded successfully', 'success');
+      } else {
+        throw new Error('Failed to generate PDF report');
+      }
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      showNotification('Error generating PDF report', 'error');
     }
-  } catch (error) {
-    console.error('Error exporting PDF:', error);
-    showNotification('Error generating PDF report', 'error');
   }
-}
+
+  // Render Heatmap Chart (using sample data)
+  function renderHeatmap() {
+    const ctx = document.getElementById('attendanceHeatmap').getContext('2d');
+    // Sample data: days of week vs time slots with random values
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const times = ['8-10am', '10-12pm', '12-2pm', '2-4pm', '4-6pm'];
+    const data = {
+      labels: times,
+      datasets: days.map((day, i) => ({
+        label: day,
+        data: Array(times.length).fill(0).map(() => Math.floor(Math.random() * 10)),
+        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+        borderWidth: 1
+      }))
+    };
+
+    if (window.heatmapChart && typeof window.heatmapChart.destroy === 'function') {
+      window.heatmapChart.destroy();
+    }
+
+    window.heatmapChart = new Chart(ctx, {
+      type: 'bar',
+      data: data,
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Absences'
+            }
+          },
+          y: {
+            stacked: true,
+            title: {
+              display: true,
+              text: 'Time Slots'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          title: {
+            display: true,
+            text: 'Attendance Heatmap (Sample Data)'
+          }
+        }
+      }
+    });
+  }
+
+  // Render Calendar View / Time Series Plot (using sample data)
+  function renderCalendarView() {
+    const ctx = document.getElementById('attendanceCalendarView').getContext('2d');
+    // Sample data: last 7 days attendance counts
+    const labels = [];
+    const dataPoints = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(d.toISOString().slice(0, 10));
+      dataPoints.push(Math.floor(Math.random() * 20));
+    }
+
+    if (window.calendarViewChart && typeof window.calendarViewChart.destroy === 'function') {
+      window.calendarViewChart.destroy();
+    }
+
+    window.calendarViewChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Attendance Count',
+          data: dataPoints,
+          fill: true,
+          borderColor: '#4bc0c0',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Date'
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Attendance'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          title: {
+            display: true,
+            text: 'Attendance Calendar View (Sample Data)'
+          }
+        }
+      }
+    });
+  }
+
+  // Render Scatter Plot (using sample data)
+  function renderScatterPlot() {
+    const ctx = document.getElementById('attendanceScatterPlot').getContext('2d');
+    // Sample data: attendance rate vs grades for 20 students
+    const dataPoints = [];
+    for (let i = 0; i < 20; i++) {
+      dataPoints.push({
+        x: Math.floor(Math.random() * 100), // attendance rate %
+        y: Math.floor(Math.random() * 100)  // grade %
+      });
+    }
+
+    if (window.scatterPlotChart && typeof window.scatterPlotChart.destroy === 'function') {
+      window.scatterPlotChart.destroy();
+    }
+
+    window.scatterPlotChart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Attendance vs Grades',
+          data: dataPoints,
+          backgroundColor: '#9966ff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Attendance Rate (%)'
+            },
+            min: 0,
+            max: 100
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'Grade (%)'
+            },
+            min: 0,
+            max: 100
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          title: {
+            display: true,
+            text: 'Attendance vs Grades Scatter Plot (Sample Data)'
+          }
+        }
+      }
+    });
+  }
+
+  // Call the new render functions on DOMContentLoaded
+  document.addEventListener('DOMContentLoaded', function() {
+    renderHeatmap();
+    renderCalendarView();
+    renderScatterPlot();
+  });
 
 async function exportExcel() {
   try {
