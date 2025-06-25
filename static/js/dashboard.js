@@ -108,9 +108,10 @@ function setupEventListeners() {
   }
   
   if (stopSessionBtn) {
-    stopSessionBtn.addEventListener('click', function(e) {
+    stopSessionBtn.addEventListener('click', async function(e) {
       e.preventDefault();
-      if (confirm('Are you sure you want to stop the current session?')) {
+      const confirmed = await customConfirm('Are you sure you want to stop the current session?', 'Stop Session');
+      if (confirmed) {
         stopSession();
       }
     });
@@ -330,7 +331,7 @@ async function executeCreateSession() {
     sessionName = document.getElementById('manualSessionName').value;
     endTime = document.getElementById('manualEndTime').value;
     if (!sessionName || !endTime) {
-      alert('Please fill in all fields');
+      await customAlert('Please fill in all fields', 'Missing Information');
       return;
     }
   } else if (profileForm.style.display !== 'none') {
@@ -340,7 +341,7 @@ async function executeCreateSession() {
     sessionName = document.getElementById('profileSessionName').value;
     endTime = document.getElementById('profileEndTime').value;
     if (!profileId || !endTime) {
-      alert('Please select a profile and set end time');
+      await customAlert('Please select a profile and set end time', 'Missing Information');
       return;
     }
     if (!sessionName) {
@@ -353,7 +354,7 @@ async function executeCreateSession() {
     classTable = classSelect.value;
     endTime = document.getElementById('classEndTime').value;
     if (!classTable || !endTime) {
-      alert('Please select a class and set end time');
+      await customAlert('Please select a class and set end time', 'Missing Information');
       return;
     }
     // Find display name for session name
@@ -775,7 +776,7 @@ function updateDeniedTable() {
   const tbody = document.getElementById('denied-attendances');
   
   if (deniedAttempts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6">No failed attempts</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">No failed attempts</td></tr>';
     return;
   }
   
@@ -783,10 +784,9 @@ function updateDeniedTable() {
     <tr>
       <td>${formatTimestamp(item.timestamp)}</td>
       <td>${escapeHtml(item.name)}</td>
-      <td>${escapeHtml(item.course)}</td>
-      <td>${escapeHtml(item.year)}</td>
       <td>${formatReason(item.reason)}</td>
-      <td>${item.token.substring(0, 8)}...</td>
+      <td>${item.token ? item.token.substring(0, 8) + '...' : 'N/A'}</td>
+      <td>${item.device_signature ? item.device_signature.substring(0, 12) + '...' : 'N/A'}</td>
     </tr>
   `).join('');
 }
@@ -939,3 +939,71 @@ function showNotification(message, type = 'info') {
     }
   }, 3000);
 }
+
+// Custom Alert and Confirm Functions
+function customAlert(message, title = 'Alert') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modalCancel.style.display = 'none';
+    modalConfirm.textContent = 'OK';
+    
+    modal.classList.add('show');
+    
+    const handleConfirm = () => {
+      modal.classList.remove('show');
+      modalConfirm.removeEventListener('click', handleConfirm);
+      modalCancel.style.display = 'inline-block';
+      resolve();
+    };
+    
+    modalConfirm.addEventListener('click', handleConfirm);
+  });
+}
+
+function customConfirm(message, title = 'Confirmation') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modalCancel.style.display = 'inline-block';
+    modalConfirm.textContent = 'Confirm';
+    
+    modal.classList.add('show');
+    
+    const handleConfirm = () => {
+      modal.classList.remove('show');
+      modalConfirm.removeEventListener('click', handleConfirm);
+      modalCancel.removeEventListener('click', handleCancel);
+      resolve(true);
+    };
+    
+    const handleCancel = () => {
+      modal.classList.remove('show');
+      modalConfirm.removeEventListener('click', handleConfirm);
+      modalCancel.removeEventListener('click', handleCancel);
+      resolve(false);
+    };
+    
+    modalConfirm.addEventListener('click', handleConfirm);
+    modalCancel.addEventListener('click', handleCancel);
+  });
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'customModal') {
+    document.getElementById('customModal').classList.remove('show');
+  }
+});
