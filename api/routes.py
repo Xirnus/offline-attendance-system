@@ -283,10 +283,31 @@ def upload_students():
         if filename.endswith(('.xlsx', '.xls')):
             import pandas as pd
             df = pd.read_excel(file)
-            required_columns = ['Student ID', 'Name', 'Course', 'Year']
+            required_columns = ['School_ID', 'Name', 'Course', 'Year_Level']
             df = df[required_columns] 
             df.columns = ['student_id', 'name', 'course', 'year'] 
-            df['year'] = df['year'].astype(int)
+            # Extract numeric year from strings like "3rd Year", "1st Year", etc.
+            def extract_year(year_str):
+                import re
+                if pd.isna(year_str):
+                    return 1  # Default to 1st year
+                
+                year_str = str(year_str).strip()
+                
+                # Extract number from strings like "3rd Year", "1st Year", "2nd Year"
+                match = re.search(r'(\d+)', year_str)
+                if match:
+                    year_num = int(match.group(1))
+                    # Validate year range (1-5 for typical college years)
+                    return year_num if 1 <= year_num <= 5 else 1
+                
+                # If no number found, try to parse as direct integer
+                try:
+                    return int(float(year_str))
+                except (ValueError, TypeError):
+                    return 1  # Default fallback
+            
+            df['year'] = df['year'].apply(extract_year)
             rows = df.values.tolist()
         elif filename.endswith('.csv'):
             import csv
@@ -294,9 +315,33 @@ def upload_students():
             content = file.read().decode('utf-8')
             reader = csv.reader(StringIO(content))
             rows = list(reader)
-            rows = rows[1:] if len(rows) > 1 else []
-        else:
-            return jsonify({'error': 'Only CSV and Excel files are supported'})
+            if len(rows) > 1:
+                # Process CSV rows to extract year numbers
+                header = rows[0]
+                data_rows = rows[1:]
+                
+                # Find year column index
+                year_col_idx = None
+                for i, col in enumerate(header):
+                    if 'year' in col.lower():
+                        year_col_idx = i
+                        break
+                
+                if year_col_idx is not None:
+                    for row in data_rows:
+                        if len(row) > year_col_idx:
+                            # Extract numeric year from year string
+                            import re
+                            year_str = str(row[year_col_idx]).strip()
+                            match = re.search(r'(\d+)', year_str)
+                            if match:
+                                row[year_col_idx] = int(match.group(1))
+                            else:
+                                row[year_col_idx] = 1  # Default
+                
+                rows = data_rows
+            else:
+                rows = []
         
         from database.operations import insert_students
         count = insert_students(rows)

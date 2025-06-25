@@ -6,111 +6,17 @@
     <title>Upload Class Record</title>
     <!-- Load XLSX library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
-    <!-- Load CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/class_upload.css') }}">
-    <style>
-        /* Loading indicator */
-        .loader {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #3498db;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 9999;
-        }
-        
-        @keyframes spin {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        
-        /* Navigation styles */
-        nav {
-            background-color: #f8f9fa;
-            padding: 10px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-        }
-        nav a {
-            margin-right: 15px;
-            text-decoration: none;
-            color: #333;
-            font-weight: 500;
-        }
-        nav a:hover {
-            color: #007bff;
-        }
-        
-        /* Upload container */
-        .upload-container {
-            margin-bottom: 30px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        #fileInput {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            width: 300px;
-        }
-        
-        #uploadBtn {
-            padding: 10px 20px;
-            background-color: #28a745;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-left: 10px;
-            font-weight: bold;
-            transition: background-color 0.3s;
-        }
-        
-        #uploadBtn:hover {
-            background-color: #218838;
-        }
-        
-        #uploadBtn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        
-        h1 {
-            color: #343a40;
-            margin-bottom: 20px;
-        }
-        
-        .error-message {
-            color: #dc3545;
-            padding: 15px;
-            background: #f8d7da;
-            border-radius: 4px;
-            margin: 20px 0;
-        }
-        
-        .no-data {
-            color: #6c757d;
-            padding: 20px;
-            text-align: center;
-            font-style: italic;
-        }
-    </style>
 </head>
 <body>
+<header>
     <nav>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/students">Students</a>
-        <a href="/sessions">Sessions</a>
-        <a href="/class_upload">Class Upload</a>
+        <a href="/dashboard">Dashboard</a> |
+        <a href="/students">Students</a> |
+        <a href="/sessions">Sessions</a> |
+        <a href="/reports">Courses</a> |
+        <a href="/class_upload">Classes</a>
     </nav>
+</header>
     
     <div class="container">
         <h1>Upload Class Record</h1>

@@ -77,6 +77,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    function formatYear(yearNumber) {
+        const yearMap = {
+            1: '1st Year',
+            2: '2nd Year', 
+            3: '3rd Year',
+            4: '4th Year',
+            5: '5th Year'
+        };
+        
+        return yearMap[yearNumber] || `${yearNumber}th Year`;
+    }
+
     function loadStudents() {
         fetch('/api/students_with_attendance?' + Date.now(), {
             headers: {
@@ -98,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tr.innerHTML = `
                     <td>${escapeHtml(student.student_id)}</td>
                     <td>${escapeHtml(student.name)}</td>
-                    <td>${escapeHtml(student.year)}</td>
+                    <td>${formatYear(student.year)}</td>
                     <td><span class="status-badge ${getStatusClass(student.status)}">${formatStatus(student.status)}</span></td>
                     <td>${formatLastCheckIn(student.last_check_in)}</td>
                     <td style="color: #28a745; font-weight: bold;">${student.present_count || 0}</td>
