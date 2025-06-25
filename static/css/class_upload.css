@@ -5,6 +5,7 @@
     margin-bottom: 20px;
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%; 
 }
 
 .class-card-header {
@@ -18,7 +19,7 @@
 
 .class-card-header h3 {
     margin: 0;
-    color: #343a40;
+    color: white;
 }
 
 .toggle-icon {
@@ -42,11 +43,14 @@
 /* Student table */
 .student-table-container {
     overflow-x: auto;
+    width: 100%;
+    margin: 0;
 }
 
 .student-table-container table {
     width: 100%;
     border-collapse: collapse;
+    min-width:800px
 }
 
 .student-table-container th,
@@ -117,6 +121,7 @@
     margin: 20px 0;
     padding: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    width: 100%; 
 }
 
 .manual-input-container h2 {
@@ -485,5 +490,311 @@ button#clearSelectionBtn:hover {
     .student-table-container th,
     .student-table-container td {
         padding: 8px 10px;
+    }
+}
+
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: #333;
+}
+
+.container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 200px;
+    background: #28156E;
+    color: white;
+    padding: 20px 0;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.logo {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 0 20px;
+}
+
+.logo img {
+    width: 144px;
+    height: 144px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+}
+
+.logo h3 {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.nav-menu {
+    list-style: none;
+}
+
+.nav-item {
+    margin: 0;
+}
+
+.nav-link {
+    display: block;
+    color: white;
+    text-decoration: none;
+    padding: 12px 20px;
+    margin: 8px 15px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border-radius: 25px;
+    background: #ffc107;
+    color: #333;
+    text-align: center;
+    border: 4px solid transparent;
+}
+
+.nav-link:hover, .nav-link.active {
+    background: #ffc107;
+    color: #333;
+    border: 4px solid white;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    background: #f8f9fa;
+    padding: 0;
+}
+
+/* Header */
+.header {
+    background: #ffc107;
+    color: #333;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.header h1 {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.header p {
+    font-size: 14px;
+    margin: 5px 0 0 0;
+    opacity: 0.8;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.header-actions button {
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+.header-actions button:hover {
+    background: rgba(0,0,0,0.1);
+}
+
+/* Content Area */
+.content {
+    padding: 30px;
+    max-width: 1400px;
+}
+
+/* Upload Container */
+.upload-section {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 2px solid #28156E;
+    width: 100%;
+}
+
+.upload-section h2 {
+    color: #28156E;
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ffc107;
+    padding-bottom: 10px;
+}
+
+.file-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    text-align: center;
+}
+
+.file-input-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+#fileInput {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+}
+
+.file-input-label {
+    display: inline-block;
+    padding: 15px 30px;
+    background: #28156E;
+    color: white;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.file-input-label:hover {
+    background: #1e0f52;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #ffc107;
+    color: #333;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.btn-primary:hover {
+    background: #e0a800;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+}
+
+.file-requirements {
+    color: #666;
+    font-size: 14px;
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #28156E;
+}
+
+.class-info-section {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 2px solid #28156E;
+    width: 100%;
+}
+
+.class-info-section h3 {
+    color: #28156E;
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ffc107;
+    padding-bottom: 8px;
+}
+
+.preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    min-width: 800px;
+}
+
+.preview-table th {
+    background: #ffc107;
+    color: #333;
+    padding: 12px;
+    font-weight: 600;
+    border: 1px solid #e0a800;
+}
+
+.preview-table td {
+    padding: 10px 12px;
+    border: 1px solid #f1f3f4;
+    background: white;
+}
+
+.preview-table tr:hover td {
+    background: #f8f9fa;
+}
+
+.status-message {
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    font-weight: 500;
+}
+
+.status-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.status-info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+    }
+    
+    .file-input-container {
+        padding: 20px;
     }
 }

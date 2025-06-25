@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initPage();
 
     function initPage() {
+        console.log('Initializing class upload page...');
+        
         // Load CSS
         loadCSS();
         
@@ -17,15 +19,14 @@ document.addEventListener('DOMContentLoaded', function() {
         loadClassTables();
         
         // Add manual input section
+        console.log('Adding manual input section...');
         addManualInputSection();
+        console.log('Manual input section added.');
     }
 
     function loadCSS() {
-        const cssLink = document.createElement('link');
-        cssLink.href = "{{ url_for('static', filename='css/class_upload.css') }}";
-        cssLink.rel = "stylesheet";
-        cssLink.type = "text/css";
-        document.head.appendChild(cssLink);
+        // CSS is already loaded in the HTML file, so this function is not needed
+        // but we'll keep it for compatibility
     }
 
     function handleFileUpload() {
@@ -94,9 +95,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 function renderClassTables(tables) {
+    const classInfoContainer = document.getElementById('classInfoContainerNew') || document.getElementById('classInfoContainer');
+    
     if (!tables || tables.length === 0) {
         classInfoContainer.innerHTML = `
-            <div class="no-data">
+            <div style="
+                text-align: center; 
+                padding: 40px 20px; 
+                color: #666; 
+                background: #f8f9fa; 
+                border-radius: 8px;
+                border: 1px dashed #dee2e6;
+            ">
                 No class records found. Upload an Excel file to get started.
             </div>
         `;
@@ -104,49 +114,86 @@ function renderClassTables(tables) {
     }
 
     classInfoContainer.innerHTML = tables.map(table => `
-        <div class="class-card">
-            <div class="class-card-header">
-                <h3>${table.display_name || table.table_name.replace(/_/g, ' ')}</h3>
-                <div class="card-header-right">
-                    <span class="student-count">${table.students.length} students</span>
-                    <button class="delete-table-btn" data-table="${table.table_name}" title="Delete this class">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <div class="class-card" style="
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        ">
+            <div class="class-card-header" style="
+                background: #28156E;
+                color: white;
+                padding: 12px 15px;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            ">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600;">${table.display_name || table.table_name.replace(/_/g, ' ')}</h3>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 12px; background: #ffc107; color: #333; padding: 2px 8px; border-radius: 12px; font-weight: 600;">${table.students.length} students</span>
+                    <button class="delete-table-btn" data-table="${table.table_name}" title="Delete this class" style="
+                        background: transparent;
+                        border: none;
+                        color: #dc3545;
+                        cursor: pointer;
+                        padding: 4px;
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                    ">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                             <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
                         </svg>
                     </button>
-                    <span class="toggle-icon">▼</span>
+                    <span class="toggle-icon" style="font-size: 14px;">▼</span>
                 </div>
             </div>
-            <div class="class-card-body">
-                <div class="table-controls">
-                    <input type="text" class="search-input" placeholder="Search students...">
+            <div class="class-card-body" style="display: none;">
+                <div class="table-controls" style="padding: 10px 15px; background: white;">
+                    <input type="text" class="search-input" placeholder="Search students..." style="
+                        width: 100%;
+                        padding: 6px 10px;
+                        border: 1px solid #dee2e6;
+                        border-radius: 4px;
+                        font-size: 13px;
+                    ">
                 </div>
-                <div class="student-table-container">
-                    <table>
+                <div class="student-table-container" style="max-height: 300px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
                         <thead>
-                            <tr>
-                                <th>Student ID</th>
-                                <th>Student Name</th>
-                                <th>Year Level</th>
-                                <th>Course</th>
-                                <th>Actions</th>
+                            <tr style="background: #f8f9fa;">
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Student ID</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Name</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Year</th>
+                                <th style="padding: 8px 10px; text-align: left; border-bottom: 1px solid #dee2e6; font-weight: 600;">Course</th>
+                                <th style="padding: 8px 10px; text-align: center; border-bottom: 1px solid #dee2e6; font-weight: 600; width: 60px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${table.students.map(student => `
-                                <tr>
-                                    <td>${student.student_id || ''}</td>
-                                    <td>${student.student_name || ''}</td>
-                                    <td>${student.year_level || ''}</td>
-                                    <td>${student.course || ''}</td>
-                                    <td>
+                                <tr style="border-bottom: 1px solid #f1f3f4;">
+                                    <td style="padding: 6px 10px;">${student.student_id || ''}</td>
+                                    <td style="padding: 6px 10px;">${student.student_name || ''}</td>
+                                    <td style="padding: 6px 10px;">${student.year_level || ''}</td>
+                                    <td style="padding: 6px 10px;">${student.course || ''}</td>
+                                    <td style="padding: 6px 10px; text-align: center;">
                                         <button class="delete-student-btn" 
                                                 data-table="${table.table_name}" 
                                                 data-student-id="${student.student_id || ''}"
                                                 data-student-name="${student.student_name || ''}"
-                                                title="Remove student from class">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                                title="Remove student from class"
+                                                style="
+                                                    background: transparent;
+                                                    border: none;
+                                                    color: #dc3545;
+                                                    cursor: pointer;
+                                                    padding: 2px;
+                                                    border-radius: 2px;
+                                                ">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
                                                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                                                 <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4L4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
                                             </svg>
@@ -330,90 +377,331 @@ function deleteClassTable(tableName) {
     }
 
     function addManualInputSection() {
-        const container = document.querySelector('.container');
-        const uploadContainer = document.querySelector('.upload-container');
+        console.log('Starting addManualInputSection...');
         
-        // Create manual input section
+        // Find the upload section and class info container
+        const uploadSection = document.querySelector('.upload-section');
+        const classInfoContainer = document.getElementById('classInfoContainer');
+        
+        console.log('Upload section found:', !!uploadSection);
+        console.log('Class info container found:', !!classInfoContainer);
+        
+        if (!uploadSection || !classInfoContainer) {
+            console.error('Could not find upload section or class info container');
+            console.log('Available elements:', {
+                uploadSection: uploadSection,
+                classInfoContainer: classInfoContainer,
+                allDivs: document.querySelectorAll('div').length
+            });
+            return;
+        }
+        
+        // Create a main container with two columns
+        const mainContainer = document.createElement('div');
+        mainContainer.style.cssText = `
+            display: flex;
+            gap: 20px;
+            margin: 20px;
+            min-height: 80vh;
+        `;
+        
+        // Create left column for class cards
+        const leftColumn = document.createElement('div');
+        leftColumn.style.cssText = `
+            flex: 2;
+            background: white;
+            border-radius: 12px;
+            border: 2px solid #28156E;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+        `;
+        leftColumn.innerHTML = `
+            <h2 style="color: #28156E; margin-bottom: 20px; font-size: 20px;">📋 Class Records</h2>
+            <div id="classInfoContainerNew"></div>
+        `;
+        
+        // Create right column for upload and manual entry
+        const rightColumn = document.createElement('div');
+        rightColumn.style.cssText = `
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        `;
+        
+        // Move and resize upload section
+        const compactUploadSection = document.createElement('div');
+        compactUploadSection.style.cssText = `
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #28156E;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        `;
+        compactUploadSection.innerHTML = `
+            <h2 style="color: #28156E; margin-bottom: 15px; font-size: 18px;">� Upload Class Record</h2>
+            <div style="margin-bottom: 15px;">
+                <div style="margin-bottom: 10px;">
+                    <input type="file" id="fileInputNew" accept=".xlsx, .xls" style="
+                        width: 100%;
+                        padding: 8px;
+                        border: 2px solid #28156E;
+                        border-radius: 8px;
+                        font-size: 14px;
+                    " />
+                </div>
+                <button id="uploadBtnNew" style="
+                    width: 100%;
+                    background: #ffc107;
+                    color: #333;
+                    border: none;
+                    padding: 10px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    font-size: 14px;
+                ">📤 Upload Excel File</button>
+            </div>
+            <div style="
+                background: #f8f9fa;
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #666;
+                border: 1px solid #dee2e6;
+            ">
+                <strong>📋 Requirements:</strong><br>
+                Excel file with columns: <code>student_id</code>, <code>student_name</code>, <code>year_level</code>, <code>course</code>
+            </div>
+        `;
+        
+        // Create manual input section (compact)
         const manualInputHTML = `
-            <div class="manual-input-container">
-                <h2>Manual Student Entry</h2>
+            <div class="manual-input-container" style="
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                border: 2px solid #28156E;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            ">
+                <h2 style="color: #28156E; margin-bottom: 15px; font-size: 18px;">👥 Manual Student Entry</h2>
                 <div class="manual-input-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="manualClassSelect">Select Class:</label>
-                            <select id="manualClassSelect">
-                                <option value="">-- Select a Class --</option>
-                            </select>
-                        </div>
-                        <button id="createNewClassBtn" class="btn-secondary">Create New Class</button>
+                    <div style="margin-bottom: 15px;">
+                        <label for="manualClassSelect" style="display: block; margin-bottom: 6px; font-weight: 600; color: #333; font-size: 14px;">Select Class:</label>
+                        <select id="manualClassSelect" style="
+                            width: 100%; 
+                            padding: 8px; 
+                            border: 2px solid #28156E; 
+                            border-radius: 6px; 
+                            font-size: 13px;
+                            background: white;
+                        ">
+                            <option value="">-- Select a Class --</option>
+                        </select>
                     </div>
                     
-                    <div id="newClassForm" class="new-class-form" style="display: none;">
-                        <h3>Create New Class</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="newClassName">Class Name:</label>
-                                <input type="text" id="newClassName" placeholder="e.g., Computer Science 101">
-                            </div>
-                            <div class="form-group">
-                                <label for="newClassProfessor">Professor:</label>
-                                <input type="text" id="newClassProfessor" placeholder="Professor Name">
-                            </div>
+                    <button id="createNewClassBtn" style="
+                        width: 100%;
+                        background: #6c757d;
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        font-size: 13px;
+                        margin-bottom: 15px;
+                    ">Create New Class</button>
+                    
+                    <div id="newClassForm" class="new-class-form" style="
+                        display: none;
+                        background: #f8f9fa;
+                        padding: 15px;
+                        border-radius: 6px;
+                        margin-bottom: 15px;
+                        border: 1px solid #dee2e6;
+                    ">
+                        <h4 style="color: #28156E; margin-bottom: 10px; font-size: 14px;">Create New Class</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label for="newClassName" style="display: block; margin-bottom: 4px; font-weight: 600; font-size: 12px;">Class Name:</label>
+                            <input type="text" id="newClassName" placeholder="e.g., Computer Science 101" style="
+                                width: 100%; 
+                                padding: 6px; 
+                                border: 1px solid #dee2e6; 
+                                border-radius: 4px; 
+                                font-size: 12px;
+                            ">
                         </div>
-                        <div class="form-row">
-                            <button id="saveNewClassBtn" class="btn-primary">Create Class</button>
-                            <button id="cancelNewClassBtn" class="btn-secondary">Cancel</button>
+                        <div style="margin-bottom: 10px;">
+                            <label for="newClassProfessor" style="display: block; margin-bottom: 4px; font-weight: 600; font-size: 12px;">Professor:</label>
+                            <input type="text" id="newClassProfessor" placeholder="Professor Name" style="
+                                width: 100%; 
+                                padding: 6px; 
+                                border: 1px solid #dee2e6; 
+                                border-radius: 4px; 
+                                font-size: 12px;
+                            ">
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="saveNewClassBtn" style="
+                                flex: 1;
+                                background: #ffc107;
+                                color: #333;
+                                border: none;
+                                padding: 6px 12px;
+                                border-radius: 4px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 12px;
+                            ">Create</button>
+                            <button id="cancelNewClassBtn" style="
+                                flex: 1;
+                                background: #6c757d;
+                                color: white;
+                                border: none;
+                                padding: 6px 12px;
+                                border-radius: 4px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 12px;
+                            ">Cancel</button>
                         </div>
                     </div>
                     
                     <div id="studentInputForm" class="student-input-form" style="display: none;">
-                        <h3>Add Student from Database</h3>
-                        <div class="form-row">
-                            <div class="form-group" style="flex: 1;">
-                                <label for="studentSelect">Select Student:</label>
-                                <select id="studentSelect" required>
-                                    <option value="">-- Select a Student --</option>
-                                </select>
-                            </div>
+                        <h4 style="color: #28156E; margin-bottom: 10px; font-size: 14px;">Add Student from Database</h4>
+                        <div style="margin-bottom: 10px;">
+                            <label for="studentSelect" style="display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px;">Select Student:</label>
+                            <select id="studentSelect" required style="
+                                width: 100%; 
+                                padding: 8px; 
+                                border: 2px solid #28156E; 
+                                border-radius: 6px; 
+                                font-size: 13px;
+                                background: white;
+                            ">
+                                <option value="">-- Select a Student --</option>
+                            </select>
                         </div>
                         <div id="selectedStudentInfo" class="selected-student-info" style="display: none;">
-                            <div class="student-info-card">
-                                <h4>Selected Student Information</h4>
-                                <div class="info-row">
-                                    <span class="info-label">Student ID:</span>
-                                    <span id="selectedStudentId"></span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Name:</span>
-                                    <span id="selectedStudentName"></span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Course:</span>
-                                    <span id="selectedStudentCourse"></span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">Year Level:</span>
-                                    <span id="selectedStudentYear"></span>
+                            <div class="student-info-card" style="
+                                background: #e8f5e9;
+                                padding: 12px;
+                                border-radius: 6px;
+                                border: 1px solid #a5d6a7;
+                                margin-bottom: 10px;
+                            ">
+                                <h5 style="color: #2e7d32; margin-bottom: 8px; font-size: 13px;">Selected Student</h5>
+                                <div style="font-size: 11px; line-height: 1.4;">
+                                    <div><strong>ID:</strong> <span id="selectedStudentId"></span></div>
+                                    <div><strong>Name:</strong> <span id="selectedStudentName"></span></div>
+                                    <div><strong>Course:</strong> <span id="selectedStudentCourse"></span></div>
+                                    <div><strong>Year:</strong> <span id="selectedStudentYear"></span></div>
                                 </div>
                             </div>
                         </div>
-                        <div class="form-row">
-                            <button id="addStudentBtn" class="btn-primary" disabled>Add Student to Class</button>
-                            <button id="clearSelectionBtn" class="btn-secondary">Clear Selection</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="addStudentBtn" disabled style="
+                                flex: 1;
+                                background: #ccc;
+                                color: #666;
+                                border: none;
+                                padding: 8px 12px;
+                                border-radius: 6px;
+                                font-weight: 600;
+                                cursor: not-allowed;
+                                font-size: 12px;
+                            ">Add Student</button>
+                            <button id="clearSelectionBtn" style="
+                                flex: 1;
+                                background: #6c757d;
+                                color: white;
+                                border: none;
+                                padding: 8px 12px;
+                                border-radius: 6px;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 12px;
+                            ">Clear</button>
                         </div>
                     </div>
                 </div>
             </div>
         `;
         
-        // Insert after upload container
-        uploadContainer.insertAdjacentHTML('afterend', manualInputHTML);
+        // Add sections to right column
+        rightColumn.appendChild(compactUploadSection);
+        rightColumn.insertAdjacentHTML('beforeend', manualInputHTML);
+        
+        // Add columns to main container
+        mainContainer.appendChild(leftColumn);
+        mainContainer.appendChild(rightColumn);
+        
+        // Replace the existing content structure
+        const contentDiv = uploadSection.parentElement;
+        contentDiv.innerHTML = '';
+        contentDiv.appendChild(mainContainer);
+        
+        // Move existing class info container content to new location
+        const newClassInfoContainer = document.getElementById('classInfoContainerNew');
+        newClassInfoContainer.innerHTML = classInfoContainer.innerHTML;
+        
+        console.log('Manual input HTML inserted');
         
         // Set up event listeners for manual input
         setupManualInputListeners();
+        console.log('Manual input listeners set up');
+        
+        // Set up new upload button listener
+        setupNewUploadListener();
         
         // Load classes for dropdown
         loadClassesForDropdown();
+        console.log('Loading classes for dropdown');
+    }
+
+    function setupNewUploadListener() {
+        const newFileInput = document.getElementById('fileInputNew');
+        const newUploadBtn = document.getElementById('uploadBtnNew');
+        
+        if (newUploadBtn && newFileInput) {
+            newUploadBtn.addEventListener('click', function() {
+                const file = newFileInput.files[0];
+                if (!file) {
+                    showAlert('Please select an Excel file first', 'error');
+                    return;
+                }
+
+                showLoading(true);
+                newUploadBtn.disabled = true;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/upload_class_record', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    console.log('Upload successful:', data);
+                    showAlert(
+                        `${data.message}<br>Professor: ${data.professor || 'N/A'}<br>Room: ${data.room || 'N/A'}`,
+                        'success'
+                    );
+                    loadClassTables();
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    showAlert(`Upload failed: ${error.message}`, 'error');
+                })
+                .finally(() => {
+                    showLoading(false);
+                    newUploadBtn.disabled = false;
+                    newFileInput.value = '';
+                });
+            });
+        }
     }
 
     function setupManualInputListeners() {
@@ -445,9 +733,17 @@ function deleteClassTable(tableName) {
             if (this.value) {
                 showSelectedStudentInfo(this.value);
                 addStudentBtn.disabled = false;
+                // Enable button styling
+                addStudentBtn.style.background = '#ffc107';
+                addStudentBtn.style.color = '#333';
+                addStudentBtn.style.cursor = 'pointer';
             } else {
                 hideSelectedStudentInfo();
                 addStudentBtn.disabled = true;
+                // Disable button styling
+                addStudentBtn.style.background = '#ccc';
+                addStudentBtn.style.color = '#666';
+                addStudentBtn.style.cursor = 'not-allowed';
             }
         });
 
@@ -526,6 +822,16 @@ function deleteClassTable(tableName) {
         // Restore the previous selection if it still exists
         if (currentSelection) {
             classSelect.value = currentSelection;
+        }
+        
+        // Update the new class info container reference
+        const oldContainer = document.getElementById('classInfoContainer');
+        const newContainer = document.getElementById('classInfoContainerNew');
+        if (oldContainer && newContainer && oldContainer !== newContainer) {
+            // Transfer any content if needed
+            if (oldContainer.innerHTML && !newContainer.innerHTML) {
+                newContainer.innerHTML = oldContainer.innerHTML;
+            }
         }
     }
 
@@ -704,6 +1010,38 @@ function deleteClassTable(tableName) {
         }
     }
 
+    function convertYearLevelToInteger(yearLevel) {
+        // Convert text year levels to integers
+        if (typeof yearLevel === 'number') {
+            return yearLevel;
+        }
+        
+        const yearStr = String(yearLevel).toLowerCase().trim();
+        
+        // Extract numeric value from common year level formats
+        if (yearStr.includes('1st') || yearStr.includes('first') || yearStr === '1') {
+            return 1;
+        } else if (yearStr.includes('2nd') || yearStr.includes('second') || yearStr === '2') {
+            return 2;
+        } else if (yearStr.includes('3rd') || yearStr.includes('third') || yearStr === '3') {
+            return 3;
+        } else if (yearStr.includes('4th') || yearStr.includes('fourth') || yearStr === '4') {
+            return 4;
+        } else if (yearStr.includes('5th') || yearStr.includes('fifth') || yearStr === '5') {
+            return 5;
+        }
+        
+        // Try to extract any number from the string
+        const match = yearStr.match(/(\d+)/);
+        if (match) {
+            return parseInt(match[1], 10);
+        }
+        
+        // Default to 1 if no valid year found
+        console.warn(`Unable to parse year level: ${yearLevel}, defaulting to 1`);
+        return 1;
+    }
+
     function hideSelectedStudentInfo() {
         document.getElementById('selectedStudentInfo').style.display = 'none';
     }
@@ -711,7 +1049,12 @@ function deleteClassTable(tableName) {
     function clearStudentSelection() {
         document.getElementById('studentSelect').value = '';
         hideSelectedStudentInfo();
-        document.getElementById('addStudentBtn').disabled = true;
+        const addStudentBtn = document.getElementById('addStudentBtn');
+        addStudentBtn.disabled = true;
+        // Apply disabled styling
+        addStudentBtn.style.background = '#ccc';
+        addStudentBtn.style.color = '#666';
+        addStudentBtn.style.cursor = 'not-allowed';
     }
 
     function handleAddStudentFromDropdown() {
@@ -731,12 +1074,16 @@ function deleteClassTable(tableName) {
         }
         
         const selectedOption = studentSelect.querySelector(`option[value="${selectedStudentId}"]`);
+        const rawYearLevel = selectedOption.dataset.year;
+        
         const studentData = {
             student_id: selectedStudentId,
             student_name: selectedOption.textContent,
-            year_level: selectedOption.dataset.year,
+            year_level: convertYearLevelToInteger(rawYearLevel),
             course: selectedOption.dataset.course
         };
+        
+        console.log('Sending student data:', studentData); // Debug logging
         
         // Show loading
         showLoading(true);

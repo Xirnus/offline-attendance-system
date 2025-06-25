@@ -1,5 +1,34 @@
 import sqlite3
 
+def convert_year_to_integer(year_level):
+    """Convert year level to integer for database storage"""
+    if isinstance(year_level, int):
+        return year_level
+    
+    year_str = str(year_level).lower().strip()
+    
+    # Extract numeric value from common year level formats
+    if '1st' in year_str or 'first' in year_str or year_str == '1':
+        return 1
+    elif '2nd' in year_str or 'second' in year_str or year_str == '2':
+        return 2
+    elif '3rd' in year_str or 'third' in year_str or year_str == '3':
+        return 3
+    elif '4th' in year_str or 'fourth' in year_str or year_str == '4':
+        return 4
+    elif '5th' in year_str or 'fifth' in year_str or year_str == '5':
+        return 5
+    
+    # Try to extract any number from the string
+    import re
+    match = re.search(r'(\d+)', year_str)
+    if match:
+        return int(match.group(1))
+    
+    # Default to 1 if no valid year found
+    print(f"Warning: Unable to parse year level: {year_level}, defaulting to 1")
+    return 1
+
 def add_students_to_class(class_name, students, db_path='attendance.db'):
     """
     Add students to the main students table with class_table identifier.
@@ -16,6 +45,10 @@ def add_students_to_class(class_name, students, db_path='attendance.db'):
     
     try:
         for student in students:
+            # Convert year level safely
+            year_level_raw = student.get('yearLevel', '')
+            year_level_int = convert_year_to_integer(year_level_raw) if year_level_raw else 1
+            
             cursor.execute('''
                 INSERT OR REPLACE INTO students (student_id, name, course, year, class_table, created_at)
                 VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -23,7 +56,7 @@ def add_students_to_class(class_name, students, db_path='attendance.db'):
                 student.get('studentId', ''),
                 student.get('studentName', ''),
                 student.get('course', ''),
-                int(student.get('yearLevel', 0)) if student.get('yearLevel') else 0,
+                year_level_int,
                 class_table
             ))
         
@@ -216,14 +249,50 @@ def fix_database_columns(db_path='attendance.db'):
 
 # Legacy functions for backward compatibility (now redirect to new functions)
 def create_class_table(table_name, columns, db_path='classes.db'):
-    """Legacy function - now just creates the class identifier"""
-    print(f"Legacy function called - class tables are now managed in attendance.db")
-    return table_name.replace(' ', '_').replace('-', '_')
+    """Create a table for a specific class in classes.db"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Create table with specified columns
+        column_definitions = ', '.join([f'{name} {type_}' for name, type_ in columns])
+        create_table_sql = f'CREATE TABLE IF NOT EXISTS "{table_name}" ({column_definitions})'
+        
+        cursor.execute(create_table_sql)
+        conn.commit()
+        print(f"Created/verified table '{table_name}' in {db_path}")
+        
+    except Exception as e:
+        print(f"Error creating table {table_name}: {e}")
+    finally:
+        conn.close()
 
 def insert_students(table_name, students, db_path='classes.db'):
-    """Legacy function - now redirects to add_students_to_class"""
-    print(f"Redirecting to new student management system...")
-    add_students_to_class(table_name, students, 'attendance.db')
+    """Insert students into a specific class table in classes.db"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Insert students into the class table
+        for student in students:
+            cursor.execute(f'''
+                INSERT OR REPLACE INTO "{table_name}" (student_id, student_name, year_level, course)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                student.get('studentId', ''),
+                student.get('studentName', ''),
+                student.get('yearLevel', ''),
+                student.get('course', '')
+            ))
+        
+        conn.commit()
+        print(f"Successfully added {len(students)} students to class table '{table_name}' in {db_path}")
+        
+    except Exception as e:
+        print(f"Error inserting students into table {table_name}: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     # Run this to add the missing columns

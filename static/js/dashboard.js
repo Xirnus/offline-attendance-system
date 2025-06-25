@@ -90,7 +90,7 @@ function setupEventListeners() {
     'generate-btn': generateQR,
     'save-settings': saveSettings,
     'refresh-data': loadData,
-    'delete-old-data': deleteAllData
+    'clear-all-data': clearAllDataWithModal
   };
   Object.entries(elements).forEach(([id, handler]) => {
     const element = document.getElementById(id);
@@ -741,6 +741,62 @@ ${result.message}`;
   }
 }
 
+// Clear all data using custom modal
+async function clearAllDataWithModal() {
+  try {
+    // Show confirmation dialog using custom modal
+    const confirmed = await showCustomModal(
+      'Are you sure you want to delete all attendance, denied attempts, and device data? This action cannot be undone.',
+      'Clear All Data',
+      true // show cancel button
+    );
+
+    if (!confirmed) {
+      return; // User cancelled
+    }
+
+    // Show loading notification
+    showNotification('Clearing all data...', 'info');
+    
+    const response = await fetch('/api/delete_all_data', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      }
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.status === 'success') {
+      // Show success message with details
+      const counts = result.deleted_counts;
+      const successMessage = `All data cleared successfully:
+• ${counts.attendances} attendance records
+• ${counts.denied_attempts} failed attempts  
+• ${counts.device_fingerprints} device records`;
+
+      showNotification(successMessage, 'success');
+      
+      // Clear the tables immediately
+      document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+      document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+      document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+      
+      // Refresh the data after a short delay
+      setTimeout(() => {
+        loadData();
+      }, 1000);
+      
+    } else {
+      throw new Error(result.message || 'Failed to clear data');
+    }
+    
+  } catch (error) {
+    console.error('Error clearing data:', error);
+    showNotification(`Failed to clear data: ${error.message}`, 'error');
+  }
+}
+
 function showDetailedDeviceInfo(deviceInfoStr) {
   try {
     if (!deviceInfoStr) return;
@@ -1070,6 +1126,48 @@ function customConfirm(message, title = 'Confirmation') {
     
     modalConfirm.addEventListener('click', handleConfirm);
     modalCancel.addEventListener('click', handleCancel);
+  });
+}
+
+function showCustomModal(message, title = 'Notification', showCancel = false) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('customModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalConfirm = document.getElementById('modalConfirm');
+    const modalCancel = document.getElementById('modalCancel');
+    
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    
+    if (showCancel) {
+      modalCancel.style.display = 'inline-block';
+      modalConfirm.textContent = 'Confirm';
+    } else {
+      modalCancel.style.display = 'none';
+      modalConfirm.textContent = 'OK';
+    }
+    
+    modal.classList.add('show');
+    
+    const handleConfirm = () => {
+      modal.classList.remove('show');
+      modalConfirm.removeEventListener('click', handleConfirm);
+      modalCancel.removeEventListener('click', handleCancel);
+      resolve(true);
+    };
+    
+    const handleCancel = () => {
+      modal.classList.remove('show');
+      modalConfirm.removeEventListener('click', handleConfirm);
+      modalCancel.removeEventListener('click', handleCancel);
+      resolve(false);
+    };
+    
+    modalConfirm.addEventListener('click', handleConfirm);
+    if (showCancel) {
+      modalCancel.addEventListener('click', handleCancel);
+    }
   });
 }
 

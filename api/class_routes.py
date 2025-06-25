@@ -21,6 +21,35 @@ from database.class_table_manager import create_class_table, insert_students as 
 
 class_bp = Blueprint('class', __name__)
 
+def convert_year_to_integer(year_level):
+    """Convert year level to integer for database storage"""
+    if isinstance(year_level, int):
+        return year_level
+    
+    year_str = str(year_level).lower().strip()
+    
+    # Extract numeric value from common year level formats
+    if '1st' in year_str or 'first' in year_str or year_str == '1':
+        return 1
+    elif '2nd' in year_str or 'second' in year_str or year_str == '2':
+        return 2
+    elif '3rd' in year_str or 'third' in year_str or year_str == '3':
+        return 3
+    elif '4th' in year_str or 'fourth' in year_str or year_str == '4':
+        return 4
+    elif '5th' in year_str or 'fifth' in year_str or year_str == '5':
+        return 5
+    
+    # Try to extract any number from the string
+    import re
+    match = re.search(r'(\d+)', year_str)
+    if match:
+        return int(match.group(1))
+    
+    # Default to 1 if no valid year found
+    print(f"Warning: Unable to parse year level: {year_level}, defaulting to 1")
+    return 1
+
 @class_bp.route('/upload_class_record', methods=['POST'])
 def upload_class_record():
     try:
@@ -99,19 +128,7 @@ def upload_class_record():
 
         # Process student data (rows after headers)
         student_data = []
-        new_students_for_attendance = []  # For attendance.db (only new students)
-        existing_student_ids = set()  # To track existing student IDs in attendance.db
 
-        # First get all existing student IDs from attendance.db
-        try:
-            attendance_conn = sqlite3.connect('attendance.db')
-            attendance_cursor = attendance_conn.cursor()
-            attendance_cursor.execute("SELECT student_id FROM students")
-            existing_student_ids = {row[0] for row in attendance_cursor.fetchall()}
-        except Exception as e:
-            print(f"Warning: Could not check existing students in attendance.db: {str(e)}")
-            existing_student_ids = set()
-        
         for row in rows[student_data_start+1:]:
             # Skip empty rows or rows with empty student_id
             if not row or not row[0] or not str(row[0]).strip():
@@ -126,16 +143,6 @@ def upload_class_record():
                 'yearLevel': str(student.get('year_level', '')).strip(),
                 'course': str(student.get('course', '')).strip()
             })
-            
-            # Only add to attendance.db if student_id doesn't exist
-            if student_id not in existing_student_ids:
-                new_students_for_attendance.append((
-                    student_id,
-                    str(student.get('student_name', '')).strip(),
-                    str(student.get('year_level', '')).strip(),
-                    str(student.get('course', '')).strip()
-                ))
-                existing_student_ids.add(student_id)  # Add to set to prevent duplicates in this batch
 
         if not student_data:
             return jsonify({'error': 'No valid student data found in the file'}), 400
@@ -170,28 +177,12 @@ def upload_class_record():
         create_class_table(table_name, columns, db_path='classes.db')
         insert_class_students(table_name, student_data, db_path='classes.db')
         
-        # Database operations for attendance.db (only for new students)
-        if new_students_for_attendance:
-            try:
-                attendance_conn = sqlite3.connect('attendance.db')
-                attendance_cursor = attendance_conn.cursor()
-                
-                # Insert only new students into attendance.db
-                attendance_cursor.executemany(
-                    "INSERT INTO students (student_id, name, year, course) VALUES (?, ?, ?, ?)",
-                    new_students_for_attendance
-                )
-                
-                attendance_conn.commit()
-                attendance_conn.close()
-                print(f"Added {len(new_students_for_attendance)} new students to attendance.db")
-            except Exception as e:
-                print(f"Warning: Could not insert into attendance.db: {str(e)}")
-                # Continue even if attendance.db insertion fails
+        # Skip attendance.db insertion for uploaded class records
+        # Class records are managed separately from the main attendance system
+        print("Skipping attendance.db insertion for uploaded class records - class tables are managed separately")
 
         return jsonify({
-            'message': f'Successfully imported {len(student_data)} students',
-            'new_students_added_to_attendance': len(new_students_for_attendance),
+            'message': f'Successfully imported {len(student_data)} students to class table',
             'display_name': display_name,
             'professor': professor_name,
             'room_type': room_type,
@@ -320,6 +311,9 @@ def add_student_to_class(table_name):
             'course': str(data['course']).strip()
         }
         
+        # Convert year_level to integer for attendance.db
+        year_level_int = convert_year_to_integer(data['year_level'])
+        
         # Validate table exists
         db_path = 'classes.db'
         conn = sqlite3.connect(db_path)
@@ -347,7 +341,8 @@ def add_student_to_class(table_name):
         conn.commit()
         conn.close()
         
-        # Also add to attendance.db if not already there
+        # For manually added students, also add to attendance.db if not already there
+        # (This is different from bulk uploads which are class-specific)
         try:
             attendance_conn = sqlite3.connect('attendance.db')
             attendance_cursor = attendance_conn.cursor()
@@ -355,14 +350,16 @@ def add_student_to_class(table_name):
             # Check if student exists in attendance.db
             attendance_cursor.execute("SELECT student_id FROM students WHERE student_id = ?", (student_data['studentId'],))
             if not attendance_cursor.fetchone():
-                # Add to attendance.db
+                # Add to attendance.db with integer year
                 attendance_cursor.execute(
                     "INSERT INTO students (student_id, name, year, course) VALUES (?, ?, ?, ?)",
                     (student_data['studentId'], student_data['studentName'], 
-                     student_data['yearLevel'], student_data['course'])
+                     year_level_int, student_data['course'])
                 )
                 attendance_conn.commit()
-                print(f"Added student {student_data['studentId']} to attendance.db")
+                print(f"Added manually entered student {student_data['studentId']} to attendance.db with year {year_level_int}")
+            else:
+                print(f"Student {student_data['studentId']} already exists in attendance.db")
             
             attendance_conn.close()
         except Exception as e:
