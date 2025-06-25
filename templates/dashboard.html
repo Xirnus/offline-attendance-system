@@ -28,7 +28,7 @@
         <a href="/dashboard">Dashboard</a> |
         <a href="/students">Students</a> |
         <a href="/sessions">Sessions</a> |
-        <a href="/reports">Courses</a> |
+        <a href="/reports">Reports</a> |
         <a href="/class_upload">Classes</a>
     </nav>
 </header>
@@ -53,8 +53,19 @@
       <strong id="recent-activity">0</strong><br>
       Last Hour
     </div>
+    <div class="stat-box">
+      <strong id="total-students">0</strong><br>
+      Total Students
+    </div>
+    <div class="stat-box">
+      <strong id="total-sessions">0</strong><br>
+      Total Sessions
+    </div>
+    <div class="stat-box">
+      <strong id="avg-attendance-rate">0%</strong><br>
+      Average Attendance Rate
+    </div>
   </div>
-  
   
   <div class="session-control">
       <button id="create-session-btn" class="btn btn-primary" style="display: inline-block;">Create Attendance Session</button>
@@ -141,6 +152,9 @@
           <td colspan="5">No device data available</td>
         </tr>
       </tbody>
-    </table>  </div>
+  </div>  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  
 </body>
 </html>

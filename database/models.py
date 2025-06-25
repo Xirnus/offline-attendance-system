@@ -39,6 +39,7 @@ TABLES = {
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year INTEGER NOT NULL,
+            class_table TEXT,
             last_check_in TEXT,
             status TEXT DEFAULT NULL,
             absent_count INTEGER DEFAULT 0,

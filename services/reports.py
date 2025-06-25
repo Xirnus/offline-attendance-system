@@ -383,6 +383,8 @@ Attendance System"""
             },
             'attendance_rates': {},
             'course_breakdown': {},
+            'attendance_trends': {},
+            'attendance_status_breakdown': {}
         }
         
         # Calculate attendance rates by student
@@ -408,6 +410,38 @@ Attendance System"""
             courses[course]['checkins'] += len([att for att in attendance_data if att.get('student_id') == student.get('student_id')])
         
         analytics['course_breakdown'] = courses
+        
+        # Generate attendance trends over time (last 7 days)
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        for i in range(7):
+            date = today - timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            # Count attendance for this date
+            daily_count = len([att for att in attendance_data 
+                             if att.get('timestamp') and 
+                             datetime.fromtimestamp(att['timestamp']).strftime('%Y-%m-%d') == date_str])
+            analytics['attendance_trends'][date_str] = daily_count
+        
+        # Attendance status breakdown by course
+        for course in courses.keys():
+            course_students = [s for s in students_data if s.get('course') == course]
+            present_count = 0
+            absent_count = 0
+            late_count = 0  # Placeholder for late status
+            
+            for student in course_students:
+                student_checkins = len([att for att in attendance_data if att.get('student_id') == student.get('student_id')])
+                student_absent = student.get('absent_count', 0)
+                present_count += student_checkins
+                absent_count += student_absent
+                # For now, late_count remains 0 as we don't track late status
+            
+            analytics['attendance_status_breakdown'][course] = {
+                'present': present_count,
+                'absent': absent_count,
+                'late': late_count
+            }
         
         return analytics
 
