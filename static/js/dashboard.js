@@ -147,7 +147,7 @@ function checkTokenUsageAndRegenerate(attendanceData, deniedAttempts) {
 
 function setupEventListeners() {
   const elements = {
-    'generate-btn': generateQR(false),
+    'generate-btn': () => generateQR(false),
     'save-settings': saveSettings,
     'refresh-data': loadData,
     'clear-all-data': clearAllDataWithModal

@@ -1,42 +1,6 @@
-"""
-Device Fingerprinting Service Module for Offline Attendance System
-
-This module provides comprehensive device fingerprinting capabilities for the SQLite-based attendance tracking system. It generates unique device signatures to prevent duplicate check-ins and ensure attendance integrity through advanced browser fingerprinting techniques.
-
-Main Features:
-- Device Signature Extraction: Parse User-Agent strings for device/OS/browser info
-- Comprehensive Fingerprinting: Collect multiple device characteristics for uniqueness
-- Hash Generation: Create unique, consistent hashes for device identification
-- Uniqueness Scoring: Calculate how distinctive a device fingerprint is
-- Cross-Platform Support: Handle mobile, tablet, and desktop devices
-
-Key Functions:
-- extract_device_signature(): Parse User-Agent for basic device information
-- generate_comprehensive_fingerprint(): Collect extensive device characteristics
-- create_fingerprint_hash(): Generate unique SHA256 hash from device data
-- get_device_uniqueness_score(): Calculate fingerprint uniqueness (0-100 scale)
-
-Fingerprinting Components:
-- Device Type: Mobile, tablet, desktop classification
-- Operating System: Windows, macOS, Linux, iOS, Android detection
-- Browser Information: Chrome, Firefox, Safari, Edge identification
-- Screen Properties: Resolution, color depth, pixel ratio
-- System Settings: Timezone, language, platform details
-- Hardware Features: Touch support, CPU cores, memory info
-- Advanced Fingerprints: Canvas, WebGL, audio fingerprinting
-
-Security Features:
-- SHA256 hashing for consistent device identification
-- Multiple fingerprinting layers for enhanced uniqueness
-- Graceful degradation when fingerprinting data is unavailable
-- Privacy-conscious data collection (no personal information)
-
-Used by: API routes, attendance validation, security checks
-Dependencies: Standard library (hashlib, re), request data parsing
-"""
-
-import re
 import hashlib
+import re
+import json
 
 def extract_device_signature(user_agent):
     """Extract basic device signature from User-Agent"""
@@ -44,43 +8,52 @@ def extract_device_signature(user_agent):
     device_info = {
         'type': 'desktop',
         'os': 'unknown',
-        'browser': 'unknown'
+        'browser': 'unknown',
+        'brand': 'unknown',
+        'model': 'unknown'
     }
     
-    # Android device detection
+    # Android device detection with brand/model extraction
     if 'android' in ua:
         device_info['type'] = 'mobile'
         device_info['os'] = 'android'
         
-        # Extract Android version
-        android_version = re.search(r'android (\d+(?:\.\d+)*)', ua)
-        if android_version:
-            device_info['os_version'] = android_version.group(1)
-    
-    # iPhone detection 
+        # Extract brand and model for Android devices
+        android_patterns = [
+            (r'(oppo|realme|vivo|xiaomi|samsung|huawei|oneplus|lg|sony|motorola|nokia)\s+([a-zA-Z0-9\-_\s]+)', 'brand_model'),
+            (r'(sm-[a-zA-Z0-9]+)', 'samsung_model'),
+            (r'(cph[0-9]+)', 'oppo_model'),
+            (r'(rmx[0-9]+)', 'realme_model'),
+            (r'(mi\s+[a-zA-Z0-9\s]+)', 'xiaomi_model')
+        ]
+        
+        for pattern, device_type in android_patterns:
+            match = re.search(pattern, ua)
+            if match:
+                if device_type == 'brand_model':
+                    device_info['brand'] = match.group(1).lower()
+                    device_info['model'] = match.group(2).strip()
+                else:
+                    device_info['model'] = match.group(1)
+                break
+                
     elif 'iphone' in ua:
         device_info['type'] = 'mobile'
         device_info['os'] = 'ios'
+        device_info['brand'] = 'apple'
+        device_info['model'] = 'iphone'
         
-        # Extract iOS version
-        ios_version = re.search(r'os (\d+(?:_\d+)*)', ua)
-        if ios_version:
-            device_info['os_version'] = ios_version.group(1).replace('_', '.')
-    
-    # iPad detection
     elif 'ipad' in ua:
         device_info['type'] = 'tablet'
         device_info['os'] = 'ios'
+        device_info['brand'] = 'apple'
+        device_info['model'] = 'ipad'
         
-        ios_version = re.search(r'os (\d+(?:_\d+)*)', ua)
-        if ios_version:
-            device_info['os_version'] = ios_version.group(1).replace('_', '.')
-    
-    # Desktop/Laptop detection
     else:
+        # Desktop OS detection
         if 'windows' in ua:
             device_info['os'] = 'windows'
-        elif 'mac' in ua and 'iphone' not in ua and 'ipad' not in ua:
+        elif 'mac' in ua:
             device_info['os'] = 'macos'
         elif 'linux' in ua:
             device_info['os'] = 'linux'
@@ -97,8 +70,7 @@ def extract_device_signature(user_agent):
     for browser, pattern in browser_patterns.items():
         match = re.search(pattern, ua)
         if match:
-            device_info['browser'] = browser
-            device_info['browser_version'] = match.group(1)
+            device_info['browser'] = f"{browser}_{match.group(1)}"
             break
     
     return device_info
@@ -127,7 +99,13 @@ def generate_comprehensive_fingerprint(request_data):
         'installed_plugins': request_data.get('installed_plugins', ''),
         'do_not_track': request_data.get('do_not_track', ''),
         'cpu_cores': request_data.get('cpu_cores', ''),
-        'max_touch_points': request_data.get('max_touch_points', '')
+        'max_touch_points': request_data.get('max_touch_points', ''),
+        'detailed_hardware': request_data.get('detailed_hardware', ''),
+        'advanced_canvas': request_data.get('advanced_canvas', ''),
+        'timing_fingerprint': request_data.get('timing_fingerprint', ''),
+        'storage_fingerprint': request_data.get('storage_fingerprint', ''),
+        'virtual_environment': request_data.get('virtual_environment', False),
+        'device_consistency': request_data.get('device_consistency', [])
     }
     
     return fingerprint_data
@@ -136,7 +114,10 @@ def create_fingerprint_hash(request_data):
     """Create a unique hash for device fingerprinting"""
     fingerprint = generate_comprehensive_fingerprint(request_data)
     
-    # Primary fingerprint components 
+    # Extract device signature for enhanced processing
+    device_sig = fingerprint['device_signature']
+    
+    # Enhanced fingerprint components for better device distinction
     primary_components = [
         str(fingerprint['device_signature']),
         fingerprint['screen_resolution'],
@@ -145,32 +126,66 @@ def create_fingerprint_hash(request_data):
         fingerprint['platform'],
         fingerprint['color_depth'],
         str(fingerprint['pixel_ratio']),
-        str(fingerprint['touch_support'])
+        str(fingerprint['touch_support']),
+        fingerprint['canvas_fingerprint'][:100] if fingerprint['canvas_fingerprint'] else '',
+        fingerprint['webgl_fingerprint'],
+        fingerprint['audio_fingerprint'][:50] if fingerprint['audio_fingerprint'] else '',
+        fingerprint['memory_info'],
+        str(fingerprint['cpu_cores']),
+        str(fingerprint['max_touch_points']),
+        fingerprint['available_fonts'][:100] if fingerprint['available_fonts'] else '',
+        fingerprint['detailed_hardware'][:200] if fingerprint['detailed_hardware'] else '',
+        fingerprint['advanced_canvas'][:100] if fingerprint['advanced_canvas'] else '',
+        fingerprint['timing_fingerprint'],
+        fingerprint['storage_fingerprint']
     ]
     
-    # Combine components
-    fingerprint_string = '|'.join([str(comp) for comp in primary_components if comp])
+    # Enhanced mobile device differentiation
+    if device_sig['type'] in ['mobile', 'tablet']:
+        mobile_components = [
+            device_sig.get('brand', ''),
+            device_sig.get('model', ''),
+            fingerprint.get('timing_fingerprint', ''),
+            str(fingerprint.get('virtual_environment', False)),
+            json.dumps(fingerprint.get('device_consistency', []))
+        ]
+        primary_components.extend(mobile_components)
     
-    # Generate hash
-    return hashlib.sha256(fingerprint_string.encode()).hexdigest()
+    # Create composite fingerprint string
+    fingerprint_string = '|'.join(str(comp) for comp in primary_components if comp)
+    
+    # Generate SHA256 hash
+    hash_object = hashlib.sha256(fingerprint_string.encode('utf-8'))
+    return hash_object.hexdigest()
 
 def get_device_uniqueness_score(request_data):
-    """Calculate how unique this device fingerprint is (0-100 scale)"""
+    """Calculate device uniqueness score (0-100)"""
     fingerprint = generate_comprehensive_fingerprint(request_data)
-    
-    uniqueness_factors = {
-        'device_signature': 30,
-        'screen_resolution': 20,
-        'timezone': 15,
-        'language': 10,
-        'platform': 10,
-        'color_depth': 8,
-        'pixel_ratio': 7
-    }
-    
     score = 0
-    for component, weight in uniqueness_factors.items():
-        if fingerprint.get(component) and str(fingerprint[component]).strip():
-            score += weight
+    
+    # Base scoring criteria
+    scoring_criteria = [
+        ('canvas_fingerprint', 20),
+        ('webgl_fingerprint', 15),
+        ('audio_fingerprint', 10),
+        ('available_fonts', 10),
+        ('detailed_hardware', 15),
+        ('timing_fingerprint', 10),
+        ('device_signature', 10),
+        ('advanced_canvas', 10)
+    ]
+    
+    for field, points in scoring_criteria:
+        value = fingerprint.get(field, '')
+        if value and value not in ['error', 'unknown', 'not_supported']:
+            score += points
+    
+    # Bonus for mobile device specificity
+    device_sig = fingerprint['device_signature']
+    if device_sig['type'] in ['mobile', 'tablet']:
+        if device_sig.get('brand') != 'unknown':
+            score += 5
+        if device_sig.get('model') != 'unknown':
+            score += 5
     
     return min(score, 100)

@@ -165,8 +165,8 @@ def record_denied_attempt(data, reason):
         
         cursor.execute('''
             INSERT INTO denied_attempts 
-            (token, fingerprint_hash, timestamp, created_at, reason, name, device_info, device_signature)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (token, fingerprint_hash, timestamp, created_at, reason, name, course, year, device_info, device_signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('token'),
             data.get('fingerprint_hash'),
@@ -174,6 +174,8 @@ def record_denied_attempt(data, reason):
             current_time,
             reason,
             data.get('name', 'Unknown'),
+            data.get('course', 'Unknown'),
+            data.get('year', 'Unknown'),
             data.get('device_info'),
             data.get('device_signature')
         ))
