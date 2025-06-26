@@ -38,7 +38,10 @@ def is_fingerprint_allowed(fingerprint_hash):
     """Check if device fingerprint is allowed"""
     settings = get_settings()
     
+    print(f"Checking fingerprint {fingerprint_hash[:8]}... with settings: {settings}")
+    
     if not settings['enable_fingerprint_blocking']:
+        print("Fingerprint blocking is disabled - allowing all devices")
         return True, "Fingerprint blocking disabled"
     
     try:
@@ -46,6 +49,8 @@ def is_fingerprint_allowed(fingerprint_hash):
         cursor = conn.cursor()
         
         time_threshold = time.time() - (settings['time_window_minutes'] * 60)
+        print(f"Checking usage within time window: {settings['time_window_minutes']} minutes (since {time_threshold})")
+        
         cursor.execute('''
             SELECT COUNT(*) as usage_count 
             FROM attendances 
@@ -53,15 +58,24 @@ def is_fingerprint_allowed(fingerprint_hash):
         ''', (fingerprint_hash, time_threshold))
         
         usage_count = cursor.fetchone()['usage_count']
+        max_uses = settings['max_uses_per_device']
+        
+        print(f"Device usage: {usage_count}/{max_uses} in the last {settings['time_window_minutes']//60} hours")
+        
         conn.close()
         
-        if usage_count >= settings['max_uses_per_device']:
+        if usage_count >= max_uses:
             hours = settings['time_window_minutes'] // 60
-            return False, f"Device already used {usage_count} times in the last {hours} hours, Please use another device"
+            message = f"Device already used {usage_count} times in the last {hours} hours. Maximum allowed: {max_uses}. Please use another device"
+            print(f"BLOCKING: {message}")
+            return False, message
         
-        return True, "Device allowed"
+        print(f"ALLOWING: Device usage within limits ({usage_count}/{max_uses})")
+        return True, f"Device allowed ({usage_count}/{max_uses} uses)"
+        
     except Exception as e:
-        return True, "Error checking fingerprint"
+        print(f"Error checking fingerprint: {e}")
+        return True, f"Error checking fingerprint: {e}"
 
 def store_device_fingerprint(fingerprint_hash, device_info):
     """Store or update device fingerprint"""

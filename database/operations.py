@@ -64,21 +64,54 @@ def get_settings():
             }
         else:
             return DEFAULT_SETTINGS
-    except Exception:
+    except Exception as e:
+        print(f"Error loading settings: {e}")
         return DEFAULT_SETTINGS
 
 def update_settings(data):
     """Update app settings"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE settings 
-        SET max_uses_per_device = ?, time_window_minutes = ?, enable_fingerprint_blocking = ?
-        WHERE id = ?
-    ''', (data['max_uses_per_device'], data['time_window_minutes'], 
-          data['enable_fingerprint_blocking'], 'config'))
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Convert boolean to integer for SQLite storage
+        enable_blocking = 1 if data.get('enable_fingerprint_blocking', True) else 0
+        
+        print(f"Updating settings: max_uses={data.get('max_uses_per_device', 1)}, "
+              f"time_window={data.get('time_window_minutes', 1440)}, "
+              f"enable_blocking={enable_blocking}")
+        
+        cursor.execute('''
+            UPDATE settings 
+            SET max_uses_per_device = ?, time_window_minutes = ?, enable_fingerprint_blocking = ?
+            WHERE id = ?
+        ''', (
+            data.get('max_uses_per_device', 1), 
+            data.get('time_window_minutes', 1440), 
+            enable_blocking, 
+            'config'
+        ))
+        
+        # Verify the update worked
+        if cursor.rowcount == 0:
+            # If no rows were updated, insert the settings
+            cursor.execute('''
+                INSERT OR REPLACE INTO settings (id, max_uses_per_device, time_window_minutes, enable_fingerprint_blocking)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                'config',
+                data.get('max_uses_per_device', 1), 
+                data.get('time_window_minutes', 1440), 
+                enable_blocking
+            ))
+        
+        conn.commit()
+        conn.close()
+        print("Settings updated successfully")
+        
+    except Exception as e:
+        print(f"Error updating settings: {e}")
+        raise e
 
 def create_token(token):
     """Store new token in database"""

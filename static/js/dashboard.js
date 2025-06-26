@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
   loadData();
   loadSessionProfiles();
   setupEventListeners();
+  setupSettingsEventListeners();
   checkSessionStatusWithExpiration();
   
   // Refresh intervals
@@ -794,9 +795,11 @@ async function loadSettings() {
     const response = await fetch('/api/settings');
     const settings = await response.json();
     
+    console.log('Loaded settings from server:', settings);
+    
     document.getElementById('max-uses').value = settings.max_uses_per_device || 1;
     document.getElementById('time-window').value = (settings.time_window_minutes || 1440) / 60;
-    document.getElementById('enable-blocking').checked = settings.enable_fingerprint_blocking !== false;
+    document.getElementById('enable-blocking').checked = settings.enable_fingerprint_blocking === true;
     
     // Load auto-regeneration setting
     const autoRegenToggle = document.getElementById('auto-regenerate-qr');
@@ -804,6 +807,13 @@ async function loadSettings() {
       autoRegenToggle.checked = settings.auto_regenerate_qr !== false;
       autoRegenerateEnabled = settings.auto_regenerate_qr !== false;
     }
+      console.log('Settings applied to form:');
+    console.log('- Max uses:', document.getElementById('max-uses').value);
+    console.log('- Time window:', document.getElementById('time-window').value);
+    console.log('- Enable blocking:', document.getElementById('enable-blocking').checked);
+    
+    // Update the visual indicator for device blocking status
+    updateDeviceBlockingStatus();
     
     // Get initial token
     await updateCurrentToken();
@@ -816,23 +826,32 @@ async function loadSettings() {
 async function saveSettings() {
   try {
     const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+    const enableBlocking = document.getElementById('enable-blocking').checked;
+    const maxUses = parseInt(document.getElementById('max-uses').value);
+    const timeWindow = parseInt(document.getElementById('time-window').value) * 60;
     
     const settings = {
-      max_uses_per_device: parseInt(document.getElementById('max-uses').value),
-      time_window_minutes: parseInt(document.getElementById('time-window').value) * 60,
-      enable_fingerprint_blocking: document.getElementById('enable-blocking').checked,
+      max_uses_per_device: maxUses,
+      time_window_minutes: timeWindow,
+      enable_fingerprint_blocking: enableBlocking,
       auto_regenerate_qr: autoRegenToggle ? autoRegenToggle.checked : true
     };
+    
+    console.log('Saving settings:', settings);
     
     const response = await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
     });
-    
-    if (response.ok) {
+      if (response.ok) {
+      const savedSettings = await response.json();
+      console.log('Settings saved successfully:', savedSettings);
       showNotification('Settings saved successfully', 'success');
       autoRegenerateEnabled = settings.auto_regenerate_qr;
+      
+      // Update the visual status indicator
+      updateDeviceBlockingStatus();
     } else {
       throw new Error('Failed to save settings');
     }
@@ -1341,3 +1360,52 @@ document.addEventListener('click', (e) => {
     document.getElementById('customModal').classList.remove('show');
   }
 });
+
+// Add visual indicator for device blocking status
+function updateDeviceBlockingStatus() {
+  const enableBlocking = document.getElementById('enable-blocking').checked;
+  const maxUses = document.getElementById('max-uses').value;
+  const timeWindow = document.getElementById('time-window').value;
+  
+  // Create or update status indicator
+  let statusIndicator = document.getElementById('device-blocking-status');
+  if (!statusIndicator) {
+    statusIndicator = document.createElement('div');
+    statusIndicator.id = 'device-blocking-status';
+    statusIndicator.style.cssText = `
+      margin-top: 10px; padding: 8px; border-radius: 4px; font-size: 12px;
+      text-align: center; font-weight: bold;
+    `;
+    
+    const enableBlockingElement = document.getElementById('enable-blocking').parentElement;
+    enableBlockingElement.appendChild(statusIndicator);
+  }
+  
+  if (enableBlocking) {
+    statusIndicator.style.backgroundColor = '#d4edda';
+    statusIndicator.style.color = '#155724';
+    statusIndicator.style.border = '1px solid #c3e6cb';
+    statusIndicator.textContent = `Device blocking ENABLED: Max ${maxUses} use(s) per ${timeWindow} hour(s)`;
+  } else {
+    statusIndicator.style.backgroundColor = '#f8d7da';
+    statusIndicator.style.color = '#721c24';
+    statusIndicator.style.border = '1px solid #f5c6cb';
+    statusIndicator.textContent = 'Device blocking DISABLED: All devices allowed';
+  }
+}
+
+// Add event listeners for settings form changes
+function setupSettingsEventListeners() {
+  const elements = ['max-uses', 'time-window', 'enable-blocking'];
+  
+  elements.forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.addEventListener('change', updateDeviceBlockingStatus);
+      element.addEventListener('input', updateDeviceBlockingStatus);
+    }
+  });
+}
+
+// Call setupSettingsEventListeners on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', setupSettingsEventListeners);
