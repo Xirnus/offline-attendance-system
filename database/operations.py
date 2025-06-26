@@ -461,9 +461,37 @@ def stop_active_session():
                 SET is_active = 0, end_time = datetime('now') 
                 WHERE is_active = 1
             ''')
+            
+            # Get counts before clearing for the response
+            cursor.execute('SELECT COUNT(*) FROM attendances')
+            attendance_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM denied_attempts')
+            denied_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM device_fingerprints')
+            device_count = cursor.fetchone()[0]
+            
+            # Clear all attendance, denied attempts, and device data when session ends
+            cursor.execute('DELETE FROM attendances')
+            cursor.execute('DELETE FROM denied_attempts')
+            cursor.execute('DELETE FROM device_fingerprints')
+            
+            # Reset auto-increment counters
+            cursor.execute('DELETE FROM sqlite_sequence WHERE name IN ("attendances", "denied_attempts", "device_fingerprints")')
+            
             conn.commit()
             
-            return {'success': True, 'absent_marked': absent_count}
+            return {
+                'success': True, 
+                'absent_marked': absent_count,
+                'data_cleared': True,
+                'cleared_counts': {
+                    'attendances': attendance_count,
+                    'denied_attempts': denied_count,
+                    'device_fingerprints': device_count
+                }
+            }
         else:
             return {'success': False, 'message': 'No active session to stop'}
             

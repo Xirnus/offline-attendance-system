@@ -73,8 +73,21 @@ def stop_session():
         result = stop_active_session()
         if result.get('success'):
             absent_marked = result.get('absent_marked', 0)
-            message = f'Session stopped successfully. {absent_marked} students marked absent.' if absent_marked > 0 else 'Session stopped successfully'
-            return jsonify(status='success', message=message, absent_marked=absent_marked)
+            data_cleared = result.get('data_cleared', False)
+            cleared_counts = result.get('cleared_counts', {})
+            
+            if data_cleared:
+                message = f'Session stopped successfully. {absent_marked} students marked absent. Data cleared: {cleared_counts.get("attendances", 0)} attendances, {cleared_counts.get("denied_attempts", 0)} failed attempts, {cleared_counts.get("device_fingerprints", 0)} devices.'
+            else:
+                message = f'Session stopped successfully. {absent_marked} students marked absent.' if absent_marked > 0 else 'Session stopped successfully'
+            
+            return jsonify(
+                status='success', 
+                message=message, 
+                absent_marked=absent_marked,
+                data_cleared=data_cleared,
+                cleared_counts=cleared_counts
+            )
         else:
             return jsonify(status='error', message=result.get('message', 'No active session to stop'))
     except Exception as e:

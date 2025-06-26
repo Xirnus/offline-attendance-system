@@ -29,6 +29,46 @@ from utils.qr_generator import generate_qr_code, build_qr_url
 
 core_bp = Blueprint('core', __name__)
 
+@core_bp.route('/api/current_token', methods=['GET'])
+def get_current_token():
+    """Get the current QR token"""
+    try:
+        from database.connection import get_db_connection
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get the most recent token that hasn't been used
+        cursor.execute('''
+            SELECT token FROM active_tokens 
+            WHERE used = 0 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''')
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return jsonify({
+                'status': 'success',
+                'token': result[0]
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'token': None,
+                'message': 'No active token found'
+            })
+            
+    except Exception as e:
+        print(f"Error getting current token: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# Also, modify the generate_qr function to store the token globally or return it
 @core_bp.route('/generate_qr')
 def generate_qr():
     if is_rate_limited(get_client_ip(request)):
@@ -45,7 +85,47 @@ def generate_qr():
         else:
             return "QR code generation not available", 500
     except Exception as e:
+        print(f"Error generating QR code: {str(e)}")
         return "Error generating QR code", 500
+
+@core_bp.route('/api/current_token', methods=['GET'])
+def get_current_token():
+    """Get the current QR token"""
+    try:
+        from database.connection import get_db_connection
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Get the most recent token that hasn't been used
+        cursor.execute('''
+            SELECT token FROM active_tokens 
+            WHERE used = 0 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''')
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return jsonify({
+                'status': 'success',
+                'token': result[0]
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'token': None,
+                'message': 'No active token found'
+            })
+            
+    except Exception as e:
+        print(f"Error getting current token: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 @core_bp.route('/scan/<token>')
 def scan(token):

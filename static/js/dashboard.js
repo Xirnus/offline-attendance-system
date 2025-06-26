@@ -6,6 +6,8 @@ let sessionProfiles = [];
 let lastUpdateTime = 0;
 let loadDataTimeout;
 let classList = [];
+let currentToken = null;
+let autoRegenerateEnabled = true;
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
@@ -16,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
   checkSessionStatusWithExpiration();
   
   // Refresh intervals
-  setInterval(loadData, 15000);
+  setInterval(loadData, 5000);
   setInterval(checkSessionStatusWithExpiration, 60000);
 
   // Refresh when tab becomes active
@@ -63,15 +65,20 @@ async function loadData() {
         newAttendanceData.length !== attendanceData.length ||
         newDeniedAttempts.length !== deniedAttempts.length ||
         newDeviceFingerprints.length !== deviceFingerprints.length;
+
+      // Check if current token has been used
+      if (currentToken && autoRegenerateEnabled) {
+        checkTokenUsageAndRegenerate(newAttendanceData, newDeniedAttempts);
+      }
       
       attendanceData = newAttendanceData;
       deniedAttempts = newDeniedAttempts;
       deviceFingerprints = newDeviceFingerprints;
-      
-      
+
       updateAttendanceTable();
       updateDeniedTable();
       updateDeviceTable();
+      updateStatisticsGrid(); 
       
       if (hasNewData && lastUpdateTime > 0) {
         showNotification('New activity detected!', 'info');
@@ -85,9 +92,62 @@ async function loadData() {
   }, 100);
 }
 
+// Add this new function to update the statistics grid
+function updateStatisticsGrid() {
+  try {
+    // Update total check-ins
+    const totalAttendances = attendanceData.length;
+    document.getElementById('total-attendances').textContent = totalAttendances;
+    
+    // Update failed attempts
+    const totalDenied = deniedAttempts.length;
+    document.getElementById('total-denied').textContent = totalDenied;
+    
+    // Update unique devices
+    const uniqueDevices = deviceFingerprints.length;
+    document.getElementById('unique-devices').textContent = uniqueDevices;
+    
+    // Calculate recent activity (last hour)
+    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+    const recentActivity = attendanceData.filter(item => {
+      const itemTime = item.timestamp * 1000; // Convert to milliseconds
+      return itemTime > oneHourAgo;
+    }).length;
+    document.getElementById('recent-activity').textContent = recentActivity;
+    
+  } catch (error) {
+    console.error('Error updating statistics grid:', error);
+  }
+}
+
+// New function to check token usage and auto-regenerate
+function checkTokenUsageAndRegenerate(attendanceData, deniedAttempts) {
+  if (!currentToken) return;
+  
+  // Check if current token appears in successful attendances
+  const tokenUsedInAttendance = attendanceData.some(item => 
+    item.token === currentToken
+  );
+  
+  // Check if current token appears in denied attempts with "already_used" reason
+  const tokenDeniedAsUsed = deniedAttempts.some(item => 
+    item.token === currentToken && item.reason === 'already_used'
+  );
+  
+  if (tokenUsedInAttendance || tokenDeniedAsUsed) {
+    console.log('Current token has been used, auto-regenerating QR code...');
+    showNotification('Token used - Generating new QR code automatically', 'info');
+    
+    // Auto-regenerate QR code
+    setTimeout(() => {
+      generateQR(true); // Pass true to indicate auto-regeneration
+    }, 1000);
+  }
+}
+
 function setupEventListeners() {
   const elements = {
-    'generate-btn': generateQR,
+    'generate-btn': generateQR(false),
     'save-settings': saveSettings,
     'refresh-data': loadData,
     'clear-all-data': clearAllDataWithModal
@@ -96,6 +156,16 @@ function setupEventListeners() {
     const element = document.getElementById(id);
     if (element) element.addEventListener('click', handler);
   });
+
+  // Add auto-regeneration toggle if it exists
+  const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+  if (autoRegenToggle) {
+    autoRegenToggle.addEventListener('change', function() {
+      autoRegenerateEnabled = this.checked;
+      console.log('Auto-regeneration:', autoRegenerateEnabled ? 'enabled' : 'disabled');
+    });
+  }
+  
   
   // Session event listeners
   const createSessionBtn = document.getElementById('create-session-btn');
@@ -458,9 +528,30 @@ function stopSession() {
   .then(data => {
     if (data.status === 'success' || data.success) {
       const absentCount = data.absent_marked || 0;
-      const message = absentCount > 0 
-        ? `Session stopped successfully. ${absentCount} students marked absent.`
-        : 'Session stopped successfully';
+      const dataCleared = data.data_cleared || false;
+      const clearedCounts = data.cleared_counts || {};
+      
+      let message = '';
+      if (absentCount > 0) {
+        message += `Session stopped successfully. ${absentCount} students marked absent.`;
+      } else {
+        message += 'Session stopped successfully.';
+      }
+      
+      if (dataCleared) {
+        message += ` All session data cleared: ${clearedCounts.attendances || 0} attendances, ${clearedCounts.denied_attempts || 0} failed attempts, ${clearedCounts.device_fingerprints || 0} devices.`;
+        
+        // Clear the tables immediately since data was cleared
+        document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+        document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+        document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+        
+        // Reset statistics grid
+        document.getElementById('total-attendances').textContent = '0';
+        document.getElementById('total-denied').textContent = '0';
+        document.getElementById('unique-devices').textContent = '0';
+        document.getElementById('recent-activity').textContent = '0';
+      }
       
       showNotification(message, 'success');
       updateButtonVisibility(false, '');
@@ -585,11 +676,31 @@ function checkSessionStatusWithExpiration() {
         .then(response => response.json())
         .then(stopData => {
           updateButtonVisibility(false, '');
+          
+          let message = '';
           if (stopData.absent_marked > 0) {
-            showNotification(`Session ended. ${stopData.absent_marked} students marked absent`, 'info');
+            message = `Session ended. ${stopData.absent_marked} students marked absent`;
           } else {
-            showNotification('Session automatically ended (expired)', 'info');
+            message = 'Session automatically ended (expired)';
           }
+          
+          if (stopData.data_cleared) {
+            const counts = stopData.cleared_counts || {};
+            message += `. Data cleared: ${counts.attendances || 0} attendances, ${counts.denied_attempts || 0} failed attempts, ${counts.device_fingerprints || 0} devices`;
+            
+            // Clear the tables immediately since data was cleared
+            document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+            document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+            document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+            
+            // Reset statistics grid
+            document.getElementById('total-attendances').textContent = '0';
+            document.getElementById('total-denied').textContent = '0';
+            document.getElementById('unique-devices').textContent = '0';
+            document.getElementById('recent-activity').textContent = '0';
+          }
+          
+          showNotification(message, 'info');
         });
       } else {
         updateButtonVisibility(true, data.active_session.session_name);
@@ -611,32 +722,70 @@ function getDefaultEndTime() {
   return now.toTimeString().slice(0, 5);
 }
 
-async function generateQR() {
+// Modify the generateQR function to handle auto-regeneration
+async function generateQR(isAutoRegeneration = false) {
   try {
     const btn = document.getElementById('generate-btn');
     const status = document.getElementById('qr-status');
     const img = document.getElementById('qr-img');
     
-    btn.disabled = true;
-    btn.textContent = 'Generating...';
-    status.textContent = 'Generating QR code...';
+    if (!isAutoRegeneration) {
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+    }
+    
+    status.textContent = isAutoRegeneration ? 'Auto-regenerating QR code...' : 'Generating QR code...';
     
     const response = await fetch('/generate_qr');
     if (response.ok) {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       img.src = url;
-      status.textContent = 'QR code generated successfully';
+      
+      // Get the new token from the response headers or make a separate API call
+      await updateCurrentToken();
+      
+      const statusMessage = isAutoRegeneration ? 
+        'QR code auto-regenerated successfully' : 
+        'QR code generated successfully';
+      status.textContent = statusMessage;
+      
+      if (isAutoRegeneration) {
+        showNotification('New QR code ready for use', 'success');
+      }
     } else {
       throw new Error('Failed to generate QR code');
     }
   } catch (error) {
     console.error('Error generating QR:', error);
-    document.getElementById('qr-status').textContent = 'Error generating QR code';
+    const errorMessage = isAutoRegeneration ? 
+      'Error auto-regenerating QR code' : 
+      'Error generating QR code';
+    document.getElementById('qr-status').textContent = errorMessage;
+    
+    if (isAutoRegeneration) {
+      showNotification('Failed to auto-regenerate QR code', 'error');
+    }
   } finally {
-    const btn = document.getElementById('generate-btn');
-    btn.disabled = false;
-    btn.textContent = 'Generate New QR Code';
+    if (!isAutoRegeneration) {
+      const btn = document.getElementById('generate-btn');
+      btn.disabled = false;
+      btn.textContent = 'Generate New QR Code';
+    }
+  }
+}
+
+// New function to get the current token
+async function updateCurrentToken() {
+  try {
+    const response = await fetch('/api/current_token');
+    if (response.ok) {
+      const data = await response.json();
+      currentToken = data.token;
+      console.log('Updated current token:', currentToken);
+    }
+  } catch (error) {
+    console.error('Error getting current token:', error);
   }
 }
 
@@ -648,6 +797,17 @@ async function loadSettings() {
     document.getElementById('max-uses').value = settings.max_uses_per_device || 1;
     document.getElementById('time-window').value = (settings.time_window_minutes || 1440) / 60;
     document.getElementById('enable-blocking').checked = settings.enable_fingerprint_blocking !== false;
+    
+    // Load auto-regeneration setting
+    const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+    if (autoRegenToggle) {
+      autoRegenToggle.checked = settings.auto_regenerate_qr !== false;
+      autoRegenerateEnabled = settings.auto_regenerate_qr !== false;
+    }
+    
+    // Get initial token
+    await updateCurrentToken();
+    
   } catch (error) {
     console.error('Error loading settings:', error);
   }
@@ -655,10 +815,13 @@ async function loadSettings() {
 
 async function saveSettings() {
   try {
+    const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+    
     const settings = {
       max_uses_per_device: parseInt(document.getElementById('max-uses').value),
       time_window_minutes: parseInt(document.getElementById('time-window').value) * 60,
-      enable_fingerprint_blocking: document.getElementById('enable-blocking').checked
+      enable_fingerprint_blocking: document.getElementById('enable-blocking').checked,
+      auto_regenerate_qr: autoRegenToggle ? autoRegenToggle.checked : true
     };
     
     const response = await fetch('/api/settings', {
@@ -669,6 +832,7 @@ async function saveSettings() {
     
     if (response.ok) {
       showNotification('Settings saved successfully', 'success');
+      autoRegenerateEnabled = settings.auto_regenerate_qr;
     } else {
       throw new Error('Failed to save settings');
     }
