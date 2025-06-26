@@ -57,19 +57,19 @@ def is_token_expired(token_timestamp):
     """Check if token is expired"""
     return time.time() - token_timestamp > Config.TOKEN_EXPIRY
 
-def validate_token_access(token_data, device_signature):
-    """Validate token access based on device signature"""
+def validate_token_access(token_data, device_fingerprint_id):
+    """Validate token access based on device fingerprint ID"""
     if not token_data:
         return False, "Invalid token"
     
     if token_data['used']:
         return False, "Token already used"
     
-    if is_token_expired(token_data['timestamp']):
+    if is_token_expired(token_data['generated_at']):
         return False, "Token expired"
     
-    # Check device signature consistency
-    if token_data['opened'] and token_data['device_signature'] != device_signature:
+    # Check device fingerprint consistency
+    if token_data['opened'] and token_data.get('device_fingerprint_id') != device_fingerprint_id:
         return False, "Token can only be used on the same device type"
     
     return True, "Token valid"

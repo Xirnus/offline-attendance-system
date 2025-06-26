@@ -9,20 +9,31 @@ Main Features:
 - Database Initialization: Creates tables and sets up initial configuration
 - Data Integrity: Foreign key relationships and constraints
 - Default Settings: Initializes system configuration values
+- Normalized Schema: Eliminates data duplication through proper foreign keys
 
 Database Tables:
 - students: Student information and attendance status
-- student_attendance_history: Historical attendance records per session
+- class_attendees: Attendance records per session with device fingerprint references
 - attendance_sessions: Session management and timing
 - session_profiles: Reusable session templates
-- active_tokens: QR code tokens and validation
-- attendances: Successful attendance check-ins
-- denied_attempts: Failed check-in attempts with reasons
-- device_fingerprints: Device tracking and usage limits
+- tokens: QR code tokens with device fingerprint references
+- denied_attempts: Failed check-in attempts with device fingerprint references
+- device_fingerprints: Centralized device tracking and usage limits
+- student_attendance_summary: Aggregated attendance statistics per student
 - settings: System configuration and security settings
+
+Key Improvements:
+- Normalized device fingerprint data to eliminate duplication
+- All device-related tables now reference device_fingerprints via foreign keys
+- Consistent device tracking across attendance, tokens, and denied attempts
+- Eliminated timestamp redundancy (consolidated to single meaningful column names)
+- Added comprehensive database indexes for improved query performance
+- Streamlined session management to reduce redundant session information
+- Made session profiles mandatory for attendance sessions (better data integrity)
 
 Key Functions:
 - create_all_tables(): Initialize complete database schema
+- migrate_tables(): Handle schema upgrades and data migration
 
 Used by: Database connection module, initialization scripts
 Dependencies: SQLite3, config settings
@@ -39,38 +50,45 @@ TABLES = {
             name TEXT NOT NULL,
             course TEXT NOT NULL,
             year INTEGER NOT NULL,
-            class_table TEXT,
-            last_check_in TEXT,
-            status TEXT DEFAULT NULL,
-            absent_count INTEGER DEFAULT 0,
-            present_count INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            session_id INTEGER,
-            last_session_id INTEGER,
-            total_sessions INTEGER DEFAULT 0,
-            recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''',
+    
+    'class_attendees': '''
+        CREATE TABLE IF NOT EXISTS class_attendees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            session_id INTEGER NOT NULL,
+            token_id INTEGER,
+            device_fingerprint_id INTEGER,
+            checked_in_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
+            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id) ON DELETE CASCADE,
+            FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE SET NULL,
+            FOREIGN KEY (device_fingerprint_id) REFERENCES device_fingerprints (id) ON DELETE SET NULL,
+            UNIQUE(student_id, session_id)
         )
     ''',
     
     'attendance_sessions': '''
         CREATE TABLE IF NOT EXISTS attendance_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_name TEXT NOT NULL,
+            profile_id INTEGER NOT NULL,
+            session_name TEXT,
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
-            is_active BOOLEAN DEFAULT TRUE,
-            profile_id INTEGER,
+            is_active BOOLEAN DEFAULT FALSE,
             class_table TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (profile_id) REFERENCES session_profiles (id)
+            FOREIGN KEY (profile_id) REFERENCES session_profiles (id) ON DELETE CASCADE
         )
     ''',
     
     'session_profiles': '''
         CREATE TABLE IF NOT EXISTS session_profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_name TEXT NOT NULL,
+            profile_name TEXT NOT NULL UNIQUE,
             room_type TEXT NOT NULL,
             building TEXT,
             capacity INTEGER,
@@ -80,50 +98,29 @@ TABLES = {
         )
     ''',
     
-    'active_tokens': '''
-        CREATE TABLE IF NOT EXISTS active_tokens (
+    'tokens': '''
+        CREATE TABLE IF NOT EXISTS tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             token TEXT UNIQUE NOT NULL,
-            timestamp REAL NOT NULL,
+            device_fingerprint_id INTEGER,
+            generated_at REAL NOT NULL,
             used BOOLEAN DEFAULT FALSE,
             opened BOOLEAN DEFAULT FALSE,
-            device_signature TEXT,
-            fingerprint_hash TEXT,
-            created_at TEXT NOT NULL
-        )
-    ''',
-    
-    'attendances': '''
-        CREATE TABLE IF NOT EXISTS attendances (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT NOT NULL,
-            token TEXT NOT NULL,
-            fingerprint_hash TEXT,
-            timestamp REAL NOT NULL,
-            created_at TEXT NOT NULL,
-            name TEXT NOT NULL,
-            course TEXT NOT NULL,
-            year TEXT NOT NULL,
-            device_info TEXT,
-            device_signature TEXT,
-            session_id INTEGER,
-            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id)
+            FOREIGN KEY (device_fingerprint_id) REFERENCES device_fingerprints (id) ON DELETE SET NULL
         )
     ''',
     
     'denied_attempts': '''
         CREATE TABLE IF NOT EXISTS denied_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            token TEXT NOT NULL,
-            fingerprint_hash TEXT,
-            timestamp REAL NOT NULL,
-            created_at TEXT NOT NULL,
+            student_id TEXT,
+            token_id INTEGER,
+            device_fingerprint_id INTEGER,
             reason TEXT NOT NULL,
-            name TEXT NOT NULL,
-            course TEXT NOT NULL,
-            year TEXT NOT NULL,
-            device_info TEXT,
-            device_signature TEXT
+            attempted_at REAL NOT NULL,
+            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE SET NULL,
+            FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE SET NULL,
+            FOREIGN KEY (device_fingerprint_id) REFERENCES device_fingerprints (id) ON DELETE SET NULL
         )
     ''',
     
@@ -134,7 +131,27 @@ TABLES = {
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
             usage_count INTEGER DEFAULT 1,
-            device_info TEXT
+            device_info TEXT,
+            is_blocked BOOLEAN DEFAULT FALSE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''',
+    
+    'student_attendance_summary': '''
+        CREATE TABLE IF NOT EXISTS student_attendance_summary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            total_sessions INTEGER DEFAULT 0,
+            present_count INTEGER DEFAULT 0,
+            absent_count INTEGER DEFAULT 0,
+            last_session_id INTEGER,
+            last_check_in TEXT,
+            status TEXT DEFAULT 'active',
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
+            FOREIGN KEY (last_session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL,
+            UNIQUE(student_id)
         )
     ''',
     
@@ -143,9 +160,27 @@ TABLES = {
             id TEXT PRIMARY KEY,
             max_uses_per_device INTEGER DEFAULT 1,
             time_window_minutes INTEGER DEFAULT 1440,
-            enable_fingerprint_blocking BOOLEAN DEFAULT TRUE
+            enable_fingerprint_blocking BOOLEAN DEFAULT TRUE,
+            session_timeout_minutes INTEGER DEFAULT 30,
+            max_devices_per_student INTEGER DEFAULT 3,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     '''
+}
+
+# Indexes for better query performance
+INDEXES = {
+    'idx_class_attendees_student': 'CREATE INDEX IF NOT EXISTS idx_class_attendees_student ON class_attendees(student_id)',
+    'idx_class_attendees_session': 'CREATE INDEX IF NOT EXISTS idx_class_attendees_session ON class_attendees(session_id)',
+    'idx_class_attendees_device': 'CREATE INDEX IF NOT EXISTS idx_class_attendees_device ON class_attendees(device_fingerprint_id)',
+    'idx_tokens_device': 'CREATE INDEX IF NOT EXISTS idx_tokens_device ON tokens(device_fingerprint_id)',
+    'idx_tokens_generated': 'CREATE INDEX IF NOT EXISTS idx_tokens_generated ON tokens(generated_at)',
+    'idx_denied_attempts_device': 'CREATE INDEX IF NOT EXISTS idx_denied_attempts_device ON denied_attempts(device_fingerprint_id)',
+    'idx_denied_attempts_time': 'CREATE INDEX IF NOT EXISTS idx_denied_attempts_time ON denied_attempts(attempted_at)',
+    'idx_device_fingerprints_hash': 'CREATE INDEX IF NOT EXISTS idx_device_fingerprints_hash ON device_fingerprints(fingerprint_hash)',
+    'idx_sessions_profile': 'CREATE INDEX IF NOT EXISTS idx_sessions_profile ON attendance_sessions(profile_id)',
+    'idx_sessions_active': 'CREATE INDEX IF NOT EXISTS idx_sessions_active ON attendance_sessions(is_active)',
 }
 
 def create_all_tables():
@@ -156,41 +191,14 @@ def create_all_tables():
     - All table definitions with proper constraints
     - Foreign key relationships
     - Default system settings
+    - Data migration from old schema if needed
     
     Returns:
         bool: True if successful, False if error occurred
     """
     try:
-        conn = sqlite3.connect(Config.DATABASE_PATH)
-        cursor = conn.cursor()
-        
-        # Enable foreign key constraints
-        cursor.execute('PRAGMA foreign_keys = ON')
-        
-        # Create all tables
-        for table_name, query in TABLES.items():
-            print(f"Creating table: {table_name}")
-            cursor.execute(query)
-        
-        # Insert default settings if not exists
-        cursor.execute('SELECT * FROM settings WHERE id = ?', ('config',))
-        if not cursor.fetchone():
-            print("Inserting default settings...")
-            cursor.execute('''
-                INSERT INTO settings (id, max_uses_per_device, time_window_minutes, enable_fingerprint_blocking)
-                VALUES (?, ?, ?, ?)
-            ''', (
-                'config', 
-                DEFAULT_SETTINGS['max_uses_per_device'], 
-                DEFAULT_SETTINGS['time_window_minutes'], 
-                DEFAULT_SETTINGS['enable_fingerprint_blocking']
-            ))
-        
-        conn.commit()
-        conn.close()
-        
-        print("Database tables created successfully!")
-        return True
+        # Use the migration function which handles both new installations and upgrades
+        return migrate_tables()
         
     except Exception as e:
         print(f"Database initialization error: {e}")
@@ -264,18 +272,334 @@ def verify_database_integrity():
 def migrate_tables():
     """Apply database migrations and updates"""
     try:
-        from .connection import get_db_connection
         print("Running database migrations...")
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
         
-        # For now, just ensure all tables exist
-        create_all_tables()
+        # Enable foreign key constraints
+        cursor.execute('PRAGMA foreign_keys = ON')
+        
+        # Check if this is a new database or needs migration
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='attendances'")
+        has_old_attendances = cursor.fetchone() is not None
+        
+        if has_old_attendances:
+            print("Migrating from old schema to new normalized schema...")
+            
+            # Create new tables
+            for table_name, query in TABLES.items():
+                print(f"Creating/updating table: {table_name}")
+                cursor.execute(query)
+            
+            # Create indexes for better performance
+            print("Creating database indexes...")
+            for index_name, index_query in INDEXES.items():
+                try:
+                    cursor.execute(index_query)
+                except Exception as e:
+                    print(f"Note: Could not create index {index_name}: {e}")
+            
+            # First, migrate device fingerprints data
+            print("Migrating device fingerprint data...")
+            cursor.execute('''
+                INSERT OR IGNORE INTO device_fingerprints 
+                (fingerprint_hash, first_seen, last_seen, usage_count, device_info, is_blocked)
+                SELECT DISTINCT
+                    COALESCE(fingerprint_hash, device_signature, 'unknown') as fingerprint_hash,
+                    MIN(created_at) as first_seen,
+                    MAX(created_at) as last_seen,
+                    COUNT(*) as usage_count,
+                    device_info,
+                    FALSE as is_blocked
+                FROM attendances 
+                WHERE fingerprint_hash IS NOT NULL OR device_signature IS NOT NULL
+                GROUP BY COALESCE(fingerprint_hash, device_signature), device_info
+            ''')
+            
+            # Migrate attendance data with device fingerprint foreign keys
+            print("Migrating attendance data with device fingerprint references...")
+            cursor.execute('''
+                INSERT OR IGNORE INTO class_attendees 
+                (student_id, session_id, device_fingerprint_id, checked_in_at)
+                SELECT 
+                    a.student_id, 
+                    COALESCE(a.session_id, 1) as session_id,
+                    df.id as device_fingerprint_id,
+                    COALESCE(a.created_at, datetime(a.timestamp, 'unixepoch')) as checked_in_at
+                FROM attendances a
+                LEFT JOIN device_fingerprints df ON 
+                    df.fingerprint_hash = COALESCE(a.fingerprint_hash, a.device_signature, 'unknown')
+                    AND (df.device_info = a.device_info OR (df.device_info IS NULL AND a.device_info IS NULL))
+                WHERE a.student_id IS NOT NULL
+            ''')
+            
+            # Migrate denied attempts data with device fingerprint references
+            print("Migrating denied attempts data...")
+            cursor.execute('''
+                INSERT OR IGNORE INTO denied_attempts 
+                (student_id, device_fingerprint_id, reason, attempted_at)
+                SELECT 
+                    da.student_id,
+                    df.id as device_fingerprint_id,
+                    da.reason,
+                    COALESCE(da.timestamp, strftime('%s', da.created_at)) as attempted_at
+                FROM denied_attempts da
+                LEFT JOIN device_fingerprints df ON 
+                    df.device_info = da.device_info
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM denied_attempts AS new_denied 
+                    WHERE new_denied.attempted_at = COALESCE(da.timestamp, strftime('%s', da.created_at))
+                    AND new_denied.reason = da.reason
+                )
+            ''')
+            
+            # Migrate tokens data with device fingerprint references
+            print("Migrating tokens data...")
+            cursor.execute('''
+                UPDATE tokens SET device_fingerprint_id = (
+                    SELECT df.id FROM device_fingerprints df 
+                    WHERE df.fingerprint_hash = tokens.device_fingerprint
+                    LIMIT 1
+                ),
+                generated_at = COALESCE(tokens.timestamp, strftime('%s', tokens.created_at))
+                WHERE device_fingerprint IS NOT NULL OR tokens.timestamp IS NOT NULL
+            ''')
+            
+            # Create summary data for existing students
+            print("Creating student attendance summaries...")
+            cursor.execute('''
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, absent_count, last_check_in, status)
+                SELECT 
+                    s.student_id,
+                    COUNT(DISTINCT ca.session_id) as total_sessions,
+                    COUNT(ca.id) as present_count,
+                    0 as absent_count,  -- Will be calculated separately
+                    MAX(ca.checked_in_at) as last_check_in,
+                    'active' as status
+                FROM students s
+                LEFT JOIN class_attendees ca ON s.student_id = ca.student_id
+                GROUP BY s.student_id
+            ''')
+            
+            # Create default session profile for migration
+            print("Creating default session profile for migration...")
+            cursor.execute('''
+                INSERT OR IGNORE INTO session_profiles (
+                    profile_name, room_type, building, capacity, organizer
+                )
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                'Default Session',
+                'Classroom',
+                'Main Building',
+                50,
+                'System Administrator'
+            ))
+            
+            # Update any existing sessions to use default profile
+            cursor.execute('''
+                UPDATE attendance_sessions 
+                SET profile_id = (SELECT id FROM session_profiles WHERE profile_name = 'Default Session' LIMIT 1)
+                WHERE profile_id IS NULL
+            ''')
+            
+            # Backup old tables by renaming them
+            print("Backing up old tables...")
+            try:
+                cursor.execute('ALTER TABLE attendances RENAME TO attendances_backup')
+                cursor.execute('ALTER TABLE active_tokens RENAME TO tokens_backup')
+                print("Old tables backed up successfully")
+            except Exception as e:
+                print(f"Note: Could not backup old tables (may not exist): {e}")
+            
+        else:
+            # Fresh installation - just create all tables
+            print("Fresh installation detected - creating all tables...")
+            for table_name, query in TABLES.items():
+                print(f"Creating table: {table_name}")
+                cursor.execute(query)
+            
+            # Create indexes for better performance
+            print("Creating database indexes...")
+            for index_name, index_query in INDEXES.items():
+                try:
+                    cursor.execute(index_query)
+                except Exception as e:
+                    print(f"Note: Could not create index {index_name}: {e}")
+        
+        # Insert default settings if not exists
+        cursor.execute('SELECT * FROM settings WHERE id = ?', ('config',))
+        if not cursor.fetchone():
+            print("Inserting default settings...")
+            cursor.execute('''
+                INSERT INTO settings (
+                    id, max_uses_per_device, time_window_minutes, 
+                    enable_fingerprint_blocking, session_timeout_minutes, max_devices_per_student
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                'config', 
+                DEFAULT_SETTINGS['max_uses_per_device'], 
+                DEFAULT_SETTINGS['time_window_minutes'], 
+                DEFAULT_SETTINGS['enable_fingerprint_blocking'],
+                30,  # session_timeout_minutes
+                3    # max_devices_per_student
+            ))
+        
+        # Create default session profile if none exists
+        cursor.execute('SELECT COUNT(*) FROM session_profiles')
+        profile_count = cursor.fetchone()[0]
+        if profile_count == 0:
+            print("Creating default session profile...")
+            cursor.execute('''
+                INSERT INTO session_profiles (
+                    profile_name, room_type, building, capacity, organizer
+                )
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                'Default Session',
+                'Classroom',
+                'Main Building',
+                50,
+                'System Administrator'
+            ))
+        
+        conn.commit()
+        conn.close()
         
         print("Database migrations completed successfully!")
         return True
         
     except Exception as e:
         print(f"Error during database migration: {e}")
+        import traceback
+        traceback.print_exc()
         return False
+
+def get_student_attendance_stats(student_id):
+    """
+    Get comprehensive attendance statistics for a student.
+    
+    Args:
+        student_id (str): The student's ID
+        
+    Returns:
+        dict: Student attendance statistics
+    """
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Get student basic info
+        cursor.execute('''
+            SELECT s.student_id, s.name, s.course, s.year,
+                   sas.total_sessions, sas.present_count, sas.absent_count,
+                   sas.last_check_in, sas.status
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            WHERE s.student_id = ?
+        ''', (student_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return None
+            
+        stats = {
+            'student_id': result[0],
+            'name': result[1],
+            'course': result[2],
+            'year': result[3],
+            'total_sessions': result[4] or 0,
+            'present_count': result[5] or 0,
+            'absent_count': result[6] or 0,
+            'last_check_in': result[7],
+            'status': result[8] or 'active'
+        }
+        
+        # Calculate attendance percentage
+        if stats['total_sessions'] > 0:
+            stats['attendance_percentage'] = (stats['present_count'] / stats['total_sessions']) * 100
+        else:
+            stats['attendance_percentage'] = 0
+            
+        conn.close()
+        return stats
+        
+    except Exception as e:
+        print(f"Error getting student attendance stats: {e}")
+        return None
+
+def update_student_attendance_summary(student_id):
+    """
+    Update the attendance summary for a specific student.
+    
+    Args:
+        student_id (str): The student's ID
+    """
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Calculate current stats
+        cursor.execute('''
+            SELECT 
+                COUNT(DISTINCT ca.session_id) as total_sessions,
+                COUNT(ca.id) as present_count,
+                MAX(ca.checked_in_at) as last_check_in
+            FROM class_attendees ca
+            WHERE ca.student_id = ?
+        ''', (student_id,))
+        
+        stats = cursor.fetchone()
+        if stats:
+            total_sessions, present_count, last_check_in = stats
+            absent_count = max(0, (total_sessions or 0) - (present_count or 0))
+            
+            # Update or insert summary
+            cursor.execute('''
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, absent_count, last_check_in, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (student_id, total_sessions or 0, present_count or 0, absent_count, last_check_in))
+            
+            conn.commit()
+        
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error updating student attendance summary: {e}")
+
+def cleanup_old_tokens():
+    """
+    Clean up old/expired tokens from the database.
+    """
+    try:
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        
+        # Get time window from settings
+        cursor.execute('SELECT time_window_minutes FROM settings WHERE id = ?', ('config',))
+        result = cursor.fetchone()
+        time_window = result[0] if result else 1440  # Default 24 hours
+        
+        # Calculate cutoff time
+        import time
+        cutoff_time = time.time() - (time_window * 60)
+        
+        # Delete old tokens
+        cursor.execute('DELETE FROM tokens WHERE generated_at < ? AND used = TRUE', (cutoff_time,))
+        deleted_count = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        if deleted_count > 0:
+            print(f"Cleaned up {deleted_count} old tokens")
+            
+    except Exception as e:
+        print(f"Error cleaning up old tokens: {e}")
 
 # Export table names for external use
 TABLE_NAMES = list(TABLES.keys())

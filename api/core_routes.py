@@ -60,9 +60,9 @@ def get_current_token():
         
         # Get the most recent token that hasn't been used
         cursor.execute('''
-            SELECT token FROM active_tokens 
+            SELECT token FROM tokens 
             WHERE used = 0 
-            ORDER BY created_at DESC 
+            ORDER BY generated_at DESC 
             LIMIT 1
         ''')
         
@@ -91,7 +91,13 @@ def get_current_token():
 @core_bp.route('/scan/<token>')
 def scan(token):
     try:
+        print(f"Scanning token: {token[:10]}...")
         token_data = get_token(token)
+        print(f"Token data retrieved: {token_data}")
+        
+        if not token_data:
+            print("Token not found or invalid")
+            return "<h3>Invalid or expired QR code</h3>", 400
         
         request_data = {
             'user_agent': request.headers.get('User-Agent', ''),
@@ -101,17 +107,28 @@ def scan(token):
         
         device_info = generate_comprehensive_fingerprint(request_data)
         device_sig = device_info.get('device_signature', {})
+        fingerprint_hash = create_fingerprint_hash(device_info)
         
-        valid, message = validate_token_access(token_data, device_sig)
+        # Get or create device fingerprint record
+        device_fingerprint = store_device_fingerprint(fingerprint_hash, device_info)
+        device_fingerprint_id = device_fingerprint['id']
+        
+        valid, message = validate_token_access(token_data, device_fingerprint_id)
         if not valid:
+            print(f"Token access validation failed: {message}")
             return f"<h3>{message}</h3>", 400
         
-        if not token_data['opened']:
-            update_token(token, opened=True, device_signature=json.dumps(device_sig))
+        if not token_data.get('opened', False):
+            print("Marking token as opened and linking to device fingerprint")
+            update_token(token, opened=True, device_fingerprint_id=device_fingerprint_id)
         
+        print("Rendering index.html template")
         return render_template('index.html', token=token)
     except Exception as e:
-        return "Error processing QR code", 500
+        print(f"Error processing QR code: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"<h3>Error processing QR code: {str(e)}</h3>", 500
 
 @core_bp.route('/checkin', methods=['POST'])
 def checkin():
@@ -160,10 +177,13 @@ def checkin():
         
         print(f"Active session found: {active_session.get('session_name', 'Unnamed')}")
         
+        # Get session ID
+        session_id = active_session.get('id')
+        
         # Check if already checked in
-        if student.get('status') == 'present':
-            print(f"Student {student_id} already present")
-            return jsonify(status='error', message='Already checked in for this session'), 409
+        if is_student_already_checked_in_session(student_id, session_id):
+            print(f"Student {student_id} already checked in for session {session_id}")
+            return jsonify(status='error', message='You have already checked in for this session'), 409
         
         # Generate fingerprint
         print("Generating fingerprint...")
@@ -184,7 +204,6 @@ def checkin():
         print("Performing enhanced validation checks...")
         
         # Check if this device has already been used to check in for this session
-        session_id = active_session.get('id')
         if is_device_already_used_in_session(fingerprint_hash, session_id):
             print(f"Device {fingerprint_hash[:8]}... already used in session {session_id}")
             enhanced_data = data.copy()
@@ -198,9 +217,9 @@ def checkin():
             return jsonify(status='error', message='This device has already been used to check in for this session'), 409
         
         # Check if student is enrolled in the session's class (if class is specified)
-        class_table = active_session.get('class_table')
-        if class_table and not is_student_in_class(student_id, class_table):
-            print(f"Student {student_id} not enrolled in class {class_table}")
+        course = active_session.get('course')
+        if course and not is_student_in_class(student_id, course):
+            print(f"Student {student_id} not enrolled in class {course}")
             enhanced_data = data.copy()
             enhanced_data.update({
                 'session_id': session_id,
@@ -235,35 +254,34 @@ def checkin():
         
         print("Fingerprint allowed")
         
-        # Update attendance records
-        print(f"Updating attendance for {student_id}...")
-        update_student_attendance(student_id, 'present')
-        print("Student attendance updated")
+        # Store device fingerprint and get the record with ID
+        print("Storing device fingerprint...")
+        device_fingerprint_record = store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
+        device_fingerprint_id = device_fingerprint_record['id']
+        print("Device fingerprint stored")
+        
+        # Update attendance records - no longer updating student status directly
+        print(f"Recording attendance for {student_id}...")
         
         print("Marking token as used...")
-        update_token(token, used=True, fingerprint_hash=fingerprint_hash)
+        update_token(token, used=True, device_fingerprint_id=device_fingerprint_id)
         print("Token marked as used")
         
         # Record attendance
         print("Recording attendance...")
         attendance_data = {
-            'token': token,
+            'session_id': session_id,
             'student_id': student_id,
-            'fingerprint_hash': fingerprint_hash,
+            'device_fingerprint_id': device_fingerprint_id,
+            'token': token,
             'name': student['name'],
             'course': student['course'],
             'year': str(student['year']),
             'device_info': json.dumps(fingerprint_data),
-            'device_signature': json.dumps(fingerprint_data.get('device_signature', {})),
-            'session_id': session_id
         }
         
         record_attendance(attendance_data)
         print("Attendance recorded")
-        
-        print("Storing device fingerprint...")
-        store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
-        print("Device fingerprint stored")
         
         print(f"Check-in successful for {student['name']}")
         return jsonify(
@@ -287,7 +305,7 @@ def delete_all_data():
         cursor = conn.cursor()
         
         # Get counts before deletion for confirmation
-        cursor.execute('SELECT COUNT(*) FROM attendances')
+        cursor.execute('SELECT COUNT(*) FROM class_attendees')
         attendance_count = cursor.fetchone()[0]
         
         cursor.execute('SELECT COUNT(*) FROM denied_attempts')
@@ -297,12 +315,12 @@ def delete_all_data():
         device_count = cursor.fetchone()[0]
         
         # Delete all data from the tables
-        cursor.execute('DELETE FROM attendances')
+        cursor.execute('DELETE FROM class_attendees')
         cursor.execute('DELETE FROM denied_attempts') 
         cursor.execute('DELETE FROM device_fingerprints')
         
         # Reset auto-increment counters
-        cursor.execute('DELETE FROM sqlite_sequence WHERE name IN ("attendances", "denied_attempts", "device_fingerprints")')
+        cursor.execute('DELETE FROM sqlite_sequence WHERE name IN ("class_attendees", "denied_attempts", "device_fingerprints")')
         
         conn.commit()
         conn.close()

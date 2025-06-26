@@ -260,11 +260,14 @@ def get_student(student_id):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Get student basic info
+        # Get student basic info with attendance summary
         cursor.execute('''
-            SELECT student_id, name, course, year, last_check_in, status, absent_count, present_count, created_at
-            FROM students 
-            WHERE student_id = ?
+            SELECT 
+                s.student_id, s.name, s.course, s.year, s.created_at, s.updated_at,
+                sas.status, sas.present_count, sas.absent_count, sas.total_sessions, sas.last_check_in
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            WHERE s.student_id = ?
         ''', (student_id,))
         
         student = cursor.fetchone()
@@ -273,44 +276,37 @@ def get_student(student_id):
             conn.close()
             return jsonify({'error': 'Student not found'}), 404
         
-        # Get attendance statistics from student_attendance_history
+        # Get attendance statistics from class_attendees
         cursor.execute('''
-            SELECT 
-                COUNT(CASE WHEN status = 'present' THEN 1 END) as present_count,
-                COUNT(CASE WHEN status = 'absent' THEN 1 END) as absent_count,
-                MAX(recorded_at) as last_recorded
-            FROM students
-            WHERE student_id = ?
+            SELECT COUNT(*) as total_records
+            FROM class_attendees ca
+            JOIN attendance_sessions asess ON ca.session_id = asess.id
+            WHERE ca.student_id = ?
         ''', (student_id,))
-        
-        stats = cursor.fetchone()
-        
-        # Also check attendances table for additional present records
-        cursor.execute('SELECT COUNT(*) FROM attendances WHERE student_id = ?', (student_id,))
-        attendance_result = cursor.fetchone()
-        attendance_count = attendance_result[0] if attendance_result else 0
+        attendance_stats = cursor.fetchone()
+        attendance_records_count = attendance_stats[0] if attendance_stats else 0
         
         conn.close()
         
-        # Handle None values safely
-        present_from_history = stats[0] if stats and stats[0] else 0
-        absent_from_history = stats[1] if stats and stats[1] else 0
-        last_recorded = stats[2] if stats and stats[2] else None
+        # Handle None values safely using the student_attendance_summary data
+        present_count = student[7] if student and student[7] else 0
+        absent_count = student[8] if student and student[8] else 0
+        total_sessions = student[9] if student and student[9] else 0
+        last_check_in = student[10] if student and student[10] else None
         
         student_data = {
             'student_id': student[0],
             'name': student[1],
             'course': student[2],
             'year': str(student[3]),  # Convert to string for consistency
-            'last_check_in': student[4],
-            'status': student[5],
-            'absent_count': student[6] if student[6] else 0,
-            'present_count': student[7] if student[7] else 0,
-            'created_at': student[8],
-            'history_present_count': present_from_history,
-            'history_absent_count': absent_from_history,
-            'attendance_records_count': attendance_count,
-            'last_recorded': last_recorded
+            'created_at': student[4],
+            'updated_at': student[5],
+            'status': student[6],
+            'present_count': present_count,
+            'absent_count': absent_count,
+            'total_sessions': total_sessions,
+            'last_check_in': last_check_in,
+            'attendance_records_count': attendance_records_count,
         };
         
         return jsonify(student_data);
@@ -395,37 +391,32 @@ def update_student(student_id):
         update_fields.extend(['name = ?', 'course = ?', 'year = ?'])
         params.extend([data['name'].strip(), data['course'].strip(), year_int])
         
-        # Update attendance counts if provided
+        # Update attendance counts if provided - update student_attendance_summary
         if present_count is not None:
-            update_fields.append('present_count = ?')
-            params.append(present_count)
-            print(f"Updating present_count to: {present_count}")  # Debug log
+            cursor.execute('''
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, present_count, absent_count, total_sessions, status, updated_at)
+                VALUES (?, ?, COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0), ?, ?, datetime('now'))
+            ''', (student_id, present_count, student_id, present_count + (absent_count or 0), status))
         
         if absent_count is not None:
-            update_fields.append('absent_count = ?')
-            params.append(absent_count)
-            print(f"Updating absent_count to: {absent_count}")  # Debug log
-        
-        # Update status
-        if 'status' in data:
-            update_fields.append('status = ?')
-            params.append(status)
-            print(f"Updating status to: {status}")  # Debug log
-        
-        # Add student_id for WHERE clause
-        params.append(student_id)
-        
-        # Execute update
-        update_query = f'''
+            cursor.execute('''
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, present_count, absent_count, total_sessions, status, updated_at)
+                VALUES (?, COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0), ?, ?, ?, datetime('now'))
+            ''', (student_id, student_id, absent_count, (present_count or 0) + absent_count, status))
+
+        # Always update basic student info
+        update_query = '''
             UPDATE students 
-            SET {', '.join(update_fields)}
+            SET name = ?, course = ?, year = ?, updated_at = datetime('now')
             WHERE student_id = ?
         '''
         
-        print(f"Executing query: {update_query}")  # Debug log
-        print(f"With params: {params}")  # Debug log
+        print(f"Executing basic update query: {update_query}")  # Debug log
+        print(f"With params: {[data['name'].strip(), data['course'].strip(), year_int, student_id]}")  # Debug log
         
-        cursor.execute(update_query, params)
+        cursor.execute(update_query, [data['name'].strip(), data['course'].strip(), year_int, student_id])
         rows_affected = cursor.rowcount
         
         print(f"Rows affected: {rows_affected}")  # Debug log
@@ -434,8 +425,14 @@ def update_student(student_id):
         
         # Verify the update by fetching the student again
         cursor.execute('''
-            SELECT student_id, name, course, year, present_count, absent_count, status
-            FROM students WHERE student_id = ?
+            SELECT 
+                s.student_id, s.name, s.course, s.year,
+                COALESCE(sas.present_count, 0) as present_count,
+                COALESCE(sas.absent_count, 0) as absent_count,
+                sas.status
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            WHERE s.student_id = ?
         ''', (student_id,))
         
         updated_student = cursor.fetchone()
@@ -487,12 +484,12 @@ def delete_student(student_id):
         
         # Delete related records first (foreign key constraints)
         
-        # Delete from student
-        cursor.execute('DELETE FROM students WHERE student_id = ?', (student_id,))
-        history_deleted = cursor.rowcount
+        # Delete from student_attendance_summary
+        cursor.execute('DELETE FROM student_attendance_summary WHERE student_id = ?', (student_id,))
+        summary_deleted = cursor.rowcount
         
-        # Delete from attendances table
-        cursor.execute('DELETE FROM attendances WHERE student_id = ?', (student_id,))
+        # Delete from class_attendees table
+        cursor.execute('DELETE FROM class_attendees WHERE student_id = ?', (student_id,))
         attendance_deleted = cursor.rowcount
         
         # Delete student
@@ -501,14 +498,16 @@ def delete_student(student_id):
         conn.commit()
         conn.close()
         
-        total_records_deleted = history_deleted + attendance_deleted
+        total_records_deleted = summary_deleted + attendance_deleted
         
         print(f"Deleted student {student_id} ({student_name}) and {total_records_deleted} related records")
         return jsonify({
             'message': f'Student {student_name} deleted successfully',
-            'attendance_records_deleted': attendance_deleted,
-            'history_records_deleted': history_deleted,
-            'total_records_deleted': total_records_deleted
+            'deleted_records': {
+                'attendance_summary': summary_deleted,
+                'attendance_records': attendance_deleted,
+                'total': total_records_deleted
+            }
         })
         
     except Exception as e:
@@ -530,16 +529,15 @@ def update_student_attendance_manual(student_id):
         if 'absent_count' not in data and 'present_count' not in data:
             return jsonify({'error': 'Either absent_count or present_count is required'}), 400
         
-        update_fields = []
-        params = []
+        present_count = None
+        absent_count = None
+        status = None
         
         if 'absent_count' in data:
             try:
                 absent_count = int(data['absent_count'])
                 if absent_count < 0:
                     return jsonify({'error': 'absent_count cannot be negative'}), 400
-                update_fields.append('absent_count = ?')
-                params.append(absent_count)
             except ValueError:
                 return jsonify({'error': 'absent_count must be a number'}), 400
         
@@ -548,14 +546,11 @@ def update_student_attendance_manual(student_id):
                 present_count = int(data['present_count'])
                 if present_count < 0:
                     return jsonify({'error': 'present_count cannot be negative'}), 400
-                update_fields.append('present_count = ?')
-                params.append(present_count)
             except ValueError:
                 return jsonify({'error': 'present_count must be a number'}), 400
         
         if 'status' in data and data['status'] in ['present', 'absent', None]:
-            update_fields.append('status = ?')
-            params.append(data['status'])
+            status = data['status']
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -568,17 +563,14 @@ def update_student_attendance_manual(student_id):
             conn.close()
             return jsonify({'error': 'Student not found'}), 404
         
-        # Add student_id for WHERE clause
-        params.append(student_id)
+        # Update or insert into student_attendance_summary
+        total_sessions = (present_count or 0) + (absent_count or 0)
+        cursor.execute('''
+            INSERT OR REPLACE INTO student_attendance_summary 
+            (student_id, present_count, absent_count, total_sessions, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ''', (student_id, present_count or 0, absent_count or 0, total_sessions, status))
         
-        # Execute update
-        update_query = f'''
-            UPDATE students 
-            SET {', '.join(update_fields)}
-            WHERE student_id = ?
-        '''
-        
-        cursor.execute(update_query, params)
         rows_affected = cursor.rowcount
         
         conn.commit()

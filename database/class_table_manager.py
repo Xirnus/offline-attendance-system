@@ -50,15 +50,21 @@ def add_students_to_class(class_name, students, db_path='attendance.db'):
             year_level_int = convert_year_to_integer(year_level_raw) if year_level_raw else 1
             
             cursor.execute('''
-                INSERT OR REPLACE INTO students (student_id, name, course, year, class_table, created_at)
-                VALUES (?, ?, ?, ?, ?, datetime('now'))
+                INSERT OR REPLACE INTO students (student_id, name, course, year, created_at, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
             ''', (
                 student.get('studentId', ''),
                 student.get('studentName', ''),
                 student.get('course', ''),
-                year_level_int,
-                class_table
+                year_level_int
             ))
+            
+            # Initialize student attendance summary
+            cursor.execute('''
+                INSERT OR IGNORE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, absent_count, status, updated_at)
+                VALUES (?, 0, 0, 0, 'active', datetime('now'))
+            ''', (student.get('studentId', ''),))
         
         conn.commit()
         print(f"Successfully added {len(students)} students to class '{class_name}' (table: {class_table})")
@@ -71,7 +77,7 @@ def add_students_to_class(class_name, students, db_path='attendance.db'):
 
 def get_students_by_class(class_table, db_path='attendance.db'):
     """
-    Get all students belonging to a specific class.
+    Get all students belonging to a specific class with their attendance data.
     :param class_table: The class table identifier
     :param db_path: Path to the attendance database file
     :return: List of student dictionaries
@@ -81,12 +87,21 @@ def get_students_by_class(class_table, db_path='attendance.db'):
     
     try:
         cursor.execute('''
-            SELECT student_id, name, course, year, class_table, status, 
-                   absent_count, present_count, created_at
-            FROM students 
-            WHERE class_table = ?
-            ORDER BY name
-        ''', (class_table,))
+            SELECT 
+                s.student_id, 
+                s.name, 
+                s.course, 
+                s.year, 
+                s.created_at,
+                sas.status,
+                COALESCE(sas.present_count, 0) as present_count,
+                COALESCE(sas.absent_count, 0) as absent_count,
+                COALESCE(sas.total_sessions, 0) as total_sessions,
+                sas.last_check_in
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            ORDER BY s.name
+        ''')
         
         columns = [desc[0] for desc in cursor.description]
         students = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -101,31 +116,30 @@ def get_students_by_class(class_table, db_path='attendance.db'):
 
 def get_all_classes(db_path='attendance.db'):
     """
-    Get all unique class tables from the students table.
+    Get all unique classes from the students table.
+    Since we removed class_table column, we'll group by course instead.
     :param db_path: Path to the attendance database file
-    :return: List of class dictionaries with table_name and student count
+    :return: List of class dictionaries with course name and student count
     """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
         cursor.execute('''
-            SELECT class_table, COUNT(*) as student_count
+            SELECT course, COUNT(*) as student_count
             FROM students 
-            WHERE class_table IS NOT NULL AND class_table != ''
-            GROUP BY class_table
-            ORDER BY class_table
+            WHERE course IS NOT NULL AND course != ''
+            GROUP BY course
+            ORDER BY course
         ''')
         
         classes = []
         for row in cursor.fetchall():
-            class_table, student_count = row
-            # Convert class_table back to display name
-            display_name = class_table.replace('_', ' ').replace('-', ' - ')
-            
+            course, student_count = row
+            # Use course as both display name and identifier
             classes.append({
-                'table_name': class_table,
-                'display_name': display_name,
+                'table_name': course.replace(' ', '_').replace('-', '_'),
+                'display_name': course,
                 'student_count': student_count
             })
         
@@ -137,10 +151,10 @@ def get_all_classes(db_path='attendance.db'):
     finally:
         conn.close()
 
-def delete_class(class_table, db_path='attendance.db'):
+def delete_class(course_name, db_path='attendance.db'):
     """
-    Delete all students belonging to a specific class.
-    :param class_table: The class table identifier
+    Delete all students belonging to a specific course.
+    :param course_name: The course name identifier
     :param db_path: Path to the attendance database file
     :return: Number of students deleted
     """
@@ -148,104 +162,158 @@ def delete_class(class_table, db_path='attendance.db'):
     cursor = conn.cursor()
     
     try:
-        cursor.execute('DELETE FROM students WHERE class_table = ?', (class_table,))
+        # First get student IDs to clean up their attendance summaries
+        cursor.execute('SELECT student_id FROM students WHERE course = ?', (course_name,))
+        student_ids = [row[0] for row in cursor.fetchall()]
+        
+        # Delete attendance summaries for these students
+        for student_id in student_ids:
+            cursor.execute('DELETE FROM student_attendance_summary WHERE student_id = ?', (student_id,))
+        
+        # Delete the students
+        cursor.execute('DELETE FROM students WHERE course = ?', (course_name,))
         deleted_count = cursor.rowcount
         conn.commit()
         
-        print(f"Deleted {deleted_count} students from class '{class_table}'")
+        print(f"Deleted {deleted_count} students from course '{course_name}'")
         return deleted_count
         
     except Exception as e:
-        print(f"Error deleting class {class_table}: {e}")
+        print(f"Error deleting course {course_name}: {e}")
         return 0
     finally:
         conn.close()
 
-def add_class_table_column_to_students(db_path='attendance.db'):
+def check_normalized_schema(db_path='attendance.db'):
     """
-    Add the class_table column to the students table if it doesn't exist.
+    Check if the database has been migrated to the new normalized schema.
+    :param db_path: Path to the attendance database file
+    :return: True if normalized schema exists, False otherwise
     """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
-        # Check if the column already exists
-        cursor.execute("PRAGMA table_info(students)")
-        columns = [row[1] for row in cursor.fetchall()]
+        # Check if new tables exist
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name IN ('class_attendees', 'student_attendance_summary', 'device_fingerprints')
+        """)
+        new_tables = cursor.fetchall()
         
-        if 'class_table' not in columns:
-            # Add the class_table column
-            cursor.execute("ALTER TABLE students ADD COLUMN class_table TEXT")
-            conn.commit()
-            print("Successfully added class_table column to students table")
-        else:
-            print("class_table column already exists in students table")
-            
+        return len(new_tables) >= 3  # All three new tables should exist
+        
     except sqlite3.Error as e:
-        print(f"Error adding class_table column: {e}")
+        print(f"Error checking schema: {e}")
+        return False
     finally:
         conn.close()
 
-def add_session_id_column_to_attendances(db_path='attendance.db'):
+def migrate_to_normalized_schema(db_path='attendance.db'):
     """
-    Add the session_id column to the attendances table if it doesn't exist.
+    Migrate the database to use the new normalized schema.
+    This function is now obsolete as migration is handled by models.py
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    try:
-        # Check if the column already exists
-        cursor.execute("PRAGMA table_info(attendances)")
-        columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'session_id' not in columns:
-            # Add the session_id column
-            cursor.execute("ALTER TABLE attendances ADD COLUMN session_id INTEGER")
-            cursor.execute("ALTER TABLE attendances ADD FOREIGN KEY (session_id) REFERENCES attendance_sessions (id)")
-            conn.commit()
-            print("Successfully added session_id column to attendances table")
-        else:
-            print("session_id column already exists in attendances table")
-            
-    except sqlite3.Error as e:
-        print(f"Error adding session_id column: {e}")
-    finally:
-        conn.close()
-
-def add_class_table_column_to_sessions(db_path='attendance.db'):
-    """
-    Add the class_table column to the attendance_sessions table if it doesn't exist.
-    """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    try:
-        # Check if the column already exists
-        cursor.execute("PRAGMA table_info(attendance_sessions)")
-        columns = [row[1] for row in cursor.fetchall()]
-        
-        if 'class_table' not in columns:
-            # Add the class_table column
-            cursor.execute("ALTER TABLE attendance_sessions ADD COLUMN class_table TEXT")
-            conn.commit()
-            print("Successfully added class_table column to attendance_sessions table")
-        else:
-            print("class_table column already exists in attendance_sessions table")
-            
-    except sqlite3.Error as e:
-        print(f"Error adding class_table column: {e}")
-    finally:
-        conn.close()
+    if check_normalized_schema(db_path):
+        print("Database already uses normalized schema")
+        return True
+    else:
+        print("Database migration needed. Please run the migration from models.py")
+        print("Use: python -c 'from database.models import create_all_tables; create_all_tables()'")
+        return False
 
 def fix_database_columns(db_path='attendance.db'):
     """
-    Fix all missing columns in the attendance database.
+    Check if database needs migration to normalized schema.
     """
-    print("Checking and fixing database columns...")
-    add_class_table_column_to_students(db_path)
-    add_session_id_column_to_attendances(db_path)
-    add_class_table_column_to_sessions(db_path)
-    print("Database column fixes completed!")
+    print("Checking database schema...")
+    if check_normalized_schema(db_path):
+        print("✅ Database uses normalized schema")
+    else:
+        print("❌ Database needs migration to normalized schema")
+        print("Please run: python -c 'from database.models import create_all_tables; create_all_tables()'")
+    print("Database check completed!")
+
+def get_students_by_course(course_name, db_path='attendance.db'):
+    """
+    Get all students belonging to a specific course with their attendance data.
+    :param course_name: The course name
+    :param db_path: Path to the attendance database file
+    :return: List of student dictionaries
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT 
+                s.student_id, 
+                s.name, 
+                s.course, 
+                s.year, 
+                s.created_at,
+                sas.status,
+                COALESCE(sas.present_count, 0) as present_count,
+                COALESCE(sas.absent_count, 0) as absent_count,
+                COALESCE(sas.total_sessions, 0) as total_sessions,
+                sas.last_check_in
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            WHERE s.course = ?
+            ORDER BY s.name
+        ''', (course_name,))
+        
+        columns = [desc[0] for desc in cursor.description]
+        students = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return students
+        
+    except Exception as e:
+        print(f"Error getting students for course {course_name}: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_session_attendance_for_course(course_name, session_id, db_path='attendance.db'):
+    """
+    Get attendance data for a specific course and session.
+    :param course_name: The course name
+    :param session_id: The session ID
+    :param db_path: Path to the attendance database file
+    :return: Dictionary with attendance statistics
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Get total students in course
+        cursor.execute('SELECT COUNT(*) FROM students WHERE course = ?', (course_name,))
+        total_students = cursor.fetchone()[0]
+        
+        # Get students who attended
+        cursor.execute('''
+            SELECT COUNT(*) FROM class_attendees ca
+            JOIN students s ON ca.student_id = s.student_id
+            WHERE s.course = ? AND ca.session_id = ?
+        ''', (course_name, session_id))
+        present_count = cursor.fetchone()[0]
+        
+        absent_count = total_students - present_count
+        
+        return {
+            'course': course_name,
+            'session_id': session_id,
+            'total_students': total_students,
+            'present_count': present_count,
+            'absent_count': absent_count,
+            'attendance_percentage': (present_count / total_students * 100) if total_students > 0 else 0
+        }
+        
+    except Exception as e:
+        print(f"Error getting session attendance for course {course_name}: {e}")
+        return {}
+    finally:
+        conn.close()
 
 # Legacy functions for backward compatibility (now redirect to new functions)
 def create_class_table(table_name, columns, db_path='classes.db'):
@@ -295,5 +363,5 @@ def insert_students(table_name, students, db_path='classes.db'):
         conn.close()
 
 if __name__ == "__main__":
-    # Run this to add the missing columns
+    # Check database schema compatibility
     fix_database_columns()

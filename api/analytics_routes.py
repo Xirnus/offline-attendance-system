@@ -37,7 +37,7 @@ def analytics_overview():
     """Get overview analytics statistics"""
     try:
         students = get_all_students()
-        attendances = get_all_data('attendances', limit=10000)  # Get all attendance records
+        attendances = get_all_data('class_attendees', limit=10000)  # Get all attendance records
         sessions = get_all_data('attendance_sessions', limit=1000)  # Get all sessions
         
         # Calculate metrics
@@ -255,7 +255,7 @@ def preview_report():
         else:
             # Return basic preview data
             students_data = get_students_with_attendance_data()
-            attendance_data = get_all_data('attendances')
+            attendance_data = get_all_data('class_attendees')
             
             data = {
                 'summary': {

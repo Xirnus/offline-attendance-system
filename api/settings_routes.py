@@ -19,7 +19,7 @@ Settings Management Features:
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
-from database.operations import get_settings, update_settings, get_all_data
+from database.operations import get_settings, update_settings, get_all_data, get_enriched_attendances
 from services.reports import reports_service
 
 settings_bp = Blueprint('settings', __name__)
@@ -27,12 +27,13 @@ settings_bp = Blueprint('settings', __name__)
 @settings_bp.route('/api/attendances')
 def api_attendances():
     try:
-        attendances = get_all_data('attendances')
+        attendances = get_enriched_attendances()
         for attendance in attendances:
             if 'fingerprint_hash' in attendance and attendance['fingerprint_hash']:
                 attendance['fingerprint_hash'] = attendance['fingerprint_hash'][:8] + '...'
         return jsonify(attendances)
     except Exception as e:
+        print(f"Error getting attendances: {e}")
         return jsonify([])
 
 @settings_bp.route('/api/denied')
@@ -40,8 +41,8 @@ def api_denied():
     try:
         denied = get_all_data('denied_attempts')
         for attempt in denied:
-            if 'fingerprint_hash' in attempt and attempt['fingerprint_hash']:
-                attempt['fingerprint_hash'] = attempt['fingerprint_hash'][:8] + '...'
+            if 'device_fingerprint_id' in attempt and attempt['device_fingerprint_id']:
+                attempt['device_fingerprint_id'] = attempt['device_fingerprint_id'][:8] + '...'
         return jsonify(denied)
     except Exception as e:
         return jsonify([])
@@ -51,8 +52,8 @@ def api_device_fingerprints():
     try:
         fingerprints = get_all_data('device_fingerprints')
         for fp in fingerprints:
-            if 'fingerprint_hash' in fp and fp['fingerprint_hash']:
-                fp['fingerprint_hash'] = fp['fingerprint_hash'][:8] + '...'
+            if 'hash' in fp and fp['hash']:
+                fp['hash'] = fp['hash'][:8] + '...'
         return jsonify(fingerprints)
     except Exception as e:
         return jsonify([])
@@ -73,7 +74,7 @@ def api_settings():
 def export_data():
     try:
         export_data = {
-            'attendances': get_all_data('attendances'),
+            'class_attendees': get_all_data('class_attendees'),
             'denied_attempts': get_all_data('denied_attempts'),
             'settings': get_settings(),
             'device_fingerprints': get_all_data('device_fingerprints'),

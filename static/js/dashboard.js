@@ -1058,19 +1058,19 @@ function updateAttendanceTable() {
   tbody.innerHTML = attendanceData.slice(0, 50).map(item => `
     <tr>
       <td>${formatTimestamp(item.timestamp)}</td>
-      <td>${escapeHtml(item.name)}</td>
-      <td>${escapeHtml(item.course)}</td>
-      <td>${escapeHtml(item.year)}</td>
+      <td>${escapeHtml(item.name || 'Unknown')}</td>
+      <td>${escapeHtml(item.course || 'Unknown')}</td>
+      <td>${escapeHtml(item.year || 'Unknown')}</td>
       <td>
         <span 
           style="cursor: pointer; color: #007bff; text-decoration: underline;" 
-          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info)}')"
+          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info || '{}')}')"
           title="Click for detailed device information"
         >
           ${getDeviceInfo(item.device_info)}
         </span>
       </td>
-      <td>${item.token.substring(0, 8)}...</td>
+      <td>${item.token ? item.token.substring(0, 8) + '...' : 'N/A'}</td>
     </tr>
   `).join('');
 }

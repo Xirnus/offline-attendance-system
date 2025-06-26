@@ -53,8 +53,9 @@ def is_fingerprint_allowed(fingerprint_hash):
         
         cursor.execute('''
             SELECT COUNT(*) as usage_count 
-            FROM attendances 
-            WHERE fingerprint_hash = ? AND timestamp > ?
+            FROM class_attendees ca
+            JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+            WHERE df.fingerprint_hash = ? AND ca.checked_in_at > datetime(?, 'unixepoch')
         ''', (fingerprint_hash, time_threshold))
         
         usage_count = cursor.fetchone()['usage_count']
@@ -78,7 +79,8 @@ def is_fingerprint_allowed(fingerprint_hash):
         return True, f"Error checking fingerprint: {e}"
 
 def store_device_fingerprint(fingerprint_hash, device_info):
-    """Store or update device fingerprint"""
+    """Store or update device fingerprint and return the record"""
+    import json
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -87,20 +89,36 @@ def store_device_fingerprint(fingerprint_hash, device_info):
         existing = cursor.fetchone()
         current_time = datetime.utcnow().isoformat()
         
+        # Convert device_info to JSON string if it's a dict
+        device_info_str = json.dumps(device_info) if isinstance(device_info, dict) else device_info
+        
         if existing:
             cursor.execute('''
                 UPDATE device_fingerprints 
-                SET last_seen = ?, usage_count = usage_count + 1, device_info = ?
+                SET last_seen = ?, usage_count = usage_count + 1, device_info = ?, updated_at = ?
                 WHERE fingerprint_hash = ?
-            ''', (current_time, device_info, fingerprint_hash))
+            ''', (current_time, device_info_str, current_time, fingerprint_hash))
+            device_id = existing[0]  # Get the ID from existing record
         else:
             cursor.execute('''
                 INSERT INTO device_fingerprints 
-                (fingerprint_hash, first_seen, last_seen, usage_count, device_info)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (fingerprint_hash, current_time, current_time, 1, device_info))
+                (fingerprint_hash, first_seen, last_seen, usage_count, device_info, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (fingerprint_hash, current_time, current_time, 1, device_info_str, current_time, current_time))
+            device_id = cursor.lastrowid
         
         conn.commit()
+        
+        # Get the full record to return
+        cursor.execute('SELECT * FROM device_fingerprints WHERE id = ?', (device_id,))
+        result = cursor.fetchone()
         conn.close()
+        
+        # Convert to dict format
+        from database.operations import row_to_dict
+        return row_to_dict(result)
+        
     except Exception as e:
-        pass  # Silently handle errors to avoid breaking the main flow
+        print(f"Error storing device fingerprint: {e}")
+        # Return a minimal record to prevent errors
+        return {'id': None, 'fingerprint_hash': fingerprint_hash}

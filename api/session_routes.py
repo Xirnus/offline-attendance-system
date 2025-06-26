@@ -40,6 +40,7 @@ def create_session():
         end_time = data.get('end_time')
         profile_id = data.get('profile_id')
         class_table = data.get('class_table')
+        course = data.get('course')  # Use course instead of class_table
         reset_status = data.get('reset_status', True)  # Default to True
 
         if not all([session_name, start_time, end_time]):
@@ -49,12 +50,13 @@ def create_session():
         if reset_status:
             conn = get_db_connection()
             cursor = conn.cursor()
-            cursor.execute('UPDATE students SET status = NULL')
+            # Reset student attendance summary status instead of student table
+            cursor.execute('UPDATE student_attendance_summary SET status = NULL')
             conn.commit()
             conn.close()
-            print("Reset all student status to null before creating session")
+            print("Reset all student attendance status to null before creating session")
 
-        result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table)
+        result = create_attendance_session(session_name, start_time, end_time, profile_id, course)
         if result:
             message = 'Attendance session created'
             if profile_id:
@@ -77,7 +79,7 @@ def stop_session():
             cleared_counts = result.get('cleared_counts', {})
             
             if data_cleared:
-                message = f'Session stopped successfully. {absent_marked} students marked absent. Data cleared: {cleared_counts.get("attendances", 0)} attendances, {cleared_counts.get("denied_attempts", 0)} failed attempts, {cleared_counts.get("device_fingerprints", 0)} devices.'
+                message = f'Session stopped successfully. {absent_marked} students marked absent. Data cleared: {cleared_counts.get("class_attendees", 0)} attendances, {cleared_counts.get("denied_attempts", 0)} failed attempts, {cleared_counts.get("device_fingerprints", 0)} devices.'
             else:
                 message = f'Session stopped successfully. {absent_marked} students marked absent.' if absent_marked > 0 else 'Session stopped successfully'
             

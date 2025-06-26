@@ -113,14 +113,14 @@ def update_settings(data):
         print(f"Error updating settings: {e}")
         raise e
 
-def create_token(token):
+def create_token(token, device_fingerprint_id=None):
     """Store new token in database"""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO active_tokens (token, timestamp, used, opened, created_at)
+        INSERT INTO tokens (token, generated_at, used, opened, device_fingerprint_id)
         VALUES (?, ?, ?, ?, ?)
-    ''', (token, time.time(), False, False, datetime.utcnow().isoformat()))
+    ''', (token, time.time(), False, False, device_fingerprint_id))
     conn.commit()
     conn.close()
 
@@ -128,7 +128,7 @@ def get_token(token):
     """Get token data from database"""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM active_tokens WHERE token = ?', (token,))
+    cursor.execute('SELECT * FROM tokens WHERE token = ?', (token,))
     result = cursor.fetchone()
     conn.close()
     return row_to_dict(result) 
@@ -144,7 +144,7 @@ def update_token(token, **kwargs):
         set_clauses.append(f"{key} = ?")
         values.append(value)
     
-    query = f"UPDATE active_tokens SET {', '.join(set_clauses)} WHERE token = ?"
+    query = f"UPDATE tokens SET {', '.join(set_clauses)} WHERE token = ?"
     values.append(token)
     
     cursor.execute(query, values)
@@ -153,29 +153,57 @@ def update_token(token, **kwargs):
 
 @retry_db_operation()
 def record_attendance(data):
-    """Record attendance with enhanced device signature"""
+    """Record attendance with device fingerprint reference"""
     conn = None
     try:
         conn = get_db_connection_with_retry()
         cursor = conn.cursor()
         current_time = datetime.utcnow().isoformat()
         
+        # First, create or get device fingerprint
+        device_fingerprint_id = None
+        if data.get('fingerprint_hash') or data.get('device_info'):
+            cursor.execute('''
+                INSERT OR IGNORE INTO device_fingerprints 
+                (fingerprint_hash, first_seen, last_seen, usage_count, device_info, is_blocked)
+                VALUES (?, ?, ?, 1, ?, FALSE)
+            ''', (
+                data.get('fingerprint_hash', 'unknown'),
+                current_time,
+                current_time,
+                data.get('device_info')
+            ))
+            
+            # Get the device fingerprint ID
+            cursor.execute('''
+                SELECT id FROM device_fingerprints 
+                WHERE fingerprint_hash = ? AND (device_info = ? OR (device_info IS NULL AND ? IS NULL))
+            ''', (
+                data.get('fingerprint_hash', 'unknown'),
+                data.get('device_info'),
+                data.get('device_info')
+            ))
+            result = cursor.fetchone()
+            if result:
+                device_fingerprint_id = result[0]
+                # Update usage count and last seen
+                cursor.execute('''
+                    UPDATE device_fingerprints 
+                    SET usage_count = usage_count + 1, last_seen = ?, updated_at = ?
+                    WHERE id = ?
+                ''', (current_time, current_time, device_fingerprint_id))
+        
+        # Record attendance
         cursor.execute('''
-            INSERT INTO attendances 
-            (token, fingerprint_hash, timestamp, created_at, name, course, year, device_info, device_signature, student_id, session_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO class_attendees 
+            (student_id, session_id, token_id, device_fingerprint_id, checked_in_at)
+            VALUES (?, ?, ?, ?, ?)
         ''', (
-            data.get('token'),
-            data.get('fingerprint_hash'),
-            time.time(),
-            current_time,
-            data.get('name'),
-            data.get('course'),
-            data.get('year'),
-            data.get('device_info'),
-            data.get('device_signature'),
             data.get('student_id'),
-            data.get('session_id')
+            data.get('session_id'),
+            data.get('token_id'),
+            device_fingerprint_id,
+            current_time
         ))
         
         conn.commit()
@@ -189,28 +217,50 @@ def record_attendance(data):
 
 @retry_db_operation()
 def record_denied_attempt(data, reason):
-    """Record denied attempt with enhanced device signature"""
+    """Record denied attempt with device fingerprint reference"""
     conn = None
     try:
         conn = get_db_connection_with_retry()
         cursor = conn.cursor()
-        current_time = datetime.utcnow().isoformat()
+        current_time = time.time()
+        
+        # First, create or get device fingerprint
+        device_fingerprint_id = None
+        if data.get('fingerprint_hash') or data.get('device_info'):
+            cursor.execute('''
+                INSERT OR IGNORE INTO device_fingerprints 
+                (fingerprint_hash, first_seen, last_seen, usage_count, device_info, is_blocked)
+                VALUES (?, ?, ?, 1, ?, FALSE)
+            ''', (
+                data.get('fingerprint_hash', 'unknown'),
+                datetime.utcnow().isoformat(),
+                datetime.utcnow().isoformat(),
+                data.get('device_info')
+            ))
+            
+            # Get the device fingerprint ID
+            cursor.execute('''
+                SELECT id FROM device_fingerprints 
+                WHERE fingerprint_hash = ? AND (device_info = ? OR (device_info IS NULL AND ? IS NULL))
+            ''', (
+                data.get('fingerprint_hash', 'unknown'),
+                data.get('device_info'),
+                data.get('device_info')
+            ))
+            result = cursor.fetchone()
+            if result:
+                device_fingerprint_id = result[0]
         
         cursor.execute('''
             INSERT INTO denied_attempts 
-            (token, fingerprint_hash, timestamp, created_at, reason, name, course, year, device_info, device_signature)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (student_id, token_id, device_fingerprint_id, reason, attempted_at)
+            VALUES (?, ?, ?, ?, ?)
         ''', (
-            data.get('token'),
-            data.get('fingerprint_hash'),
-            time.time(),
-            current_time,
+            data.get('student_id'),
+            data.get('token_id'),
+            device_fingerprint_id,
             reason,
-            data.get('name', 'Unknown'),
-            data.get('course', 'Unknown'),
-            data.get('year', 'Unknown'),
-            data.get('device_info'),
-            data.get('device_signature')
+            current_time
         ))
         
         conn.commit()
@@ -229,9 +279,12 @@ def get_all_data(table_name, limit=100):
     
     timestamp_columns = {
         'device_fingerprints': 'last_seen',
-        'attendances': 'timestamp',
-        'denied_attempts': 'timestamp',
-        'active_tokens': 'created_at',
+        'class_attendees': 'checked_in_at',
+        'denied_attempts': 'attempted_at',
+        'tokens': 'generated_at',
+        'attendance_sessions': 'created_at',
+        'session_profiles': 'created_at',
+        'student_attendance_summary': 'updated_at',
         'settings': 'id'
     }
     
@@ -299,7 +352,7 @@ def get_student_by_id(student_id):
 
 @retry_db_operation()
 def update_student_attendance(student_id, status):
-    """Update student attendance status and increment counters - SIMPLIFIED"""
+    """Update student attendance status using new normalized schema"""
     conn = None
     try:
         conn = get_db_connection_with_retry()
@@ -310,37 +363,47 @@ def update_student_attendance(student_id, status):
         session = cursor.fetchone()
         session_id = session[0] if session else None
         
-        # Update student status AND increment the appropriate counter
-        if status == 'present':
+        if status == 'present' and session_id:
+            # Record attendance in class_attendees table
             cursor.execute('''
-                UPDATE students 
-                SET status = ?, 
-                    last_check_in = datetime('now'),
-                    present_count = COALESCE(present_count, 0) + 1,
-                    last_session_id = ?
-                WHERE student_id = ?
-            ''', (status, session_id, student_id))
-            print(f"Updated {student_id} as present, incremented present_count")
+                INSERT OR IGNORE INTO class_attendees 
+                (student_id, session_id, checked_in_at)
+                VALUES (?, ?, ?)
+            ''', (student_id, session_id, datetime.utcnow().isoformat()))
             
-        elif status == 'absent':
+            # Update student attendance summary
             cursor.execute('''
-                UPDATE students 
-                SET status = ?, 
-                    absent_count = COALESCE(absent_count, 0) + 1,
-                    last_session_id = ?
-                WHERE student_id = ?
-            ''', (status, session_id, student_id))
-            print(f"Updated {student_id} as absent, incremented absent_count")
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, absent_count, last_session_id, last_check_in, status, updated_at)
+                SELECT 
+                    ?, 
+                    COALESCE((SELECT total_sessions FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0),
+                    ?,
+                    ?,
+                    'present',
+                    datetime('now')
+            ''', (student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
             
-        else:
+            print(f"Updated {student_id} as present for session {session_id}")
+            
+        elif status == 'absent' and session_id:
+            # Update student attendance summary for absent
             cursor.execute('''
-                UPDATE students 
-                SET status = ?, 
-                    last_check_in = datetime('now'),
-                    last_session_id = ?
-                WHERE student_id = ?
-            ''', (status, session_id, student_id))
-            print(f"Updated {student_id} status to {status}")
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, absent_count, last_session_id, status, updated_at)
+                SELECT 
+                    ?, 
+                    COALESCE((SELECT total_sessions FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0),
+                    COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    ?,
+                    'absent',
+                    datetime('now')
+            ''', (student_id, student_id, student_id, student_id, session_id))
+            
+            print(f"Updated {student_id} as absent for session {session_id}")
         
         conn.commit()
         
@@ -357,13 +420,13 @@ def update_student_attendance(student_id, status):
 @retry_db_operation()
 def mark_students_absent(session_id=None, cursor=None):
     """Mark students as absent if they didn't check in during active session.
-    If class_table is set, only mark students from that class as absent.
-    Otherwise, mark all students as absent if they didn't check in."""
+    Uses the new normalized schema with class_attendees table."""
     conn = None
     try:
         if cursor is None:
             conn = get_db_connection_with_retry()
             cursor = conn.cursor()
+        
         if session_id is None:
             cursor.execute('SELECT id, class_table FROM attendance_sessions WHERE is_active = 1')
             session = cursor.fetchone()
@@ -371,73 +434,65 @@ def mark_students_absent(session_id=None, cursor=None):
                 if conn:
                     conn.close()
                 return 0
-            session_id, class_table = session
+            session_id, course_name = session
         else:
             cursor.execute('SELECT class_table FROM attendance_sessions WHERE id = ?', (session_id,))
-            class_table_row = cursor.fetchone()
-            class_table = class_table_row[0] if class_table_row else None
+            course_row = cursor.fetchone()
+            course_name = course_row[0] if course_row else None
 
         absent_count = 0
 
-        if class_table:  # Class session: only mark students from that class
-            import sqlite3
-            class_db_conn = sqlite3.connect('classes.db')
-            class_cursor = class_db_conn.cursor()
-            class_cursor.execute(f'SELECT student_id FROM "{class_table}"')
-            class_student_ids = [row[0] for row in class_cursor.fetchall()]
-            class_db_conn.close()
-
-            for student_id in class_student_ids:
-                cursor.execute('''
-                    SELECT 1 FROM attendances WHERE student_id = ? AND session_id = ?
-                ''', (student_id, session_id))
-                checked_in = cursor.fetchone()
-                cursor.execute('SELECT status FROM students WHERE student_id = ?', (student_id,))
-                student_row = cursor.fetchone()
-                status = student_row[0] if student_row else None
-                if not checked_in and (status is None or status != 'present'):
-                    cursor.execute('''
-                        UPDATE students 
-                        SET status = 'absent',
-                            absent_count = COALESCE(absent_count, 0) + 1,
-                            last_session_id = ?
-                        WHERE student_id = ?
-                    ''', (session_id, student_id))
+        if course_name:  # Course-specific session: only mark students from that course
+            # Get all students enrolled in this course from the main students table
+            cursor.execute('SELECT student_id FROM students WHERE course = ?', (course_name,))
+            course_student_ids = [row[0] for row in cursor.fetchall()]
+            
+            print(f"Found {len(course_student_ids)} students in course '{course_name}'")
+            
+            # Get students who already checked in for this session
+            cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
+            checked_in_students = {row[0] for row in cursor.fetchall()}
+            
+            print(f"Found {len(checked_in_students)} students already checked in for session {session_id}")
+            
+            # Mark absent students from this course
+            for student_id in course_student_ids:
+                if student_id not in checked_in_students:
+                    update_student_attendance(student_id, 'absent')
                     absent_count += 1
-        else:  # Manual/User session: mark all students who didn't check in
+                    
+        else:  # General session: mark all students who didn't check in
+            # Get all students
             cursor.execute('SELECT student_id FROM students')
             all_student_ids = [row[0] for row in cursor.fetchall()]
+            
+            # Get students who already checked in for this session
+            cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
+            checked_in_students = {row[0] for row in cursor.fetchall()}
+            
+            # Mark absent students
             for student_id in all_student_ids:
-                cursor.execute('''
-                    SELECT 1 FROM attendances WHERE student_id = ? AND session_id = ?
-                ''', (student_id, session_id))
-                checked_in = cursor.fetchone()
-                cursor.execute('SELECT status FROM students WHERE student_id = ?', (student_id,))
-                student_row = cursor.fetchone()
-                status = student_row[0] if student_row else None
-                if not checked_in and (status is None or status != 'present'):
-                    cursor.execute('''
-                        UPDATE students 
-                        SET status = 'absent',
-                            absent_count = COALESCE(absent_count, 0) + 1,
-                            last_session_id = ?
-                        WHERE student_id = ?
-                    ''', (session_id, student_id))
+                if student_id not in checked_in_students:
+                    update_student_attendance(student_id, 'absent')
                     absent_count += 1
 
         if conn:
             conn.commit()
-            conn.close()
+        print(f"Marked {absent_count} students as absent for session {session_id}")
         return absent_count
+        
     except Exception as e:
         if conn:
             conn.rollback()
-            conn.close()
-        raise e
+        print(f"Error marking students absent: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
     finally:
         if conn:
             conn.close()
-            
+
+
 def get_active_session():
     """Get the currently active attendance session"""
     try:
@@ -457,16 +512,29 @@ def get_active_session():
         return None
 
 def create_attendance_session(session_name, start_time, end_time, profile_id=None, class_table=None):
-    """Create attendance session, optionally from a profile and class_table"""
+    """Create attendance session with required profile_id
+    Note: class_table parameter is kept for backward compatibility but represents course name
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # If no profile_id provided, use default profile
+        if profile_id is None:
+            cursor.execute('SELECT id FROM session_profiles WHERE profile_name = ? LIMIT 1', ('Default Session',))
+            profile_result = cursor.fetchone()
+            profile_id = profile_result[0] if profile_result else 1
+        
+        # Deactivate any existing active sessions
+        cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1')
+        
         cursor.execute('''
-            INSERT INTO attendance_sessions (session_name, start_time, end_time, is_active, profile_id, class_table, created_at)
-            VALUES (?, ?, ?, 1, ?, ?, datetime('now'))
-        ''', (session_name, start_time, end_time, profile_id, class_table))
+            INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
+            VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
+        ''', (profile_id, session_name, start_time, end_time, class_table))
         conn.commit()
         conn.close()
+        print(f"Created attendance session: {session_name} for course: {class_table}")
         return True
     except Exception as e:
         print(f"Error creating session: {e}")
@@ -498,7 +566,7 @@ def stop_active_session():
             ''')
             
             # Get counts before clearing for the response
-            cursor.execute('SELECT COUNT(*) FROM attendances')
+            cursor.execute('SELECT COUNT(*) FROM class_attendees')
             attendance_count = cursor.fetchone()[0]
             
             cursor.execute('SELECT COUNT(*) FROM denied_attempts')
@@ -507,13 +575,10 @@ def stop_active_session():
             cursor.execute('SELECT COUNT(*) FROM device_fingerprints')
             device_count = cursor.fetchone()[0]
             
-            # Clear all attendance, denied attempts, and device data when session ends
-            cursor.execute('DELETE FROM attendances')
+            # Clear session-specific data when session ends
+            cursor.execute('DELETE FROM class_attendees WHERE session_id = ?', (session_id,))
             cursor.execute('DELETE FROM denied_attempts')
-            cursor.execute('DELETE FROM device_fingerprints')
-            
-            # Reset auto-increment counters
-            cursor.execute('DELETE FROM sqlite_sequence WHERE name IN ("attendances", "denied_attempts", "device_fingerprints")')
+            cursor.execute('DELETE FROM tokens WHERE used = TRUE')
             
             conn.commit()
             
@@ -540,7 +605,7 @@ def stop_active_session():
 
 @retry_db_operation()
 def get_students_with_attendance_data():
-    """Get all students with their attendance statistics - SIMPLIFIED"""
+    """Get all students with their attendance statistics from the normalized schema"""
     conn = None
     try:
         conn = get_db_connection_with_retry()
@@ -548,16 +613,18 @@ def get_students_with_attendance_data():
         
         cursor.execute('''
             SELECT 
-                student_id,
-                name,
-                course,
-                year,
-                status,
-                last_check_in,
-                COALESCE(present_count, 0) as present_count,
-                COALESCE(absent_count, 0) as absent_count
-            FROM students
-            ORDER BY name
+                s.student_id,
+                s.name,
+                s.course,
+                s.year,
+                sas.status,
+                sas.last_check_in,
+                COALESCE(sas.present_count, 0) as present_count,
+                COALESCE(sas.absent_count, 0) as absent_count,
+                COALESCE(sas.total_sessions, 0) as total_sessions
+            FROM students s
+            LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+            ORDER BY s.name
         ''')
         
         results = cursor.fetchall()
@@ -578,21 +645,22 @@ def get_students_with_attendance_data():
         if conn:
             conn.close()
                
-def create_session_profile(profile_name, room_type, building, capacity):
+def create_session_profile(profile_name, room_type, building, capacity, organizer):
     """Create a new session profile"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO session_profiles (profile_name, room_type, building, capacity, created_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-        ''', (profile_name, room_type, building, capacity))
+            INSERT INTO session_profiles (profile_name, room_type, building, capacity, organizer, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ''', (profile_name, room_type, building, capacity, organizer))
         
         conn.commit()
         conn.close()
         return True
     except Exception as e:
+        print(f"Error creating session profile: {e}")
         return False
 
 def get_session_profile_by_id(profile_id):
@@ -615,16 +683,17 @@ def update_session_profile(profile_id, data):
         
         cursor.execute('''
             UPDATE session_profiles 
-            SET profile_name = ?, room_type = ?, building = ?, capacity = ?
+            SET profile_name = ?, room_type = ?, building = ?, capacity = ?, organizer = ?, updated_at = datetime('now')
             WHERE id = ?
         ''', (data.get('profile_name'), data.get('room_type'), 
-              data.get('building'), data.get('capacity'), profile_id))
+              data.get('building'), data.get('capacity'), data.get('organizer'), profile_id))
         
         conn.commit()
         affected_rows = cursor.rowcount
         conn.close()
         return affected_rows > 0
     except Exception as e:
+        print(f"Error updating session profile: {e}")
         return False
 
 def delete_session_profile(profile_id):
@@ -647,8 +716,9 @@ def is_device_already_used_in_session(fingerprint_hash, session_id):
         cursor = conn.cursor()
         cursor.execute('''
             SELECT COUNT(*) as count 
-            FROM attendances 
-            WHERE fingerprint_hash = ? AND session_id = ?
+            FROM class_attendees ca
+            JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+            WHERE df.fingerprint_hash = ? AND ca.session_id = ?
         ''', (fingerprint_hash, session_id))
         result = cursor.fetchone()
         conn.close()
@@ -657,24 +727,42 @@ def is_device_already_used_in_session(fingerprint_hash, session_id):
         print(f"Error checking device usage in session: {e}")
         return False
 
-def is_student_in_class(student_id, class_table):
-    """Check if a student is enrolled in a specific class table"""
+def is_student_in_class(student_id, course_name):
+    """Check if a student is enrolled in a specific course.
+    For normalized schema, this checks the main students table by course.
+    Falls back to checking classes.db for legacy class tables.
+    """
     try:
-        # Connect to classes.db
-        conn = sqlite3.connect('classes.db')
-        cursor = conn.cursor()
-        
-        # Check if the table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (class_table,))
-        if not cursor.fetchone():
+        # First check in main students table by course
+        if course_name:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM students WHERE student_id = ? AND course = ?', (student_id, course_name))
+            result = cursor.fetchone()
             conn.close()
-            return False
+            if result and result[0] > 0:
+                return True
         
-        # Check if student exists in the class table
-        cursor.execute(f'SELECT COUNT(*) as count FROM "{class_table}" WHERE student_id = ?', (student_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] > 0 if result else False
+        # Fallback: check in classes.db (legacy behavior)
+        # Convert course name to table name format
+        class_table = course_name.replace(' ', '_').replace('-', '_') if course_name else None
+        
+        if class_table:
+            import sqlite3
+            conn = sqlite3.connect('classes.db')
+            cursor = conn.cursor()
+            
+            # Check if the table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (class_table,))
+            if cursor.fetchone():
+                # Check if student exists in the class table
+                cursor.execute(f'SELECT COUNT(*) as count FROM "{class_table}" WHERE student_id = ?', (student_id,))
+                result = cursor.fetchone()
+                conn.close()
+                return result[0] > 0 if result else False
+            conn.close()
+        
+        return False
     except Exception as e:
         print(f"Error checking student in class: {e}")
         return False
@@ -686,7 +774,7 @@ def is_student_already_checked_in_session(student_id, session_id):
         cursor = conn.cursor()
         cursor.execute('''
             SELECT COUNT(*) as count 
-            FROM attendances 
+            FROM class_attendees 
             WHERE student_id = ? AND session_id = ?
         ''', (student_id, session_id))
         result = cursor.fetchone()
@@ -695,3 +783,64 @@ def is_student_already_checked_in_session(student_id, session_id):
     except Exception as e:
         print(f"Error checking student session attendance: {e}")
         return False
+
+def get_enriched_attendances(limit=100):
+    """Get attendance data with all related information for the frontend"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Join all related tables to get complete information
+    cursor.execute('''
+        SELECT 
+            ca.id,
+            ca.student_id,
+            ca.session_id,
+            ca.checked_in_at,
+            s.name,
+            s.course,
+            s.year,
+            t.token,
+            df.fingerprint_hash,
+            df.device_info,
+            CASE 
+                WHEN ca.checked_in_at LIKE '%-%-%T%:%:%.%Z' THEN 
+                    strftime('%s', ca.checked_in_at)
+                WHEN ca.checked_in_at LIKE '%-%-%T%:%:%' THEN 
+                    strftime('%s', ca.checked_in_at || 'Z')
+                WHEN ca.checked_in_at LIKE '%-%- %:%:%' THEN 
+                    strftime('%s', ca.checked_in_at)
+                ELSE 
+                    ca.checked_in_at
+            END as timestamp
+        FROM class_attendees ca
+        LEFT JOIN students s ON ca.student_id = s.student_id
+        LEFT JOIN tokens t ON ca.token_id = t.id
+        LEFT JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+        ORDER BY ca.checked_in_at DESC
+        LIMIT ?
+    ''', (limit,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # Convert to list of dictionaries
+    result = []
+    for row in rows:
+        row_dict = dict(row)
+        # Ensure timestamp is numeric for frontend compatibility
+        try:
+            if row_dict['timestamp'] and row_dict['timestamp'] != row_dict['checked_in_at']:
+                row_dict['timestamp'] = float(row_dict['timestamp'])
+            else:
+                # Fallback: try to parse the timestamp manually
+                from datetime import datetime
+                dt = datetime.fromisoformat(row_dict['checked_in_at'].replace('Z', '+00:00'))
+                row_dict['timestamp'] = dt.timestamp()
+        except (ValueError, TypeError):
+            # If all else fails, use current time
+            import time
+            row_dict['timestamp'] = time.time()
+        
+        result.append(row_dict)
+    
+    return result
