@@ -618,3 +618,260 @@ def cleanup_old_tokens():
 
 # Export table names for external use
 TABLE_NAMES = list(TABLES.keys())
+
+# ===================================================================
+# OPTIMIZED CLASSES DATABASE SCHEMA
+# This section provides the optimized schema for classes.db
+# to eliminate data redundancy and improve performance
+# ===================================================================
+
+OPTIMIZED_CLASSES_TABLES = {
+    'classes': '''
+        CREATE TABLE IF NOT EXISTS classes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_name TEXT NOT NULL,
+            professor_name TEXT NOT NULL,
+            course_code TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            schedule_days TEXT, -- JSON array of days: ["Monday", "Wednesday", "Friday"]
+            semester TEXT,
+            academic_year TEXT,
+            status TEXT DEFAULT 'active', -- active, inactive, completed
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(class_name, professor_name, semester, academic_year)
+        )
+    ''',
+    
+    'class_enrollments': '''
+        CREATE TABLE IF NOT EXISTS class_enrollments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_id INTEGER NOT NULL,
+            student_id TEXT NOT NULL,
+            enrollment_status TEXT DEFAULT 'enrolled', -- enrolled, dropped, completed
+            enrolled_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            dropped_at TEXT,
+            FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE CASCADE,
+            UNIQUE(class_id, student_id)
+        )
+    ''',
+    
+    'professors': '''
+        CREATE TABLE IF NOT EXISTS professors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            professor_name TEXT NOT NULL UNIQUE,
+            department TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''',
+    
+    'class_schedules': '''
+        CREATE TABLE IF NOT EXISTS class_schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            class_id INTEGER NOT NULL,
+            day_of_week TEXT NOT NULL, -- Monday, Tuesday, etc.
+            start_time TEXT NOT NULL,  -- HH:MM format
+            end_time TEXT NOT NULL,    -- HH:MM format
+            room TEXT,
+            effective_from TEXT,       -- Start date for this schedule
+            effective_until TEXT,      -- End date for this schedule
+            FOREIGN KEY (class_id) REFERENCES classes (id) ON DELETE CASCADE
+        )
+    '''
+}
+
+OPTIMIZED_CLASSES_INDEXES = {
+    'idx_classes_professor': 'CREATE INDEX IF NOT EXISTS idx_classes_professor ON classes(professor_name)',
+    'idx_classes_status': 'CREATE INDEX IF NOT EXISTS idx_classes_status ON classes(status)',
+    'idx_enrollments_class': 'CREATE INDEX IF NOT EXISTS idx_enrollments_class ON class_enrollments(class_id)',
+    'idx_enrollments_student': 'CREATE INDEX IF NOT EXISTS idx_enrollments_student ON class_enrollments(student_id)',
+    'idx_schedules_class': 'CREATE INDEX IF NOT EXISTS idx_schedules_class ON class_schedules(class_id)',
+    'idx_schedules_day': 'CREATE INDEX IF NOT EXISTS idx_schedules_day ON class_schedules(day_of_week)',
+}
+
+OPTIMIZED_CLASSES_VIEWS = {
+    'class_summary': '''
+        CREATE VIEW IF NOT EXISTS class_summary AS
+        SELECT 
+            c.id as class_id,
+            c.class_name,
+            c.professor_name,
+            c.course_code,
+            c.semester,
+            c.academic_year,
+            c.status,
+            COUNT(ce.student_id) as enrolled_students,
+            GROUP_CONCAT(
+                cs.day_of_week || ' ' || cs.start_time || '-' || cs.end_time, 
+                '; '
+            ) as schedule
+        FROM classes c
+        LEFT JOIN class_enrollments ce ON c.id = ce.class_id AND ce.enrollment_status = 'enrolled'
+        LEFT JOIN class_schedules cs ON c.id = cs.class_id
+        GROUP BY c.id, c.class_name, c.professor_name, c.course_code
+    ''',
+    
+    'student_class_details': '''
+        CREATE VIEW IF NOT EXISTS student_class_details AS
+        SELECT 
+            ce.student_id,
+            c.id as class_id,
+            c.class_name,
+            c.professor_name,
+            c.course_code,
+            ce.enrollment_status,
+            ce.enrolled_at,
+            ce.dropped_at
+        FROM class_enrollments ce
+        JOIN classes c ON ce.class_id = c.id
+    '''
+}
+
+def create_optimized_classes_schema(db_path='classes.db'):
+    """
+    Create the optimized classes database schema to replace redundant table-per-class approach.
+    This eliminates data duplication and improves performance.
+    """
+    import sqlite3
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        print("Creating optimized classes database schema...")
+        
+        # Create tables
+        for table_name, table_sql in OPTIMIZED_CLASSES_TABLES.items():
+            cursor.execute(table_sql)
+            print(f"✅ Created table: {table_name}")
+        
+        # Create indexes
+        for index_name, index_sql in OPTIMIZED_CLASSES_INDEXES.items():
+            cursor.execute(index_sql)
+            print(f"✅ Created index: {index_name}")
+        
+        # Create views
+        for view_name, view_sql in OPTIMIZED_CLASSES_VIEWS.items():
+            cursor.execute(view_sql)
+            print(f"✅ Created view: {view_name}")
+        
+        conn.commit()
+        print("✅ Optimized classes schema created successfully!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error creating optimized schema: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def migrate_existing_classes_data(old_db_path='classes.db', attendance_db_path='attendance.db'):
+    """
+    Migrate existing class tables to the new optimized schema.
+    Extracts class and professor information from table names and preserves student enrollments.
+    """
+    import sqlite3
+    import re
+    from datetime import datetime
+    
+    # Create backup first
+    import shutil
+    backup_path = f"{old_db_path}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    shutil.copy2(old_db_path, backup_path)
+    print(f"✅ Backup created: {backup_path}")
+    
+    conn = sqlite3.connect(old_db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Get existing class tables (exclude new optimized tables and sqlite_sequence)
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name != 'sqlite_sequence'
+            AND name NOT IN ('classes', 'class_enrollments', 'professors', 'class_schedules')
+        """)
+        old_tables = [row[0] for row in cursor.fetchall()]
+        
+        if not old_tables:
+            print("ℹ️  No old class tables found to migrate")
+            return True
+        
+        print(f"📋 Found {len(old_tables)} class tables to migrate:")
+        for table in old_tables:
+            print(f"   - {table}")
+        
+        migrated_count = 0
+        for table_name in old_tables:
+            # Extract class name and professor from table name
+            if '___' in table_name:
+                parts = table_name.split('___')
+                class_name = parts[0].replace('_', ' ')
+                professor_name = parts[1].replace('_', ' ') if len(parts) > 1 else 'Unknown Professor'
+            else:
+                class_name = table_name.replace('_', ' ')
+                professor_name = 'Unknown Professor'
+            
+            # Get students from this table
+            cursor.execute(f"SELECT student_id FROM {table_name}")
+            student_ids = [row[0] for row in cursor.fetchall()]
+            
+            if student_ids:
+                # Insert professor if not exists
+                cursor.execute("""
+                    INSERT OR IGNORE INTO professors (professor_name, status)
+                    VALUES (?, 'active')
+                """, (professor_name,))
+                
+                # Insert class
+                cursor.execute("""
+                    INSERT OR IGNORE INTO classes 
+                    (class_name, professor_name, status, semester, academic_year)
+                    VALUES (?, ?, 'active', '2025-1', '2024-2025')
+                """, (class_name, professor_name))
+                
+                # Get class ID
+                cursor.execute("""
+                    SELECT id FROM classes 
+                    WHERE class_name = ? AND professor_name = ?
+                """, (class_name, professor_name))
+                result = cursor.fetchone()
+                if result:
+                    class_id = result[0]
+                    
+                    # Insert enrollments
+                    for student_id in student_ids:
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO class_enrollments 
+                            (class_id, student_id, enrollment_status)
+                            VALUES (?, ?, 'enrolled')
+                        """, (class_id, student_id))
+                    
+                    print(f"✅ Migrated: {class_name} - {professor_name} ({len(student_ids)} students)")
+                    migrated_count += 1
+        
+        conn.commit()
+        print(f"✅ Successfully migrated {migrated_count} classes to optimized schema")
+        
+        # Ask if user wants to remove old tables
+        response = input("\nRemove old redundant tables? (y/N): ").lower()
+        if response == 'y':
+            for table in old_tables:
+                cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                print(f"🗑️  Removed old table: {table}")
+            conn.commit()
+            print("✅ Old tables cleaned up")
+        else:
+            print("ℹ️  Old tables preserved. You can remove them manually later.")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Migration error: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()

@@ -365,3 +365,386 @@ def insert_students(table_name, students, db_path='classes.db'):
 if __name__ == "__main__":
     # Check database schema compatibility
     fix_database_columns()
+
+# ===================================================================
+# OPTIMIZED CLASS MANAGEMENT FUNCTIONS
+# THESE FUNCTIONS WORK WITH THE NEW OPTIMIZED CLASSES.DB SCHEMA
+# TO ELIMINATE DATA REDUNDANCY AND IMPROVE PERFORMANCE
+# ===================================================================
+
+class OptimizedClassManager:
+    """Manages classes using the optimized normalized schema instead of table-per-class approach"""
+    
+    def __init__(self, classes_db_path='classes.db', attendance_db_path='attendance.db'):
+        self.classes_db_path = classes_db_path
+        self.attendance_db_path = attendance_db_path
+    
+    def create_class(self, class_name, professor_name, course_code=None, 
+                    semester=None, academic_year=None):
+        """
+        Create a new class with professor information
+        Returns the class ID
+        """
+        import sqlite3
+        conn = sqlite3.connect(self.classes_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Set defaults
+            if not semester:
+                semester = "2025-1"
+            if not academic_year:
+                academic_year = "2024-2025"
+            
+            # Insert professor if not exists
+            cursor.execute("""
+                INSERT OR IGNORE INTO professors (professor_name, status)
+                VALUES (?, 'active')
+            """, (professor_name,))
+            
+            # Insert class
+            cursor.execute("""
+                INSERT INTO classes 
+                (class_name, professor_name, course_code, semester, academic_year, status)
+                VALUES (?, ?, ?, ?, ?, 'active')
+            """, (class_name, professor_name, course_code, semester, academic_year))
+            
+            class_id = cursor.lastrowid
+            conn.commit()
+            
+            print(f"✅ Created class: {class_name} - {professor_name} (ID: {class_id})")
+            return class_id
+            
+        except sqlite3.IntegrityError:
+            # Class already exists, get existing ID
+            cursor.execute("""
+                SELECT id FROM classes 
+                WHERE class_name = ? AND professor_name = ? AND semester = ? AND academic_year = ?
+            """, (class_name, professor_name, semester, academic_year))
+            result = cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            print(f"❌ Error creating class: {e}")
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+    
+    def enroll_students(self, class_id, student_ids):
+        """
+        Enroll multiple students in a class
+        Returns number of students successfully enrolled
+        """
+        import sqlite3
+        conn = sqlite3.connect(self.classes_db_path)
+        cursor = conn.cursor()
+        
+        enrolled_count = 0
+        try:
+            for student_id in student_ids:
+                try:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO class_enrollments 
+                        (class_id, student_id, enrollment_status)
+                        VALUES (?, ?, 'enrolled')
+                    """, (class_id, student_id))
+                    
+                    if cursor.rowcount > 0:
+                        enrolled_count += 1
+                        
+                except Exception as e:
+                    print(f"❌ Error enrolling student {student_id}: {e}")
+            
+            conn.commit()
+            print(f"✅ Enrolled {enrolled_count}/{len(student_ids)} students in class ID {class_id}")
+            return enrolled_count
+            
+        except Exception as e:
+            print(f"❌ Error during enrollment: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
+    
+    def get_all_classes(self):
+        """Get all classes with summary information"""
+        import sqlite3
+        conn = sqlite3.connect(self.classes_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT * FROM class_summary ORDER BY class_name, professor_name")
+            
+            columns = [desc[0] for desc in cursor.description]
+            classes = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            return classes
+            
+        except Exception as e:
+            print(f"❌ Error getting classes: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def get_class_students(self, class_id):
+        """Get all students enrolled in a specific class with their details from attendance.db"""
+        import sqlite3
+        
+        # Get enrolled student IDs from classes.db
+        conn_classes = sqlite3.connect(self.classes_db_path)
+        cursor_classes = conn_classes.cursor()
+        
+        try:
+            cursor_classes.execute("""
+                SELECT student_id, enrollment_status, enrolled_at
+                FROM class_enrollments 
+                WHERE class_id = ? AND enrollment_status = 'enrolled'
+            """, (class_id,))
+            
+            enrollments = cursor_classes.fetchall()
+            if not enrollments:
+                return []
+            
+        except Exception as e:
+            print(f"❌ Error getting class enrollments: {e}")
+            return []
+        finally:
+            conn_classes.close()
+        
+        # Get student details from attendance.db
+        conn_attendance = sqlite3.connect(self.attendance_db_path)
+        cursor_attendance = conn_attendance.cursor()
+        
+        students = []
+        try:
+            for student_id, enrollment_status, enrolled_at in enrollments:
+                cursor_attendance.execute("""
+                    SELECT s.student_id, s.name, s.course, s.year,
+                           COALESCE(sas.present_count, 0) as present_count,
+                           COALESCE(sas.absent_count, 0) as absent_count,
+                           COALESCE(sas.total_sessions, 0) as total_sessions,
+                           sas.last_check_in, sas.status
+                    FROM students s
+                    LEFT JOIN student_attendance_summary sas ON s.student_id = sas.student_id
+                    WHERE s.student_id = ?
+                """, (student_id,))
+                
+                result = cursor_attendance.fetchone()
+                if result:
+                    student_data = {
+                        'student_id': result[0],
+                        'name': result[1],
+                        'course': result[2],
+                        'year': result[3],
+                        'present_count': result[4],
+                        'absent_count': result[5],
+                        'total_sessions': result[6],
+                        'last_check_in': result[7],
+                        'attendance_status': result[8],
+                        'enrollment_status': enrollment_status,
+                        'enrolled_at': enrolled_at
+                    }
+                    students.append(student_data)
+            
+            return students
+            
+        except Exception as e:
+            print(f"❌ Error getting student details: {e}")
+            return []
+        finally:
+            conn_attendance.close()
+    
+    def import_from_excel_data(self, class_name, professor_name, student_data, metadata=None):
+        """
+        Import class data from Excel upload (replacement for old table-per-class method)
+        """
+        try:
+            # Create class (metadata no longer needed for room/venue info)
+            class_id = self.create_class(
+                class_name=class_name,
+                professor_name=professor_name
+            )
+            
+            if not class_id:
+                return None
+            
+            # Extract student IDs
+            student_ids = [student.get('studentId') for student in student_data if student.get('studentId')]
+            
+            # Ensure students exist in attendance.db first
+            self._ensure_students_exist(student_data)
+            
+            # Enroll students
+            enrolled_count = self.enroll_students(class_id, student_ids)
+            
+            print(f"✅ Successfully imported class: {class_name} - {professor_name}")
+            print(f"   Students enrolled: {enrolled_count}/{len(student_ids)}")
+            
+            return class_id
+            
+        except Exception as e:
+            print(f"❌ Error importing class data: {e}")
+            return None
+    
+    def _ensure_students_exist(self, student_data):
+        """Ensure all students exist in the attendance.db students table"""
+        import sqlite3
+        conn = sqlite3.connect(self.attendance_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            for student in student_data:
+                student_id = student.get('studentId')
+                if not student_id:
+                    continue
+                
+                # Convert year level
+                year_level = convert_year_to_integer(student.get('yearLevel', ''))
+                
+                cursor.execute("""
+                    INSERT OR REPLACE INTO students (student_id, name, course, year, updated_at)
+                    VALUES (?, ?, ?, ?, datetime('now'))
+                """, (
+                    student_id,
+                    student.get('studentName', ''),
+                    student.get('course', ''),
+                    year_level
+                ))
+                
+                # Initialize attendance summary if not exists
+                cursor.execute("""
+                    INSERT OR IGNORE INTO student_attendance_summary 
+                    (student_id, total_sessions, present_count, absent_count, status, updated_at)
+                    VALUES (?, 0, 0, 0, 'active', datetime('now'))
+                """, (student_id,))
+            
+            conn.commit()
+            
+        except Exception as e:
+            print(f"❌ Error ensuring students exist: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+    
+    def delete_class(self, class_id):
+        """Delete a class and all its enrollments"""
+        import sqlite3
+        conn = sqlite3.connect(self.classes_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Check if class exists
+            cursor.execute("SELECT class_name, professor_name FROM classes WHERE id = ?", (class_id,))
+            result = cursor.fetchone()
+            if not result:
+                print(f"❌ Class {class_id} not found")
+                return False
+            
+            class_name, professor_name = result
+            print(f"🗑️  Deleting class: {class_name} - {professor_name}")
+            
+            # Delete enrollments first (will be handled by foreign key cascade)
+            cursor.execute("DELETE FROM class_enrollments WHERE class_id = ?", (class_id,))
+            enrollments_deleted = cursor.rowcount
+            
+            # Delete schedules
+            cursor.execute("DELETE FROM class_schedules WHERE class_id = ?", (class_id,))
+            schedules_deleted = cursor.rowcount
+            
+            # Delete the class
+            cursor.execute("DELETE FROM classes WHERE id = ?", (class_id,))
+            class_deleted = cursor.rowcount
+            
+            conn.commit()
+            
+            if class_deleted > 0:
+                print(f"✅ Successfully deleted class {class_id} ({enrollments_deleted} enrollments, {schedules_deleted} schedules)")
+                return True
+            else:
+                print(f"❌ Failed to delete class {class_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error deleting class {class_id}: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+    def unenroll_student(self, class_id, student_id):
+        """Remove a student from a class"""
+        import sqlite3
+        conn = sqlite3.connect(self.classes_db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Check if enrollment exists
+            cursor.execute("""
+                SELECT id FROM class_enrollments 
+                WHERE class_id = ? AND student_id = ? AND enrollment_status = 'enrolled'
+            """, (class_id, student_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                print(f"❌ Student {student_id} not enrolled in class {class_id}")
+                return False
+            
+            # Update enrollment status instead of deleting (for audit trail)
+            cursor.execute("""
+                UPDATE class_enrollments 
+                SET enrollment_status = 'dropped', dropped_at = CURRENT_TIMESTAMP
+                WHERE class_id = ? AND student_id = ?
+            """, (class_id, student_id))
+            
+            updated = cursor.rowcount
+            conn.commit()
+            
+            if updated > 0:
+                print(f"✅ Successfully unenrolled student {student_id} from class {class_id}")
+                return True
+            else:
+                print(f"❌ Failed to unenroll student {student_id} from class {class_id}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error unenrolling student {student_id} from class {class_id}: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+    
+# Backward compatibility functions - use these to gradually migrate your existing code
+def create_class_optimized(class_name, professor_name, students, metadata=None):
+    """Legacy wrapper for creating classes with the optimized schema"""
+    manager = OptimizedClassManager()
+    class_id = manager.import_from_excel_data(class_name, professor_name, students, metadata)
+    return class_id is not None
+
+def get_all_classes_optimized():
+    """Legacy wrapper for getting all classes"""
+    manager = OptimizedClassManager()
+    return manager.get_all_classes()
+
+def get_class_students_optimized(class_name, professor_name):
+    """Legacy wrapper for getting class students by name"""
+    manager = OptimizedClassManager()
+    
+    # Find class by name and professor
+    classes = manager.get_all_classes()
+    for class_data in classes:
+        if (class_data['class_name'] == class_name and 
+            class_data['professor_name'] == professor_name):
+            return manager.get_class_students(class_data['class_id'])
+    
+    return []
+
+# Function to setup optimized schema
+def setup_optimized_classes_db():
+    """Initialize the optimized classes database schema"""
+    from .models import create_optimized_classes_schema
+    return create_optimized_classes_schema()
+
+def migrate_to_optimized_schema():
+    """Migrate existing class tables to optimized schema"""
+    from .models import migrate_existing_classes_data
+    return migrate_existing_classes_data()

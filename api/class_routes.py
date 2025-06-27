@@ -17,7 +17,10 @@ Class Management Features:
 import sqlite3
 import openpyxl
 from flask import Blueprint, request, jsonify
-from database.class_table_manager import create_class_table, insert_students as insert_class_students
+from database.class_table_manager import (
+    create_class_table, insert_students as insert_class_students,
+    OptimizedClassManager, create_class_optimized
+)
 
 class_bp = Blueprint('class', __name__)
 
@@ -74,36 +77,33 @@ def upload_class_record():
 
         # Extract metadata (first few rows)
         metadata = {}
-        current_header = None
         
-        for row in rows[:5]:  # Check first 5 rows for metadata
+        for i, row in enumerate(rows[:8]):  # Check first 8 rows for metadata
             if not any(row):  # Skip empty rows
                 continue
                 
-            # Check if this is a metadata header row
-            if row[0] and any(x in str(row[0]).lower() for x in ['professor', 'room', 'venue']):
-                # This is likely a header row for metadata
-                current_header = {
-                    'professor': 0,
-                    'room_type': 1 if len(row) > 1 and 'room type' in str(row[1]).lower() else None,
-                    'venue': 2 if len(row) > 2 and 'venue' in str(row[2]).lower() else None
-                }
-                continue
+            # Look for specific metadata patterns
+            if row[0] and len(row) > 1:
+                key = str(row[0]).lower().strip()
+                value = str(row[1]).strip() if row[1] else None
                 
-            # If we have headers, extract values
-            if current_header:
-                if 'professor' in current_header and row[current_header['professor']]:
-                    metadata['professor'] = str(row[current_header['professor']]).strip()
-                if 'room_type' in current_header and current_header['room_type'] is not None and len(row) > current_header['room_type'] and row[current_header['room_type']]:
-                    metadata['room_type'] = str(row[current_header['room_type']]).strip()
-                if 'venue' in current_header and current_header['venue'] is not None and len(row) > current_header['venue'] and row[current_header['venue']]:
-                    metadata['venue'] = str(row[current_header['venue']]).strip()
-                break
+                if 'professor' in key and value:
+                    metadata['professor'] = value
+                elif 'class' in key and 'name' in key and value:
+                    metadata['class_name'] = value
+                elif 'room' in key and 'type' in key and value:
+                    metadata['room_type'] = value
+                elif 'building' in key and value:
+                    metadata['building'] = value
+                elif 'venue' in key and value:
+                    metadata['venue'] = value
 
         # Set defaults if not found
         professor_name = metadata.get('professor', 'Unknown Professor')
-        room_type = metadata.get('room_type', 'Unknown Room Type')
-        venue = metadata.get('venue', 'Unknown Venue')
+        class_name = metadata.get('class_name', file_name)  # Use extracted class name or file name
+        room_type = metadata.get('room_type', 'Classroom')
+        venue = metadata.get('venue', 'Main Building')
+        building = metadata.get('building', 'Main Building')
 
         # Find the row with student headers
         student_data_start = None
@@ -166,27 +166,49 @@ def upload_class_record():
         table_name = f"{sanitized_file_name}___{sanitized_professor}"
         table_name = ''.join(c for c in table_name if c.isalnum() or c == '_')
 
-        # Database operations for classes.db
-        columns = [
-            ('student_id', 'TEXT'),
-            ('student_name', 'TEXT'),
-            ('year_level', 'TEXT'),
-            ('course', 'TEXT')
-        ]
+        # Database operations - Choose between old redundant method and new optimized method
+        use_optimized = request.form.get('use_optimized', 'false').lower() == 'true'
         
-        create_class_table(table_name, columns, db_path='classes.db')
-        insert_class_students(table_name, student_data, db_path='classes.db')
+        if use_optimized:
+            # NEW OPTIMIZED METHOD - eliminates data redundancy
+            print("Using optimized classes database schema...")
+            manager = OptimizedClassManager()
+            
+            class_id = manager.import_from_excel_data(
+                class_name=class_name,  # Use extracted class name
+                professor_name=professor_name,
+                student_data=student_data
+            )
+            
+            if class_id:
+                success_message = f'Successfully imported {len(student_data)} students using optimized schema'
+            else:
+                return jsonify({'error': 'Failed to create class with optimized schema'}), 500
+        else:
+            # OLD METHOD - creates redundant table per class (for backward compatibility)
+            print("Using legacy table-per-class method...")
+            columns = [
+                ('student_id', 'TEXT'),
+                ('student_name', 'TEXT'),
+                ('year_level', 'TEXT'),
+                ('course', 'TEXT')
+            ]
+            
+            create_class_table(table_name, columns, db_path='classes.db')
+            insert_class_students(table_name, student_data, db_path='classes.db')
+            success_message = f'Successfully imported {len(student_data)} students to class table'
         
         # Skip attendance.db insertion for uploaded class records
         # Class records are managed separately from the main attendance system
         print("Skipping attendance.db insertion for uploaded class records - class tables are managed separately")
 
         return jsonify({
-            'message': f'Successfully imported {len(student_data)} students to class table',
+            'message': success_message,
             'display_name': display_name,
             'professor': professor_name,
             'room_type': room_type,
             'venue': venue,
+            'optimized': use_optimized,
             'student_data': student_data
         })
         
@@ -415,6 +437,168 @@ def remove_student_from_class(table_name, student_id):
             })
         else:
             return jsonify({'error': 'Failed to remove student'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# ===================================================================
+# OPTIMIZED CLASS API ENDPOINTS
+# These endpoints use the new normalized schema instead of table-per-class
+# ===================================================================
+
+@class_bp.route('/api/optimized/setup', methods=['POST'])
+def setup_optimized_schema():
+    """Initialize the optimized classes database schema"""
+    try:
+        from database.models import create_optimized_classes_schema
+        success = create_optimized_classes_schema()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Optimized classes schema created successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to create optimized schema'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/migrate', methods=['POST'])
+def migrate_to_optimized():
+    """Migrate existing class tables to optimized schema"""
+    try:
+        from database.models import migrate_existing_classes_data
+        success = migrate_existing_classes_data()
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Successfully migrated to optimized schema'
+            })
+        else:
+            return jsonify({'error': 'Migration failed'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes', methods=['GET'])
+def get_optimized_classes():
+    """Get all classes using the optimized schema"""
+    try:
+        manager = OptimizedClassManager()
+        classes = manager.get_all_classes()
+        
+        return jsonify({
+            'status': 'success',
+            'classes': classes,
+            'count': len(classes)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes/<int:class_id>/students', methods=['GET'])
+def get_optimized_class_students(class_id):
+    """Get students enrolled in a specific class using optimized schema"""
+    try:
+        manager = OptimizedClassManager()
+        students = manager.get_class_students(class_id)
+        
+        return jsonify({
+            'status': 'success',
+            'students': students,
+            'count': len(students),
+            'class_id': class_id
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes', methods=['POST'])
+def create_optimized_class():
+    """Create a new class using optimized schema"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('class_name') or not data.get('professor_name'):
+            return jsonify({'error': 'class_name and professor_name are required'}), 400
+        
+        manager = OptimizedClassManager()
+        class_id = manager.create_class(
+            class_name=data['class_name'],
+            professor_name=data['professor_name'],
+            course_code=data.get('course_code'),
+            semester=data.get('semester'),
+            academic_year=data.get('academic_year')
+        )
+        
+        if class_id:
+            return jsonify({
+                'status': 'success',
+                'message': 'Class created successfully',
+                'class_id': class_id
+            })
+        else:
+            return jsonify({'error': 'Failed to create class'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes/<int:class_id>/enroll', methods=['POST'])
+def enroll_students_optimized(class_id):
+    """Enroll students in a class using optimized schema"""
+    try:
+        data = request.get_json()
+        
+        if not data or not data.get('student_ids'):
+            return jsonify({'error': 'student_ids array is required'}), 400
+        
+        manager = OptimizedClassManager()
+        enrolled_count = manager.enroll_students(class_id, data['student_ids'])
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Enrolled {enrolled_count} students successfully',
+            'enrolled_count': enrolled_count,
+            'total_requested': len(data['student_ids'])
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes/<int:class_id>', methods=['DELETE'])
+def delete_class_optimized(class_id):
+    """Delete a class and all its enrollments using optimized schema"""
+    try:
+        manager = OptimizedClassManager()
+        success = manager.delete_class(class_id)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Class {class_id} deleted successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to delete class'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes/<int:class_id>/students/<student_id>', methods=['DELETE'])
+def unenroll_student_optimized(class_id, student_id):
+    """Remove a student from a class using optimized schema"""
+    try:
+        manager = OptimizedClassManager()
+        success = manager.unenroll_student(class_id, student_id)
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': f'Student {student_id} removed from class successfully'
+            })
+        else:
+            return jsonify({'error': 'Failed to remove student from class'}), 500
             
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500

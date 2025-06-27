@@ -463,6 +463,196 @@ button#clearSelectionBtn:hover {
     border-color: #545b62;
 }
 
+/* Manual Entry Section */
+.manual-entry-section {
+    margin: 20px 0;
+    text-align: center;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: white;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 15px;
+}
+
+.modal-title {
+    color: #28156E;
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.close {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #000;
+}
+
+.modal-body {
+    padding: 10px 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #28156E;
+}
+
+.new-class-form {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    margin: 15px 0;
+}
+
+.new-class-form h4 {
+    color: #28156E;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.student-form h4 {
+    color: #28156E;
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.selected-student-info {
+    margin: 15px 0;
+}
+
+.student-info-card {
+    background: #e8f5e9;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #a5d6a7;
+}
+
+.student-info-card h5 {
+    color: #2e7d32;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.student-details {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.student-details div {
+    margin-bottom: 5px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: #28156E;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1e0f4f;
+}
+
+.btn-primary:disabled {
+    background: #ccc;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-outline {
+    background: transparent;
+    color: #28156E;
+    border: 2px solid #28156E;
+}
+
+.btn-outline:hover {
+    background: #28156E;
+    color: white;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .form-row {
@@ -490,6 +680,21 @@ button#clearSelectionBtn:hover {
     .student-table-container th,
     .student-table-container td {
         padding: 8px 10px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        padding: 20px;
+        max-height: 90vh;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+        margin-bottom: 10px;
     }
 }
 
@@ -784,17 +989,207 @@ body {
     border: 1px solid #bee5eb;
 }
 
+/* Bulk Selection Styles */
+.bulk-selection-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.tab-button {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-weight: 600;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab-button.active,
+.tab-button:hover {
+    color: #28156E;
+    border-bottom-color: #28156E;
+}
+
+.selection-mode {
+    margin-bottom: 20px;
+}
+
+.bulk-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.bulk-student-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f8f9fa;
+}
+
+.student-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 2px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.student-checkbox-item:hover {
+    background-color: #e9ecef;
+}
+
+.student-checkbox-item.selected {
+    background-color: #e8f5e9;
+    border: 1px solid #a5d6a7;
+}
+
+.student-checkbox-item input[type="checkbox"] {
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.student-checkbox-item label {
+    flex: 1;
+    cursor: pointer;
+    margin: 0;
+    font-weight: normal;
+}
+
+/* Bulk student item styles */
+.bulk-student-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin: 4px 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.bulk-student-item:hover {
+    background-color: #f8f9fa;
+    border-color: #28156E;
+}
+
+.student-checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    cursor: pointer;
+}
+
+.student-checkbox {
+    margin-right: 12px;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+
+.student-label {
+    flex: 1;
+    cursor: pointer;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.student-id-name {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.student-details {
+    font-size: 0.85em;
+    color: #666;
+}
+
+/* No students message */
+.no-students {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Selected student tag styling */
+.selected-student-tag {
+    display: inline-flex;
+    align-items: center;
+    background: #28156E;
+    color: white;
+    padding: 6px 10px;
+    margin: 3px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.remove-student-btn {
+    background: none;
+    border: none;
+    color: white;
+    margin-left: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+}
+
+.remove-student-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Search input styling */
+#studentSearchInput {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#studentSearchInput:focus {
+    outline: none;
+    border-color: #28156E;
+    box-shadow: 0 0 0 0.2rem rgba(40, 21, 110, 0.25);
+}
+
+/* Button text updates */
+#addButtonText {
+    transition: opacity 0.2s ease;
+}
+
+/* Responsive adjustments for bulk selection */
 @media (max-width: 768px) {
-    .container {
+    .bulk-controls {
         flex-direction: column;
     }
     
-    .sidebar {
+    .bulk-controls button {
         width: 100%;
-        height: auto;
+        margin-bottom: 5px;
     }
     
-    .file-input-container {
-        padding: 20px;
+    .tab-button {
+        flex: 1;
+        text-align: center;
     }
 }

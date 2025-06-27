@@ -43,8 +43,8 @@
             <!-- Header -->
             <header class="header">
                 <div>
-                    <h1>Upload Class Record</h1>
-                    <p>Import student data from Excel files</p>
+                    <h1>Class Management</h1>
+                    <p>Import student data from Excel files or manage classes manually</p>
                 </div>
                 <div class="header-actions">
                     <button>🔔</button>
@@ -74,15 +74,137 @@
                         <div class="file-requirements">
                             <strong>📋 File Requirements:</strong><br>
                             Please upload an Excel file with the following columns:<br>
-                            <code>student_id</code>, <code>student_name</code>, <code>year_level</code>, <code>course</code>
+                            <code>student_id</code>, <code>student_name</code>, <code>year_level</code>, <code>course</code><br>
+                            <small>Optional metadata: Professor name in the first few rows</small>
                         </div>
                     </div>
+                </div>
+
+                <!-- Manual Entry Button -->
+                <div class="manual-entry-section">
+                    <button id="openManualEntryBtn" class="btn btn-secondary">
+                        👥 Add Student to Class
+                    </button>
                 </div>
 
                 <!-- Class Info Container -->
                 <div id="classInfoContainer"></div>
             </div>
         </main>
+    </div>
+
+    <!-- Manual Student Entry Modal -->
+    <div id="manualStudentEntryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Student to Class</h3>
+                <span class="close">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Class Selection -->
+                <div class="form-group">
+                    <label for="modalClassSelect">Select Class:</label>
+                    <select id="modalClassSelect" class="form-control">
+                        <option value="">-- Select a Class --</option>
+                    </select>
+                </div>
+                
+                <!-- Create New Class Button -->
+                <div class="form-group">
+                    <button id="modalCreateNewClassBtn" class="btn btn-outline">
+                        ✨ Create New Class
+                    </button>
+                </div>
+                
+                <!-- New Class Form (hidden by default) -->
+                <div id="modalNewClassForm" class="new-class-form" style="display: none;">
+                    <h4>Create New Class</h4>
+                    <div class="form-group">
+                        <label for="modalNewClassName">Class Name:</label>
+                        <input type="text" id="modalNewClassName" class="form-control" placeholder="e.g., Computer Science 101">
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassProfessor">Professor:</label>
+                        <input type="text" id="modalNewClassProfessor" class="form-control" placeholder="Professor Name">
+                    </div>
+                    <div class="form-actions">
+                        <button id="modalSaveNewClassBtn" class="btn btn-primary">Create Class</button>
+                        <button id="modalCancelNewClassBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+                
+                <!-- Student Selection Form -->
+                <div id="modalStudentForm" class="student-form" style="display: none;">
+                    <h4>Add Students to Class</h4>
+                    
+                    <!-- Bulk Selection Options -->
+                    <div class="form-group">
+                        <div class="bulk-selection-tabs">
+                            <button type="button" id="singleSelectTab" class="tab-button active">Single Student</button>
+                            <button type="button" id="bulkSelectTab" class="tab-button">Bulk Select</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Single Student Selection -->
+                    <div id="singleStudentSelection" class="selection-mode">
+                        <div class="form-group">
+                            <label for="modalStudentSelect">Select Student:</label>
+                            <select id="modalStudentSelect" class="form-control">
+                                <option value="">-- Select a Student --</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Selected Student Info -->
+                        <div id="modalSelectedStudentInfo" class="selected-student-info" style="display: none;">
+                            <div class="student-info-card">
+                                <h5>Selected Student</h5>
+                                <div class="student-details">
+                                    <div><strong>ID:</strong> <span id="modalSelectedStudentId"></span></div>
+                                    <div><strong>Name:</strong> <span id="modalSelectedStudentName"></span></div>
+                                    <div><strong>Course:</strong> <span id="modalSelectedStudentCourse"></span></div>
+                                    <div><strong>Year:</strong> <span id="modalSelectedStudentYear"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bulk Student Selection -->
+                    <div id="bulkStudentSelection" class="selection-mode" style="display: none;">
+                        <div class="form-group">
+                            <label>Select Multiple Students:</label>
+                            <div class="bulk-controls">
+                                <button type="button" id="selectAllStudentsBtn" class="btn btn-outline">Select All</button>
+                                <button type="button" id="clearAllStudentsBtn" class="btn btn-outline">Clear All</button>
+                                <input type="text" id="studentSearchInput" class="form-control" placeholder="Search students..." style="margin-top: 10px;">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div id="bulkStudentList" class="bulk-student-list">
+                                <!-- Students will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Selected Students Summary -->
+                        <div id="selectedStudentsSummary" class="selected-summary" style="display: none;">
+                            <h5>Selected Students (<span id="selectedCount">0</span>):</h5>
+                            <div id="selectedStudentsList" class="selected-students-list">
+                                <!-- Selected students will be shown here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <button id="modalAddStudentBtn" class="btn btn-primary" disabled>
+                            <span id="addButtonText">Add Student</span>
+                        </button>
+                        <button id="modalClearSelectionBtn" class="btn btn-secondary">Clear Selection</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Load JavaScript -->
