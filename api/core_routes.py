@@ -237,7 +237,41 @@ def checkin():
         
         # Check if student is enrolled in the session's class (if class is specified)
         course = active_session.get('course')
-        if course and not is_student_in_class(student_id, course):
+        class_table = active_session.get('class_table')
+        
+        if class_table:
+            print(f"Checking enrollment for student {student_id} in class_table {class_table}")
+            from database.operations import is_student_enrolled_in_class_id, is_student_in_class
+            
+            # Check if class_table is a numeric class_id (new optimized schema) or course name (legacy)
+            try:
+                class_id = int(class_table)
+                # It's a numeric class_id, use optimized schema check
+                if not is_student_enrolled_in_class_id(student_id, class_id):
+                    print(f"Student {student_id} not enrolled in class {class_id}")
+                    enhanced_data = data.copy()
+                    enhanced_data.update({
+                        'session_id': session_id,
+                        'name': student.get('name', 'Unknown'),
+                        'course': student.get('course', 'Unknown'), 
+                        'year': str(student.get('year', 'Unknown'))
+                    })
+                    record_denied_attempt(enhanced_data, 'student_not_enrolled_in_class')
+                    return jsonify(status='error', message='You are not enrolled in this class. Please contact your instructor to be added to the class.'), 403
+            except ValueError:
+                # It's a string course name, use legacy check
+                if not is_student_in_class(student_id, class_table):
+                    print(f"Student {student_id} not enrolled in course {class_table}")
+                    enhanced_data = data.copy()
+                    enhanced_data.update({
+                        'session_id': session_id,
+                        'name': student.get('name', 'Unknown'),
+                        'course': student.get('course', 'Unknown'), 
+                        'year': str(student.get('year', 'Unknown'))
+                    })
+                    record_denied_attempt(enhanced_data, 'student_not_in_class')
+                    return jsonify(status='error', message='You are not enrolled in this class'), 403
+        elif course and not is_student_in_class(student_id, course):
             print(f"Student {student_id} not enrolled in class {course}")
             enhanced_data = data.copy()
             enhanced_data.update({

@@ -1,5 +1,13 @@
 """
-Settings Routes Module for Offline Attendance System
+Settings Routes Module for Offline Attenda@settings_bp.route('/api/denied', methods=['GET'])
+def api_denied():
+    try:
+        from database.operations import get_denied_attempts_with_details
+        denied = get_denied_attempts_with_details()
+        return jsonify(denied)
+    except Exception as e:
+        print(f"Error getting denied attempts: {e}")
+        return jsonify([])
 
 This module contains all settings and data management endpoints:
 - System settings configuration
@@ -27,10 +35,19 @@ settings_bp = Blueprint('settings', __name__)
 @settings_bp.route('/api/attendances')
 def api_attendances():
     try:
-        attendances = get_all_data('class_attendees')
+        from database.operations import get_attendance_records_with_details
+        attendances = get_attendance_records_with_details()
+        
+        # Process device_info if it exists
         for attendance in attendances:
-            if 'fingerprint_hash' in attendance and attendance['fingerprint_hash']:
-                attendance['fingerprint_hash'] = attendance['fingerprint_hash'][:8] + '...'
+            if 'device_info' in attendance and attendance['device_info']:
+                try:
+                    # device_info might be JSON string, keep it as is for the frontend
+                    pass
+                except:
+                    # If not JSON, leave as is
+                    pass
+        
         return jsonify(attendances)
     except Exception as e:
         print(f"Error getting attendances: {e}")

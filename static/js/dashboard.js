@@ -9,6 +9,14 @@ let classList = [];
 let currentToken = null;
 let autoRegenerateEnabled = true;
 
+// Track previous data to detect actual new data
+let previousAttendanceCount = 0;
+let previousDeniedCount = 0;
+let previousDeviceCount = 0;
+
+// Track token regeneration to prevent spam
+let lastTokenRegeneratedTime = 0;
+
 // Hidden data management
 let hiddenAttendanceIds = new Set();
 let hiddenDeniedIds = new Set();
@@ -71,10 +79,11 @@ function loadData() {
       // Filter out hidden data
       filterVisibleData();
       
-      const hasNewData = 
-        attendanceData.length > 0 ||
-        deniedAttempts.length > 0 ||
-        deviceFingerprints.length > 0;
+      // Check for actually new data by comparing counts
+      const hasNewAttendance = attendanceData.length > previousAttendanceCount;
+      const hasNewDenied = deniedAttempts.length > previousDeniedCount;
+      const hasNewDevice = deviceFingerprints.length > previousDeviceCount;
+      const hasAnyNewData = hasNewAttendance || hasNewDenied || hasNewDevice;
 
       // Check if current token has been used
       if (currentToken && autoRegenerateEnabled) {
@@ -86,9 +95,22 @@ function loadData() {
       updateDeviceTable();
       updateStatisticsGrid(); 
       
-      if (hasNewData && lastUpdateTime > 0) {
-        showNotification('New activity detected!', 'info');
+      // Only show notification for actually new data, and only after initial load
+      if (hasAnyNewData && lastUpdateTime > 0) {
+        let notificationMessage = 'New activity detected: ';
+        let activities = [];
+        if (hasNewAttendance) activities.push('check-ins');
+        if (hasNewDenied) activities.push('denied attempts');
+        if (hasNewDevice) activities.push('devices');
+        notificationMessage += activities.join(', ');
+        
+        showNotification(notificationMessage, 'info', 2000);
       }
+      
+      // Update previous counts for next comparison
+      previousAttendanceCount = attendanceData.length;
+      previousDeniedCount = deniedAttempts.length;
+      previousDeviceCount = deviceFingerprints.length;
       
       lastUpdateTime = Date.now();
       
@@ -142,7 +164,13 @@ function checkTokenUsageAndRegenerate(attendanceData, deniedAttempts) {
   
   if (tokenUsedInAttendance || tokenDeniedAsUsed) {
     console.log('Current token has been used, auto-regenerating QR code...');
-    showNotification('Token used - Generating new QR code automatically', 'info');
+    
+    // Only show notification if it's been more than 10 seconds since last regeneration
+    const now = Date.now();
+    if (now - lastTokenRegeneratedTime > 10000) {
+      showNotification('Token used - Generating new QR code automatically', 'info', 2000);
+      lastTokenRegeneratedTime = now;
+    }
     
     // Auto-regenerate QR code
     setTimeout(() => {
@@ -1114,7 +1142,30 @@ function updateDeviceTable() {
 }
 
 function formatTimestamp(timestamp) {
-  return new Date(timestamp * 1000).toLocaleString();
+  // Handle different timestamp formats
+  if (!timestamp) return 'Unknown';
+  
+  // If it's already a number (Unix timestamp), multiply by 1000
+  if (typeof timestamp === 'number') {
+    return new Date(timestamp * 1000).toLocaleString();
+  }
+  
+  // If it's a string (ISO format), parse directly
+  if (typeof timestamp === 'string') {
+    // Handle both ISO format (2025-06-27T13:31:07.041358) and space format (2025-06-27 20:24:34.228115)
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) {
+      // If parsing failed, try treating as Unix timestamp
+      const numTimestamp = parseFloat(timestamp);
+      if (!isNaN(numTimestamp)) {
+        return new Date(numTimestamp * 1000).toLocaleString();
+      }
+      return 'Invalid Date';
+    }
+    return date.toLocaleString();
+  }
+  
+  return 'Invalid Date';
 }
 
 function formatDateTime(isoString) {

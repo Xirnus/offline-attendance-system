@@ -13,7 +13,28 @@
  * @param {string} type - The type of notification ('success', 'error', 'info', 'warning')
  * @param {number} duration - Duration in milliseconds (default: 3000)
  */
+
+// Notification throttling to prevent spam
+const notificationHistory = new Map();
+const NOTIFICATION_THROTTLE_TIME = 3000; // 3 seconds
+
 function showNotification(message, type = 'info', duration = 3000) {
+  // Create a key for this specific message + type combination
+  const notificationKey = `${message}_${type}`;
+  const now = Date.now();
+  
+  // Check if this exact notification was shown recently
+  if (notificationHistory.has(notificationKey)) {
+    const lastShown = notificationHistory.get(notificationKey);
+    if (now - lastShown < NOTIFICATION_THROTTLE_TIME) {
+      // Skip showing the notification if it was shown too recently
+      return;
+    }
+  }
+  
+  // Update the notification history
+  notificationHistory.set(notificationKey, now);
+  
   const notification = document.createElement('div');
   
   // Handle multiline messages

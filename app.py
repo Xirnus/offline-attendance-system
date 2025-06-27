@@ -64,10 +64,10 @@ except Exception as e:
     traceback.print_exc()
     # Fallback to original routes if new structure fails
     try:
-        print("Falling back to original routes structure...")
-        from api.old_routes import api_bp
+        print("Falling back to routes_new structure...")
+        from api.routes_new import api_bp
         app.register_blueprint(api_bp)
-        print("Original routes structure loaded successfully")
+        print("Fallback routes structure loaded successfully")
     except Exception as e2:
         print(f"ERROR with fallback routes: {e2}")
         exit(1)

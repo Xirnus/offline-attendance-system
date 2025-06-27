@@ -294,6 +294,41 @@ def get_all_data(table_name, limit=100):
     conn.close()
     return [dict(row) for row in rows]
 
+def get_attendance_records_with_details(limit=100):
+    """Get attendance records with student details, device info, and token info"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT 
+                ca.checked_in_at as timestamp,
+                s.name,
+                s.course,
+                s.year,
+                df.device_info,
+                t.token,
+                ca.student_id,
+                ca.session_id
+            FROM class_attendees ca
+            LEFT JOIN students s ON ca.student_id = s.student_id
+            LEFT JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+            LEFT JOIN tokens t ON ca.token_id = t.id
+            ORDER BY ca.checked_in_at DESC
+            LIMIT ?
+        ''', (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        return [dict(row) for row in rows]
+        
+    except Exception as e:
+        print(f"Error getting attendance records: {e}")
+        conn.close()
+        return []
+
 def insert_students(rows):
     """Insert students from CSV/Excel data"""
     conn = get_db_connection()
@@ -952,6 +987,22 @@ def is_student_in_class(student_id, course):
         print(f"Error checking student class enrollment: {e}")
         return False
 
+def is_student_enrolled_in_class_id(student_id, class_id):
+    """Check if a student is enrolled in a specific class using the optimized schema"""
+    try:
+        from database.class_table_manager import OptimizedClassManager
+        manager = OptimizedClassManager()
+        
+        # Check if the student is enrolled in the specified class
+        enrolled_students = manager.get_class_students(class_id)
+        student_ids = [student['student_id'] for student in enrolled_students]
+        
+        return student_id in student_ids
+        
+    except Exception as e:
+        print(f"Error checking student enrollment in class {class_id}: {e}")
+        return False
+
 def is_student_already_checked_in_session(student_id, session_id):
     """Check if a student has already checked in for a specific session"""
     try:
@@ -968,6 +1019,40 @@ def is_student_already_checked_in_session(student_id, session_id):
         print(f"Error checking student check-in: {e}")
         return False
 
+def get_denied_attempts_with_details(limit=100):
+    """Get denied attempts with student details, device info, and token info"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            SELECT 
+                da.attempted_at as timestamp,
+                s.name,
+                s.course,
+                s.year,
+                da.reason,
+                df.device_info,
+                t.token,
+                da.student_id
+            FROM denied_attempts da
+            LEFT JOIN students s ON da.student_id = s.student_id
+            LEFT JOIN device_fingerprints df ON da.device_fingerprint_id = df.id
+            LEFT JOIN tokens t ON da.token_id = t.id
+            ORDER BY da.attempted_at DESC
+            LIMIT ?
+        ''', (limit,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        return [dict(row) for row in rows]
+        
+    except Exception as e:
+        print(f"Error getting denied attempts: {e}")
+        conn.close()
+        return []
 # ===================================================================
 # CLASSES DATABASE OPTIMIZATION GUIDE
 # ===================================================================

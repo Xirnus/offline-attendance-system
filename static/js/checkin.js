@@ -459,7 +459,8 @@ async function initializeFingerprinting() {
         // Generate session ID first
         sessionId = generateSessionId();
         
-        showMessage('Generating device fingerprint...', 'info');
+        // Remove the fingerprint generation notification
+        // showMessage('Generating device fingerprint...', 'info');
         
         deviceInfo = {
             userAgent: navigator.userAgent,
@@ -553,7 +554,8 @@ function setupFormHandler() {
         
         try {
             setButtonLoading('submitBtn', true, 'Checking in...');
-            showMessage('Processing check-in...', 'info');
+            // Remove the processing notification to reduce noise
+            // showMessage('Processing check-in...', 'info');
             
             const pathParts = window.location.pathname.split('/');
             const token = pathParts[pathParts.length - 1];
@@ -713,8 +715,9 @@ function showEnhancedErrorMessage(errorType, customMessage = null) {
             type: 'error',
             suggestions: [
                 'Verify you\'re attending the correct class',
-                'Check your class schedule',
-                'Contact your instructor for enrollment assistance'
+                'Check your class schedule and enrollment status',
+                'Contact your instructor for enrollment assistance',
+                'Visit the registrar\'s office if you believe this is an error'
             ]
         },
         student_not_found: {
