@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const importBtn = document.getElementById('import-csv');
-    const clearBtn = document.getElementById('clear-table');
-    const csvInput = document.getElementById('csv-input');
-    const tableBody = document.getElementById('table-body');
+    const importBtn = getElement('import-csv');
+    const clearBtn = getElement('clear-table');
+    const csvInput = getElement('csv-input');
+    const tableBody = getElement('table-body');
 
     // Load students on page load
     loadStudents();
@@ -11,8 +11,7 @@ document.addEventListener('DOMContentLoaded', function() {
     checkSessionAndSetRefresh();
 
     function checkSessionAndSetRefresh() {
-        fetch('/api/session_status')
-        .then(response => response.json())
+        fetchWithLoading('/api/session_status')
         .then(data => {
             const refreshInterval = (data.active_session && data.active_session.is_active) ? 10000 : 30000;
             setInterval(loadStudents, refreshInterval);
@@ -23,33 +22,38 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Clear button
-    clearBtn.addEventListener('click', function() {
-        if (confirm('Clear all students?')) {
-            fetch('/clear_students', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    alert(`Deleted ${data.deleted} students`);
-                    loadStudents();
-                });
+    addEventListenerSafe(clearBtn, 'click', async function() {
+        const confirmed = await customConfirm('Clear all students?', 'Confirm Action');
+        if (confirmed) {
+            try {
+                const data = await postJSON('/clear_students');
+                showNotification(`Deleted ${data.deleted} students`, 'success');
+                loadStudents();
+            } catch (error) {
+                showNotification('Error deleting students', 'error');
+            }
         }
     });
 
     // Import button
-    importBtn.addEventListener('click', () => csvInput.click());
+    addEventListenerSafe(importBtn, 'click', () => csvInput?.click());
 
     // File upload
-    csvInput.addEventListener('change', function(event) {
+    addEventListenerSafe(csvInput, 'change', async function(event) {
         const file = event.target.files[0];
         if (!file) return;
         
         const formData = new FormData();
         formData.append('file', file);
 
-        fetch('/upload_students', {
-            method: 'POST',
-            body: formData
-        })
-        .then(async response => {
+        try {
+            setButtonLoading(importBtn, true, 'Uploading...');
+            
+            const response = await fetch('/upload_students', {
+                method: 'POST',
+                body: formData
+            });
+            
             const contentType = response.headers.get('content-type');
             
             if (!response.ok) {
@@ -62,19 +66,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`Expected JSON response, got: ${responseText.substring(0, 100)}`);
             }
             
-            return response.json();
-        })
-        .then(data => {
-            alert(data.error ? 'Error: ' + data.error : data.message);
+            const data = await response.json();
+            showNotification(data.error ? 'Error: ' + data.error : data.message, data.error ? 'error' : 'success');
             if (!data.error) loadStudents();
-        })
-        .catch(error => {
+        } catch (error) {
             console.error('Upload failed:', error);
-            alert('Upload failed: ' + error.message);
-        })
-        .finally(() => {
-            csvInput.value = '';
-        });
+            showNotification('Upload failed: ' + error.message, 'error');
+        } finally {
+            setButtonLoading(importBtn, false);
+            if (csvInput) csvInput.value = '';
+        }
     });
 
     // Add to DOMContentLoaded function
@@ -522,9 +523,5 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    // Remove duplicate escapeHtml function - now using common.js version
 });

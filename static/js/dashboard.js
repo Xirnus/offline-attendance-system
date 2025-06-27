@@ -9,8 +9,14 @@ let classList = [];
 let currentToken = null;
 let autoRegenerateEnabled = true;
 
+// Hidden data management
+let hiddenAttendanceIds = new Set();
+let hiddenDeniedIds = new Set();
+let hiddenDeviceHashes = new Set();
+
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
+  loadHiddenData(); // Load hidden data from localStorage
   loadSettings();
   loadData();
   loadSessionProfiles();
@@ -46,35 +52,34 @@ async function loadSessionProfiles() {
   }
 }
 
-// Load data with debouncing
-async function loadData() {
+function loadData() {
   if (loadDataTimeout) clearTimeout(loadDataTimeout);
   
   loadDataTimeout = setTimeout(async () => {
     try {
       const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
-        fetch('/api/attendances'),
-        fetch('/api/denied'),
-        fetch('/api/device_fingerprints')
+        fetchWithLoading('/api/attendances'),
+        fetchWithLoading('/api/denied'),
+        fetchWithLoading('/api/device_fingerprints')
       ]);
       
-      const newAttendanceData = await attendanceRes.json();
-      const newDeniedAttempts = await deniedRes.json();
-      const newDeviceFingerprints = await devicesRes.json();
+      // Store original data
+      attendanceData = attendanceRes;
+      deniedAttempts = deniedRes;
+      deviceFingerprints = devicesRes;
+      
+      // Filter out hidden data
+      filterVisibleData();
       
       const hasNewData = 
-        newAttendanceData.length !== attendanceData.length ||
-        newDeniedAttempts.length !== deniedAttempts.length ||
-        newDeviceFingerprints.length !== deviceFingerprints.length;
+        attendanceData.length > 0 ||
+        deniedAttempts.length > 0 ||
+        deviceFingerprints.length > 0;
 
       // Check if current token has been used
       if (currentToken && autoRegenerateEnabled) {
-        checkTokenUsageAndRegenerate(newAttendanceData, newDeniedAttempts);
+        checkTokenUsageAndRegenerate(attendanceData, deniedAttempts);
       }
-      
-      attendanceData = newAttendanceData;
-      deniedAttempts = newDeniedAttempts;
-      deviceFingerprints = newDeviceFingerprints;
 
       updateAttendanceTable();
       updateDeniedTable();
@@ -147,19 +152,16 @@ function checkTokenUsageAndRegenerate(attendanceData, deniedAttempts) {
 }
 
 function setupEventListeners() {
-  const elements = {
+  addEventListeners({
     'generate-btn': () => generateQR(false),
     'save-settings': saveSettings,
     'refresh-data': loadData,
-    'clear-all-data': clearAllDataWithModal
-  };
-  Object.entries(elements).forEach(([id, handler]) => {
-    const element = document.getElementById(id);
-    if (element) element.addEventListener('click', handler);
+    'clear-all-data': clearAllDataWithModal,
+    'restore-hidden-data': restoreHiddenData
   });
 
   // Add auto-regeneration toggle if it exists
-  const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+  const autoRegenToggle = getElement('auto-regenerate-qr');
   if (autoRegenToggle) {
     autoRegenToggle.addEventListener('change', function() {
       autoRegenerateEnabled = this.checked;
@@ -167,27 +169,19 @@ function setupEventListeners() {
     });
   }
   
-  
   // Session event listeners
-  const createSessionBtn = document.getElementById('create-session-btn');
-  const stopSessionBtn = document.getElementById('stop-session-btn');
+  addEventListenerSafe('create-session-btn', 'click', function(e) {
+    e.preventDefault();
+    showSessionCreationModal();
+  });
   
-  if (createSessionBtn) {
-    createSessionBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      showSessionCreationModal();
-    });
-  }
-  
-  if (stopSessionBtn) {
-    stopSessionBtn.addEventListener('click', async function(e) {
-      e.preventDefault();
-      const confirmed = await customConfirm('Are you sure you want to stop the current session?', 'Stop Session');
-      if (confirmed) {
-        stopSession();
-      }
-    });
-  }
+  addEventListenerSafe('stop-session-btn', 'click', async function(e) {
+    e.preventDefault();
+    const confirmed = await customConfirm('Are you sure you want to stop the current session?', 'Stop Session');
+    if (confirmed) {
+      stopSession();
+    }
+  });
 }
 
 async function showSessionCreationModal() {
@@ -723,33 +717,32 @@ function getDefaultEndTime() {
   return now.toTimeString().slice(0, 5);
 }
 
-// Modify the generateQR function to handle auto-regeneration
 async function generateQR(isAutoRegeneration = false) {
   try {
-    const btn = document.getElementById('generate-btn');
-    const status = document.getElementById('qr-status');
-    const img = document.getElementById('qr-img');
+    const btn = getElement('generate-btn');
+    const status = getElement('qr-status');
+    const img = getElement('qr-img');
     
-    if (!isAutoRegeneration) {
-      btn.disabled = true;
-      btn.textContent = 'Generating...';
+    if (!isAutoRegeneration && btn) {
+      setButtonLoading(btn, true, 'Generating...');
     }
     
-    status.textContent = isAutoRegeneration ? 'Auto-regenerating QR code...' : 'Generating QR code...';
+    if (status) {
+      status.textContent = isAutoRegeneration ? 'Auto-regenerating QR code...' : 'Generating QR code...';
+    }
     
     const response = await fetch('/generate_qr');
     if (response.ok) {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      img.src = url;
+      if (img) img.src = url;
       
-      // Get the new token from the response headers or make a separate API call
       await updateCurrentToken();
       
       const statusMessage = isAutoRegeneration ? 
         'QR code auto-regenerated successfully' : 
         'QR code generated successfully';
-      status.textContent = statusMessage;
+      if (status) status.textContent = statusMessage;
       
       if (isAutoRegeneration) {
         showNotification('New QR code ready for use', 'success');
@@ -762,29 +755,25 @@ async function generateQR(isAutoRegeneration = false) {
     const errorMessage = isAutoRegeneration ? 
       'Error auto-regenerating QR code' : 
       'Error generating QR code';
-    document.getElementById('qr-status').textContent = errorMessage;
+    const status = getElement('qr-status');
+    if (status) status.textContent = errorMessage;
     
     if (isAutoRegeneration) {
       showNotification('Failed to auto-regenerate QR code', 'error');
     }
   } finally {
     if (!isAutoRegeneration) {
-      const btn = document.getElementById('generate-btn');
-      btn.disabled = false;
-      btn.textContent = 'Generate New QR Code';
+      const btn = getElement('generate-btn');
+      if (btn) setButtonLoading(btn, false, 'Generate New QR Code');
     }
   }
 }
 
-// New function to get the current token
 async function updateCurrentToken() {
   try {
-    const response = await fetch('/api/current_token');
-    if (response.ok) {
-      const data = await response.json();
-      currentToken = data.token;
-      console.log('Updated current token:', currentToken);
-    }
+    const data = await fetchWithLoading('/api/current_token');
+    currentToken = data.token;
+    console.log('Updated current token:', currentToken);
   } catch (error) {
     console.error('Error getting current token:', error);
   }
@@ -792,30 +781,30 @@ async function updateCurrentToken() {
 
 async function loadSettings() {
   try {
-    const response = await fetch('/api/settings');
-    const settings = await response.json();
+    const settings = await fetchWithLoading('/api/settings');
     
     console.log('Loaded settings from server:', settings);
     
-    document.getElementById('max-uses').value = settings.max_uses_per_device || 1;
-    document.getElementById('time-window').value = (settings.time_window_minutes || 1440) / 60;
-    document.getElementById('enable-blocking').checked = settings.enable_fingerprint_blocking === true;
+    const maxUsesEl = getElement('max-uses');
+    const timeWindowEl = getElement('time-window');
+    const enableBlockingEl = getElement('enable-blocking');
+    const autoRegenToggle = getElement('auto-regenerate-qr');
     
-    // Load auto-regeneration setting
-    const autoRegenToggle = document.getElementById('auto-regenerate-qr');
+    if (maxUsesEl) maxUsesEl.value = settings.max_uses_per_device || 1;
+    if (timeWindowEl) timeWindowEl.value = (settings.time_window_minutes || 1440) / 60;
+    if (enableBlockingEl) enableBlockingEl.checked = settings.enable_fingerprint_blocking === true;
+    
     if (autoRegenToggle) {
       autoRegenToggle.checked = settings.auto_regenerate_qr !== false;
       autoRegenerateEnabled = settings.auto_regenerate_qr !== false;
     }
-      console.log('Settings applied to form:');
-    console.log('- Max uses:', document.getElementById('max-uses').value);
-    console.log('- Time window:', document.getElementById('time-window').value);
-    console.log('- Enable blocking:', document.getElementById('enable-blocking').checked);
     
-    // Update the visual indicator for device blocking status
+    console.log('Settings applied to form:');
+    console.log('- Max uses:', maxUsesEl?.value);
+    console.log('- Time window:', timeWindowEl?.value);
+    console.log('- Enable blocking:', enableBlockingEl?.checked);
+    
     updateDeviceBlockingStatus();
-    
-    // Get initial token
     await updateCurrentToken();
     
   } catch (error) {
@@ -924,13 +913,13 @@ ${result.message}`;
   }
 }
 
-// Clear all data using custom modal
+// Hide all data from display (preserve in database)
 async function clearAllDataWithModal() {
   try {
-    // Show confirmation dialog using custom modal
+    // Show confirmation dialog
     const confirmed = await showCustomModal(
-      'Are you sure you want to delete all attendance, denied attempts, and device data? This action cannot be undone.',
-      'Clear All Data',
+      'This will hide all current data from the dashboard view.\n\nThe data will remain in the database but will not be displayed even after refresh.\n\nTo permanently delete data, you would need to use the database management tools.\n\nProceed with hiding the data?',
+      'Hide All Data',
       true // show cancel button
     );
 
@@ -939,44 +928,47 @@ async function clearAllDataWithModal() {
     }
 
     // Show loading notification
-    showNotification('Clearing all data...', 'info');
+    showNotification('Hiding all data from display...', 'info');
     
-    const response = await fetch('/api/delete_all_data', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json' 
-      }
-    });
+    // Count current data for the notification
+    const currentCounts = {
+      attendances: attendanceData.length,
+      denied_attempts: deniedAttempts.length,
+      device_fingerprints: deviceFingerprints.length
+    };
     
-    const result = await response.json();
+    // Hide all current data
+    hideAllCurrentData();
     
-    if (response.ok && result.status === 'success') {
-      // Show success message with details
-      const counts = result.deleted_counts;
-      const successMessage = `All data cleared successfully:
-• ${counts.attendances} attendance records
-• ${counts.denied_attempts} failed attempts  
-• ${counts.device_fingerprints} device records`;
+    // Clear the data arrays (they will stay hidden even on refresh)
+    attendanceData = [];
+    deniedAttempts = [];
+    deviceFingerprints = [];
+    
+    // Clear the tables immediately
+    document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+    document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+    document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+    
+    // Reset statistics grid
+    document.getElementById('total-attendances').textContent = '0';
+    document.getElementById('total-denied').textContent = '0';
+    document.getElementById('unique-devices').textContent = '0';
+    document.getElementById('recent-activity').textContent = '0';
+    
+    // Show success message with details
+    const successMessage = `Data hidden successfully:
+• ${currentCounts.attendances} attendance records hidden
+• ${currentCounts.denied_attempts} failed attempts hidden
+• ${currentCounts.device_fingerprints} device records hidden
 
-      showNotification(successMessage, 'success');
-      
-      // Clear the tables immediately
-      document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
-      document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-      document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
-      
-      // Refresh the data after a short delay
-      setTimeout(() => {
-        loadData();
-      }, 1000);
-      
-    } else {
-      throw new Error(result.message || 'Failed to clear data');
-    }
+Note: Data is preserved in database but will remain hidden even after refresh.`;
+
+    showNotification(successMessage, 'success');
     
   } catch (error) {
-    console.error('Error clearing data:', error);
-    showNotification(`Failed to clear data: ${error.message}`, 'error');
+    console.error('Error hiding data:', error);
+    showNotification(`Failed to hide data: ${error.message}`, 'error');
   }
 }
 
@@ -1210,157 +1202,6 @@ function getDeviceInfo(deviceInfoStr) {
   }
 }
 
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-
-function showNotification(message, type = 'info') {
-  const notification = document.createElement('div');
-  
-  // Handle multiline messages
-  if (message.includes('\n')) {
-    notification.innerHTML = message.replace(/\n/g, '<br>');
-  } else {
-    notification.textContent = message;
-  }
-  
-  const colors = {
-    success: '#28a745',
-    error: '#dc3545',
-    info: '#17a2b8',
-    default: '#6c757d'
-  };
-  
-  notification.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 15px 20px;
-    border-radius: 8px; color: white; z-index: 1000; font-weight: bold;
-    background-color: ${colors[type] || colors.default};
-    max-width: 400px; line-height: 1.4; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    border: 2px solid ${colors[type] || colors.default};
-  `;
-  
-  document.body.appendChild(notification);
-    setTimeout(() => {
-    if (document.body.contains(notification)) {
-      document.body.removeChild(notification);
-    }
-  }, 3000);
-}
-
-// Custom Alert and Confirm Functions
-function customAlert(message, title = 'Alert') {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('customModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalMessage = document.getElementById('modalMessage');
-    const modalConfirm = document.getElementById('modalConfirm');
-    const modalCancel = document.getElementById('modalCancel');
-    
-    modalTitle.textContent = title;
-    modalMessage.textContent = message;
-    modalCancel.style.display = 'none';
-    modalConfirm.textContent = 'OK';
-    
-    modal.classList.add('show');
-    
-    const handleConfirm = () => {
-      modal.classList.remove('show');
-      modalConfirm.removeEventListener('click', handleConfirm);
-      modalCancel.style.display = 'inline-block';
-      resolve();
-    };
-    
-    modalConfirm.addEventListener('click', handleConfirm);
-  });
-}
-
-function customConfirm(message, title = 'Confirmation') {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('customModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalMessage = document.getElementById('modalMessage');
-    const modalConfirm = document.getElementById('modalConfirm');
-    const modalCancel = document.getElementById('modalCancel');
-    
-    modalTitle.textContent = title;
-    modalMessage.textContent = message;
-    modalCancel.style.display = 'inline-block';
-    modalConfirm.textContent = 'Confirm';
-    
-    modal.classList.add('show');
-    
-    const handleConfirm = () => {
-      modal.classList.remove('show');
-      modalConfirm.removeEventListener('click', handleConfirm);
-      modalCancel.removeEventListener('click', handleCancel);
-      resolve(true);
-    };
-    
-    const handleCancel = () => {
-      modal.classList.remove('show');
-      modalConfirm.removeEventListener('click', handleConfirm);
-      modalCancel.removeEventListener('click', handleCancel);
-      resolve(false);
-    };
-    
-    modalConfirm.addEventListener('click', handleConfirm);
-    modalCancel.addEventListener('click', handleCancel);
-  });
-}
-
-function showCustomModal(message, title = 'Notification', showCancel = false) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('customModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalMessage = document.getElementById('modalMessage');
-    const modalConfirm = document.getElementById('modalConfirm');
-    const modalCancel = document.getElementById('modalCancel');
-    
-    modalTitle.textContent = title;
-    modalMessage.textContent = message;
-    
-    if (showCancel) {
-      modalCancel.style.display = 'inline-block';
-      modalConfirm.textContent = 'Confirm';
-    } else {
-      modalCancel.style.display = 'none';
-      modalConfirm.textContent = 'OK';
-    }
-    
-    modal.classList.add('show');
-    
-    const handleConfirm = () => {
-      modal.classList.remove('show');
-      modalConfirm.removeEventListener('click', handleConfirm);
-      modalCancel.removeEventListener('click', handleCancel);
-      resolve(true);
-    };
-    
-    const handleCancel = () => {
-      modal.classList.remove('show');
-      modalConfirm.removeEventListener('click', handleConfirm);
-      modalCancel.removeEventListener('click', handleCancel);
-      resolve(false);
-    };
-    
-    modalConfirm.addEventListener('click', handleConfirm);
-    if (showCancel) {
-      modalCancel.addEventListener('click', handleCancel);
-    }
-  });
-}
-
-// Close modal when clicking outside
-document.addEventListener('click', (e) => {
-  if (e.target.id === 'customModal') {
-    document.getElementById('customModal').classList.remove('show');
-  }
-});
-
 // Add visual indicator for device blocking status
 function updateDeviceBlockingStatus() {
   const enableBlocking = document.getElementById('enable-blocking').checked;
@@ -1409,3 +1250,120 @@ function setupSettingsEventListeners() {
 
 // Call setupSettingsEventListeners on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', setupSettingsEventListeners);
+
+// Hidden data management functions
+function loadHiddenData() {
+  try {
+    const hiddenAttendance = localStorage.getItem('hiddenAttendanceIds');
+    const hiddenDenied = localStorage.getItem('hiddenDeniedIds');
+    const hiddenDevices = localStorage.getItem('hiddenDeviceHashes');
+    
+    hiddenAttendanceIds = hiddenAttendance ? new Set(JSON.parse(hiddenAttendance)) : new Set();
+    hiddenDeniedIds = hiddenDenied ? new Set(JSON.parse(hiddenDenied)) : new Set();
+    hiddenDeviceHashes = hiddenDevices ? new Set(JSON.parse(hiddenDevices)) : new Set();
+    
+    console.log('Loaded hidden data:', {
+      attendance: hiddenAttendanceIds.size,
+      denied: hiddenDeniedIds.size,
+      devices: hiddenDeviceHashes.size
+    });
+  } catch (error) {
+    console.error('Error loading hidden data:', error);
+    hiddenAttendanceIds = new Set();
+    hiddenDeniedIds = new Set();
+    hiddenDeviceHashes = new Set();
+  }
+}
+
+function saveHiddenData() {
+  try {
+    localStorage.setItem('hiddenAttendanceIds', JSON.stringify([...hiddenAttendanceIds]));
+    localStorage.setItem('hiddenDeniedIds', JSON.stringify([...hiddenDeniedIds]));
+    localStorage.setItem('hiddenDeviceHashes', JSON.stringify([...hiddenDeviceHashes]));
+  } catch (error) {
+    console.error('Error saving hidden data:', error);
+  }
+}
+
+function hideAllCurrentData() {
+  // Add all current data IDs to hidden sets
+  attendanceData.forEach(item => {
+    if (item.id) hiddenAttendanceIds.add(item.id);
+    else if (item.timestamp && item.name) {
+      // Create a unique identifier if no ID exists
+      hiddenAttendanceIds.add(`${item.timestamp}_${item.name}_${item.token || ''}`);
+    }
+  });
+  
+  deniedAttempts.forEach(item => {
+    if (item.id) hiddenDeniedIds.add(item.id);
+    else if (item.timestamp && item.name) {
+      // Create a unique identifier if no ID exists
+      hiddenDeniedIds.add(`${item.timestamp}_${item.name}_${item.reason || ''}`);
+    }
+  });
+  
+  deviceFingerprints.forEach(item => {
+    if (item.fingerprint_hash) hiddenDeviceHashes.add(item.fingerprint_hash);
+  });
+  
+  // Save to localStorage
+  saveHiddenData();
+}
+
+function filterVisibleData() {
+  // Filter out hidden attendance data
+  attendanceData = attendanceData.filter(item => {
+    if (item.id && hiddenAttendanceIds.has(item.id)) return false;
+    const fallbackId = `${item.timestamp}_${item.name}_${item.token || ''}`;
+    return !hiddenAttendanceIds.has(fallbackId);
+  });
+  
+  // Filter out hidden denied attempts
+  deniedAttempts = deniedAttempts.filter(item => {
+    if (item.id && hiddenDeniedIds.has(item.id)) return false;
+    const fallbackId = `${item.timestamp}_${item.name}_${item.reason || ''}`;
+    return !hiddenDeniedIds.has(fallbackId);
+  });
+  
+  // Filter out hidden device fingerprints
+  deviceFingerprints = deviceFingerprints.filter(item => {
+    return !hiddenDeviceHashes.has(item.fingerprint_hash);
+  });
+}
+
+// Function to restore all hidden data
+async function restoreHiddenData() {
+  try {
+    const confirmed = await showCustomModal(
+      'This will restore all previously hidden data and make it visible again.\n\nProceed?',
+      'Restore Hidden Data',
+      true
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    // Clear all hidden data sets
+    hiddenAttendanceIds.clear();
+    hiddenDeniedIds.clear();
+    hiddenDeviceHashes.clear();
+
+    // Clear localStorage
+    localStorage.removeItem('hiddenAttendanceIds');
+    localStorage.removeItem('hiddenDeniedIds');
+    localStorage.removeItem('hiddenDeviceHashes');
+
+    showNotification('Hidden data cleared. Refreshing data...', 'info');
+
+    // Reload data to show everything
+    setTimeout(() => {
+      loadData();
+    }, 500);
+
+  } catch (error) {
+    console.error('Error restoring hidden data:', error);
+    showNotification('Error restoring hidden data', 'error');
+  }
+}

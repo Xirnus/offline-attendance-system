@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
-    const classInfoContainer = document.getElementById('classInfoContainer');
-    const fileInput = document.getElementById('fileInput');
-    const uploadBtn = document.getElementById('uploadBtn');
+    const classInfoContainer = getElement('classInfoContainer');
+    const fileInput = getElement('fileInput');
+    const uploadBtn = getElement('uploadBtn');
 
     // Bulk selection state - declare at the top
     let currentSelectionMode = 'single'; // 'single' or 'bulk'
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadCSS();
         
         // Set up event listeners
-        uploadBtn.addEventListener('click', handleFileUpload);
+        addEventListenerSafe(uploadBtn, 'click', handleFileUpload);
         
         // Load existing class data
         loadClassTables();
@@ -34,42 +34,38 @@ document.addEventListener('DOMContentLoaded', function() {
         // but we'll keep it for compatibility
     }
 
-    function handleFileUpload() {
-        const file = fileInput.files[0];
+    async function handleFileUpload() {
+        const file = fileInput?.files[0];
         if (!file) {
             showAlert('Please select an Excel file first', 'error');
             return;
         }
 
-        showLoading(true);
-        uploadBtn.disabled = true;
+        setButtonLoading(uploadBtn, true, 'Uploading...');
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('use_optimized', 'true'); // Use optimized schema
 
-        fetch('/upload_class_record', {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => res.json())
-        .then(data => {
+        try {
+            const data = await fetchWithLoading('/upload_class_record', {
+                method: 'POST',
+                body: formData
+            });
+            
             console.log('Upload successful:', data);
             showAlert(
                 `${data.message}<br>Professor: ${data.professor || 'N/A'}`,
                 'success'
             );
             loadClassTables();
-        })
-        .catch(error => {
+        } catch (error) {
             console.error('Upload error:', error);
             showAlert(`Upload failed: ${error.message}`, 'error');
-        })
-        .finally(() => {
-            showLoading(false);
-            uploadBtn.disabled = false;
-            fileInput.value = '';
-        });
+        } finally {
+            setButtonLoading(uploadBtn, false);
+            if (fileInput) fileInput.value = '';
+        }
     }
 
     function loadClassTables() {

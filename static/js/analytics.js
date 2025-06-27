@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function setupEventListeners() {
-    // Remove redundant event listeners and use a more efficient approach
+    // Use common utility for efficient event listener setup
     const eventHandlers = {
         'refresh-trends': refreshTrends,
         'refresh-courses': loadCourseComparison,
@@ -22,14 +22,8 @@ function setupEventListeners() {
         'refresh-issues-table': loadAttendanceIssues
     };
 
-    // Add event listeners efficiently
-    Object.entries(eventHandlers).forEach(([id, handler]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            const eventType = element.tagName === 'SELECT' ? 'change' : 'click';
-            element.addEventListener(eventType, handler);
-        }
-    });
+    // Add event listeners efficiently using common utility
+    setupEventListeners(eventHandlers);
 }
 
 function initializeCharts() {

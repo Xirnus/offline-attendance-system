@@ -433,19 +433,17 @@ function generateFallbackFingerprint() {
     return Math.abs(hash).toString(16);
 }
 
-// Simple message function
+// Simple message function - adapted to use showNotification from common.js
 function showMessage(text, type) {
-    const messageDiv = document.getElementById('message');
-    messageDiv.textContent = text;
-    messageDiv.className = `alert-${type}`;
-    messageDiv.style.display = 'block';
+    // Map checkin.js message types to common.js notification types
+    const typeMapping = {
+        'success': 'success',
+        'danger': 'error', 
+        'warning': 'warning',
+        'info': 'info'
+    };
     
-    // Keep success messages visible longer
-    if (type === 'success') {
-        setTimeout(() => {
-            messageDiv.style.backgroundColor = '#c8e6c9';
-        }, 100);
-    }
+    showNotification(text, typeMapping[type] || 'info');
 }
 
 // Initialize on page load
@@ -542,12 +540,11 @@ function getDeviceDescription() {
 }
 
 function setupFormHandler() {
-    // Form submission
-    document.getElementById('attendanceForm').addEventListener('submit', async function(e) {
+    // Form submission using common utility
+    addEventListenerSafe('attendanceForm', 'submit', async function(e) {
         e.preventDefault();
         
-        const studentId = document.getElementById('student_id').value.trim();
-        const submitBtn = document.getElementById('submitBtn');
+        const studentId = getElement('student_id')?.value.trim();
         
         if (!studentId) {
             showMessage('Please enter your Student ID', 'danger');
@@ -555,8 +552,7 @@ function setupFormHandler() {
         }
         
         try {
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Checking in...';
+            setButtonLoading('submitBtn', true, 'Checking in...');
             showMessage('Processing check-in...', 'info');
             
             const pathParts = window.location.pathname.split('/');
@@ -604,31 +600,22 @@ function setupFormHandler() {
                 random_seed: Math.random().toString(36)
             };
             
-            const response = await fetch('/checkin', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(deviceData)
-            });
-            
-            const result = await response.json();
+            const result = await postJSON('/checkin', deviceData);
             
             if (result.status === 'success') {
                 markCheckedIn(); // Mark as checked in locally
                 showMessage(result.message, 'success');
-                document.getElementById('attendanceForm').style.display = 'none';
+                const form = getElement('attendanceForm');
+                if (form) form.style.display = 'none';
             } else {
                 showMessage(result.message || 'Check-in failed', 'danger');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Check In';
+                setButtonLoading('submitBtn', false, 'Check In');
             }
             
         } catch (error) {
             console.error('Error:', error);
             showMessage('Network error. Please try again.', 'danger');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Check In';
+            setButtonLoading('submitBtn', false, 'Check In');
         }
     });
 }

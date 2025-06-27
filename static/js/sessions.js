@@ -12,20 +12,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function setupEventListeners() {
     // Profile form submission
-    document.getElementById('profileForm').addEventListener('submit', handleCreateProfile);
+    addEventListenerSafe('profileForm', 'submit', handleCreateProfile);
     
     // Search functionality
-    document.getElementById('searchProfiles').addEventListener('input', function(e) {
+    addEventListenerSafe('searchProfiles', 'input', function(e) {
         filterProfiles(e.target.value);
     });
     
-    // Session creation form (commented out since modal removed)
-    // document.getElementById('createSessionForm')?.addEventListener('submit', handleCreateSession);
-    
     // Edit profile form
-    document.getElementById('editProfileForm').addEventListener('submit', handleEditProfile);
+    addEventListenerSafe('editProfileForm', 'submit', handleEditProfile);
     
-    // Modal controls
+    // Modal controls (using common utility)
     setupModalControls();
     
     // Auto-refresh every 30 seconds
@@ -33,25 +30,8 @@ function setupEventListeners() {
 }
 
 function setupModalControls() {
-    const modals = document.querySelectorAll('.modal');
-    const closeButtons = document.querySelectorAll('.close');
-    
-    // Close modal when clicking X
-    closeButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const modal = this.closest('.modal');
-            modal.style.display = 'none';
-        });
-    });
-    
-    // Close modal when clicking outside
-    window.addEventListener('click', function(event) {
-        modals.forEach(modal => {
-            if (event.target === modal) {
-                modal.style.display = 'none';
-            }
-        });
-    });
+    // Using common modal controls utility
+    // This is now handled by common.js setupModalControls()
 }
 
 function initializeSessionsPage() {
@@ -65,7 +45,7 @@ function formatDateTime(date) {
 
 async function loadActiveSession() {
     try {
-        const response = await fetch('/api/session_status');
+        const response = await fetchWithLoading('/api/session_status');
         const data = await response.json();
         activeSession = data.active_session;
         updateActiveSessionDisplay();
@@ -147,23 +127,21 @@ function calculateDuration(startTime, endTime) {
 async function stopActiveSession() {
     if (!activeSession) return;
     
-    if (!confirm('Are you sure you want to stop the active session? This will mark absent students and end attendance tracking.')) {
-        return;
-    }
+    const confirmed = await customConfirm(
+        'Are you sure you want to stop the active session? This will mark absent students and end attendance tracking.',
+        'Stop Session'
+    );
+    
+    if (!confirmed) return;
     
     try {
-        const response = await fetch('/api/stop_session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const response = await postJSON('/api/stop_session', {});
         
-        const result = await response.json();
-        
-        if (result.status === 'success') {
-            showMessage(result.message, 'success');
+        if (response.status === 'success') {
+            showMessage(response.message, 'success');
             loadActiveSession(); // Refresh the display
         } else {
-            showMessage(result.message || 'Failed to stop session', 'error');
+            showMessage(response.message || 'Failed to stop session', 'error');
         }
     } catch (error) {
         console.error('Error stopping session:', error);
@@ -174,7 +152,7 @@ async function stopActiveSession() {
 async function fetchProfiles(filter = '') {
     console.log('Fetching profiles...'); // Debug log
     try {
-        const response = await fetch('/api/session_profiles');
+        const response = await fetchWithLoading('/api/session_profiles');
         const data = await response.json();
         console.log('Profiles data:', data); // Debug log
         currentProfiles = Array.isArray(data.profiles) ? data.profiles : [];
@@ -210,7 +188,7 @@ function filterProfiles(filter) {
 }
 
 function renderProfiles(profiles) {
-    const container = document.getElementById('profilesList');
+    const container = getElement('profilesList');
     console.log('Rendering profiles:', profiles, 'Container:', container); // Debug log
     
     if (!profiles || profiles.length === 0) {
@@ -247,11 +225,7 @@ function renderProfiles(profiles) {
     `).join('');
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// Remove duplicate escapeHtml function - now using common.js version
 
 async function handleCreateProfile(e) {
     e.preventDefault();
@@ -260,9 +234,7 @@ async function handleCreateProfile(e) {
     const profileData = Object.fromEntries(formData);
     
     // Validate required fields
-    if (!profileData.profile_name || !profileData.organizer || !profileData.building || 
-        !profileData.room_type || !profileData.capacity) {
-        showMessage('Please fill in all required fields', 'error');
+    if (!validateForm(e.target, ['profile_name', 'organizer', 'building', 'room_type', 'capacity'])) {
         return;
     }
     
@@ -274,18 +246,13 @@ async function handleCreateProfile(e) {
     }
     
     try {
-        const response = await fetch('/api/session_profiles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(profileData)
-        });
+        const result = await postJSON('/api/session_profiles', profileData);
         
-        const result = await response.json();
-        
-        if (response.ok && result.status === 'success') {
+        if (result.status === 'success') {
             showMessage('Session profile created successfully!', 'success');
             e.target.reset();
-            fetchProfiles(document.getElementById('searchProfiles').value);
+            clearFormErrors(e.target);
+            fetchProfiles(getElement('searchProfiles').value);
         } else {
             showMessage(result.error || 'Failed to create profile', 'error');
         }
@@ -299,15 +266,15 @@ function openEditProfileModal(profileId) {
     const profile = currentProfiles.find(p => p.id === profileId);
     if (!profile) return;
     
-    // Populate form fields
-    document.getElementById('editProfileId').value = profile.id;
-    document.getElementById('editProfileName').value = profile.profile_name || '';
-    document.getElementById('editProfessorName').value = profile.organizer || '';
-    document.getElementById('editBuildingRoom').value = profile.building || '';
-    document.getElementById('editRoomType').value = profile.room_type || '';
-    document.getElementById('editRoomCapacity').value = profile.capacity || '';
+    // Populate form fields using getElement
+    getElement('editProfileId').value = profile.id;
+    getElement('editProfileName').value = profile.profile_name || '';
+    getElement('editProfessorName').value = profile.organizer || '';
+    getElement('editBuildingRoom').value = profile.building || '';
+    getElement('editRoomType').value = profile.room_type || '';
+    getElement('editRoomCapacity').value = profile.capacity || '';
     
-    document.getElementById('editProfileModal').style.display = 'block';
+    showModal('editProfileModal');
 }
 
 async function handleEditProfile(e) {
@@ -330,8 +297,8 @@ async function handleEditProfile(e) {
         
         if (response.ok && result.status === 'success') {
             showMessage('Profile updated successfully!', 'success');
-            document.getElementById('editProfileModal').style.display = 'none';
-            fetchProfiles(document.getElementById('searchProfiles').value);
+            hideModal('editProfileModal');
+            fetchProfiles(getElement('searchProfiles').value);
         } else {
             showMessage(result.error || 'Failed to update profile', 'error');
         }
@@ -345,9 +312,12 @@ async function deleteProfile(profileId) {
     const profile = currentProfiles.find(p => p.id === profileId);
     if (!profile) return;
     
-    if (!confirm(`Are you sure you want to delete the profile "${profile.profile_name}"? This action cannot be undone.`)) {
-        return;
-    }
+    const confirmed = await customConfirm(
+        `Are you sure you want to delete the profile "${profile.profile_name}"? This action cannot be undone.`,
+        'Delete Profile'
+    );
+    
+    if (!confirmed) return;
     
     try {
         const response = await fetch(`/api/session_profiles/${profileId}`, {
@@ -358,7 +328,7 @@ async function deleteProfile(profileId) {
         
         if (response.ok && result.status === 'success') {
             showMessage('Profile deleted successfully!', 'success');
-            fetchProfiles(document.getElementById('searchProfiles').value);
+            fetchProfiles(getElement('searchProfiles').value);
         } else {
             showMessage(result.error || 'Failed to delete profile', 'error');
         }
@@ -370,31 +340,11 @@ async function deleteProfile(profileId) {
 
 function refreshData() {
     loadActiveSession();
-    fetchProfiles(document.getElementById('searchProfiles').value);
+    fetchProfiles(getElement('searchProfiles').value);
     showMessage('Data refreshed', 'success');
 }
 
-function showMessage(message, type = 'info') {
-    // Remove existing messages
-    const existingMessages = document.querySelectorAll('.error-message, .success-message');
-    existingMessages.forEach(msg => msg.remove());
-    
-    // Create new message
-    const messageDiv = document.createElement('div');
-    messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
-    messageDiv.textContent = message;
-    
-    // Insert at the top of content
-    const content = document.querySelector('.content');
-    content.insertBefore(messageDiv, content.firstChild);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        if (messageDiv.parentNode) {
-            messageDiv.remove();
-        }
-    }, 5000);
-}
+// Remove duplicate showMessage function - now using common.js version
 
 // Global functions for button handlers
 window.openEditProfileModal = openEditProfileModal;

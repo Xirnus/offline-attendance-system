@@ -8,30 +8,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Set up all event listeners
 function setupEventListeners() {
-  // Quick Export buttons
-  document.getElementById('export-pdf').addEventListener('click', exportPDF);
-  document.getElementById('export-excel').addEventListener('click', exportExcel);
-  document.getElementById('export-csv').addEventListener('click', exportCSV);
-  
-  // Email reports
-  document.getElementById('send-email-report').addEventListener('click', sendEmailReport);
-  
-  // Analytics
-  document.getElementById('view-analytics').addEventListener('click', viewAnalytics);
-  document.getElementById('refresh-analytics').addEventListener('click', refreshAnalytics);
-  
-  // Scheduled reports
-  document.getElementById('setup-schedule').addEventListener('click', setupScheduledReports);
-  document.getElementById('view-schedules').addEventListener('click', viewActiveSchedules);
-  
-  // Advanced options
-  document.getElementById('export-custom').addEventListener('click', exportCustomData);
-  document.getElementById('export-json').addEventListener('click', exportJSON);
-  
-  // Data management
-  document.getElementById('backup-data').addEventListener('click', backupAllData);
-  document.getElementById('clear-old-data').addEventListener('click', clearOldData);
-  document.getElementById('verify-data').addEventListener('click', verifyDataIntegrity);
+  const eventHandlers = {
+    'export-pdf': exportPDF,
+    'export-excel': exportExcel,
+    'export-csv': exportCSV,
+    'send-email-report': sendEmailReport,
+    'view-analytics': viewAnalytics,
+    'refresh-analytics': refreshAnalytics,
+    'setup-schedule': setupScheduledReports,
+    'view-schedules': viewActiveSchedules,
+    'export-custom': exportCustomData,
+    'export-json': exportJSON,
+    'backup-data': backupAllData,
+    'clear-old-data': clearOldData,
+    'verify-data': verifyDataIntegrity
+  };
+
+  // Use common utility to set up event listeners
+  addEventListeners(eventHandlers);
 }
 
 // Load initial data for the page
@@ -41,16 +35,19 @@ function loadInitialData() {
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - 30);
   
-  document.getElementById('date-range-end').value = endDate.toISOString().split('T')[0];
-  document.getElementById('date-range-start').value = startDate.toISOString().split('T')[0];
+  const endInput = getElement('date-range-end');
+  const startInput = getElement('date-range-start');
+  
+  if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+  if (startInput) startInput.value = startDate.toISOString().split('T')[0];
 }
 
 // Export Functions
 async function exportPDF() {
   try {
     showNotification('Generating PDF report...', 'info');
-    const reportType = document.getElementById('report-type').value;
-    const response = await fetch(`/api/export/pdf?type=${reportType}`);
+    const reportType = getElement('report-type')?.value || 'basic';
+    const response = await fetchWithLoading(`/api/export/pdf?type=${reportType}`);
     
     if (response.ok) {
       const blob = await response.blob();
@@ -68,7 +65,7 @@ async function exportPDF() {
 async function exportExcel() {
   try {
     showNotification('Generating Excel report...', 'info');
-    const response = await fetch('/api/export/excel');
+    const response = await fetchWithLoading('/api/export/excel');
     
     if (response.ok) {
       const blob = await response.blob();
@@ -86,7 +83,7 @@ async function exportExcel() {
 async function exportCSV() {
   try {
     showNotification('Generating CSV export...', 'info');
-    const response = await fetch('/api/export/csv?type=all');
+    const response = await fetchWithLoading('/api/export/csv?type=all');
     
     if (response.ok) {
       const result = await response.json();
@@ -109,9 +106,9 @@ async function exportCSV() {
 
 async function exportCustomData() {
   try {
-    const startDate = document.getElementById('date-range-start').value;
-    const endDate = document.getElementById('date-range-end').value;
-    const format = document.getElementById('export-format').value;
+    const startDate = getElement('date-range-start')?.value;
+    const endDate = getElement('date-range-end')?.value;
+    const format = getElement('export-format')?.value || 'csv';
     
     if (!startDate || !endDate) {
       showNotification('Please select both start and end dates', 'warning');
@@ -126,7 +123,7 @@ async function exportCustomData() {
       end_date: endDate
     });
     
-    const response = await fetch(`/api/export/custom?${params}`);
+    const response = await fetchWithLoading(`/api/export/custom?${params}`);
     
     if (response.ok) {
       const blob = await response.blob();
@@ -145,7 +142,7 @@ async function exportCustomData() {
 async function exportJSON() {
   try {
     showNotification('Generating JSON export...', 'info');
-    const response = await fetch('/api/export_data');
+    const response = await fetchWithLoading('/api/export_data');
     
     if (response.ok) {
       const data = await response.json();
@@ -164,8 +161,8 @@ async function exportJSON() {
 // Email Reports
 async function sendEmailReport() {
   try {
-    const recipientEmail = document.getElementById('recipient-email').value;
-    const reportType = document.getElementById('email-report-type').value;
+    const recipientEmail = getElement('recipient-email')?.value;
+    const reportType = getElement('email-report-type')?.value || 'basic';
     
     if (!recipientEmail) {
       showNotification('Please enter recipient email address', 'warning');
@@ -179,22 +176,15 @@ async function sendEmailReport() {
     
     showNotification('Sending email report...', 'info');
     
-    const response = await fetch('/api/reports/email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        recipient_email: recipientEmail,
-        report_type: reportType
-      })
+    const result = await postJSON('/api/reports/email', {
+      recipient_email: recipientEmail,
+      report_type: reportType
     });
     
-    const result = await response.json();
-    
-    if (response.ok) {
+    if (result.status === 'success') {
       showNotification('Email report sent successfully', 'success');
-      document.getElementById('recipient-email').value = '';
+      const emailInput = getElement('recipient-email');
+      if (emailInput) emailInput.value = '';
     } else {
       throw new Error(result.error || 'Failed to send email report');
     }
@@ -210,12 +200,13 @@ async function viewAnalytics() {
     showLoading('analytics-loading', true);
     showNotification('Loading analytics...', 'info');
     
-    const response = await fetch('/api/reports/analytics');
+    const response = await fetchWithLoading('/api/reports/analytics');
     
     if (response.ok) {
       const analytics = await response.json();
       displayAnalytics(analytics);
-      document.getElementById('analytics-preview').classList.remove('hidden');
+      const previewElement = getElement('analytics-preview');
+      if (previewElement) previewElement.classList.remove('hidden');
       showNotification('Analytics loaded successfully', 'success');
     } else {
       throw new Error('Failed to load analytics');
@@ -229,8 +220,8 @@ async function viewAnalytics() {
 }
 
 async function refreshAnalytics() {
-  const analyticsPreview = document.getElementById('analytics-preview');
-  if (!analyticsPreview.classList.contains('hidden')) {
+  const analyticsPreview = getElement('analytics-preview');
+  if (analyticsPreview && !analyticsPreview.classList.contains('hidden')) {
     await viewAnalytics();
   } else {
     showNotification('Click "View Analytics" first to load data', 'info');
@@ -238,7 +229,8 @@ async function refreshAnalytics() {
 }
 
 function displayAnalytics(analytics) {
-  const content = document.getElementById('analytics-content');
+  const content = getElement('analytics-content');
+  if (!content) return;
   
   let html = '<h3>📊 Attendance Overview</h3>';
   html += '<div class="analytics-stats">';
@@ -274,7 +266,7 @@ function displayAnalytics(analytics) {
     for (const [course, data] of Object.entries(analytics.course_breakdown)) {
       html += `
         <div class="analytics-stat">
-          <h4>${course}</h4>
+          <h4>${escapeHtml(course)}</h4>
           <div class="value">${data.students}</div>
           <small>${data.checkins} check-ins</small>
         </div>
@@ -298,8 +290,8 @@ function displayAnalytics(analytics) {
       const rateColor = data.rate >= 90 ? '#28a745' : data.rate >= 75 ? '#ffc107' : '#dc3545';
       html += `
         <tr>
-          <td>${data.name}</td>
-          <td style="color: ${rateColor}; font-weight: bold;">${data.rate}%</td>
+          <td>${escapeHtml(studentId)}</td>
+          <td style="color: ${rateColor}; font-weight: bold;">${data.rate.toFixed(1)}%</td>
           <td>${data.present}</td>
           <td>${data.absent}</td>
         </tr>
@@ -500,39 +492,5 @@ function downloadFile(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
-function getDateString() {
-  return new Date().toISOString().split('T')[0];
-}
-
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-function showNotification(message, type = 'info') {
-  // Remove existing notifications
-  const existingNotification = document.querySelector('.notification');
-  if (existingNotification) {
-    existingNotification.remove();
-  }
-  
-  const notification = document.createElement('div');
-  notification.className = `notification ${type}`;
-  notification.textContent = message;
-  
-  document.body.appendChild(notification);
-  
-  // Auto-remove after 5 seconds
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.remove();
-    }
-  }, 5000);
-}
-
-function showLoading(elementId, show) {
-  const element = document.getElementById(elementId);
-  if (element) {
-    element.style.display = show ? 'block' : 'none';
-  }
-}
+// Remove duplicate utility functions - now using common.js versions
+// isValidEmail, getDateString, showNotification, showLoading, and downloadFile are all in common.js
