@@ -188,7 +188,7 @@ async function showSessionCreationModal() {
   // Fetch class list for the dropdown
   if (classList.length === 0) {
     try {
-      const res = await fetch('/api/classes');
+      const res = await fetch('/api/optimized/classes');
       const data = await res.json();
       classList = data.classes || [];
     } catch (e) {
@@ -291,7 +291,7 @@ async function showSessionCreationModal() {
             ">
               <option value="">Choose a class...</option>
               ${classList.map(cls => `
-                <option value="${cls.table_name}">${escapeHtml(cls.display_name)}</option>
+                <option value="${cls.class_id}">${escapeHtml(`${cls.class_name} - ${cls.professor_name}`)}</option>
               `).join('')}
             </select>
           </div>
@@ -390,7 +390,7 @@ async function executeCreateSession() {
   const manualForm = document.getElementById('manualSessionForm');
   const profileForm = document.getElementById('profileSessionForm');
   const classForm = document.getElementById('classSessionForm');
-  let sessionName, endTime, profileId = null, classTable = null;
+  let sessionName, endTime, profileId = null, classId = null;
 
   if (manualForm.style.display !== 'none') {
     // Manual session
@@ -417,15 +417,15 @@ async function executeCreateSession() {
   } else if (classForm.style.display !== 'none') {
     // Class session
     const classSelect = document.getElementById('classSelect');
-    classTable = classSelect.value;
+    classId = classSelect.value;
     endTime = document.getElementById('classEndTime').value;
-    if (!classTable || !endTime) {
+    if (!classId || !endTime) {
       await customAlert('Please select a class and set end time', 'Missing Information');
       return;
     }
     // Find display name for session name
-    const cls = classList.find(c => c.table_name === classTable);
-    sessionName = cls ? cls.display_name : classTable;
+    const cls = classList.find(c => c.class_id == classId);
+    sessionName = cls ? `${cls.class_name} - ${cls.professor_name}` : classId;
   }
 
   // Create end time
@@ -440,11 +440,11 @@ async function executeCreateSession() {
 
   closeCreateSessionModal();
 
-  // Add class_table to request if class session
-  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId, classTable);
+  // Add class_id to request if class session
+  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId, classId);
 }
 
-function createSession(sessionName, startTime, endTime, profileId = null, classTable = null) {
+function createSession(sessionName, startTime, endTime, profileId = null, classId = null) {
   const createBtn = document.getElementById('create-session-btn');
   const originalText = createBtn ? createBtn.textContent : '';
   if (createBtn) {
@@ -459,7 +459,7 @@ function createSession(sessionName, startTime, endTime, profileId = null, classT
   };
 
   if (profileId) requestBody.profile_id = parseInt(profileId);
-  if (classTable) requestBody.class_table = classTable;
+  if (classId) requestBody.class_table = classId;
 
   fetch('/api/create_session', {
     method: 'POST',
@@ -474,9 +474,9 @@ function createSession(sessionName, startTime, endTime, profileId = null, classT
         const profile = sessionProfiles.find(p => p.id == profileId);
         if (profile) message += ` using ${profile.profile_name} profile`;
       }
-      if (classTable) {
-        const cls = classList.find(c => c.table_name === classTable);
-        if (cls) message += ` for class ${cls.display_name}`;
+      if (classId) {
+        const cls = classList.find(c => c.class_id == classId);
+        if (cls) message += ` for class ${cls.class_name} - ${cls.professor_name}`;
       }
       showNotification(message, 'success');
 
@@ -485,7 +485,7 @@ function createSession(sessionName, startTime, endTime, profileId = null, classT
         start_time: startTime,
         end_time: endTime,
         profile_id: profileId,
-        class_table: classTable
+        class_table: classId
       };
       updateButtonVisibility(true, sessionName);
       displaySessionDetails(sessionData);

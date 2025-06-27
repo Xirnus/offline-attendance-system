@@ -547,7 +547,7 @@ function setupFormHandler() {
         const studentId = getElement('student_id')?.value.trim();
         
         if (!studentId) {
-            showMessage('Please enter your Student ID', 'danger');
+            showEnhancedErrorMessage('missing_student_id');
             return;
         }
         
@@ -604,18 +604,398 @@ function setupFormHandler() {
             
             if (result.status === 'success') {
                 markCheckedIn(); // Mark as checked in locally
-                showMessage(result.message, 'success');
+                showSuccessMessage(result.message);
                 const form = getElement('attendanceForm');
                 if (form) form.style.display = 'none';
             } else {
-                showMessage(result.message || 'Check-in failed', 'danger');
+                // Enhanced error handling with specific error codes
+                handleCheckInError(result);
                 setButtonLoading('submitBtn', false, 'Check In');
             }
             
         } catch (error) {
             console.error('Error:', error);
-            showMessage('Network error. Please try again.', 'danger');
+            if (error.response) {
+                // Handle HTTP errors with enhanced messages
+                handleHttpError(error.response.status, error.response);
+            } else {
+                showEnhancedErrorMessage('network_error');
+            }
             setButtonLoading('submitBtn', false, 'Check In');
         }
     });
+}
+
+/**
+ * Enhanced error message handler for check-in process
+ */
+function handleCheckInError(result) {
+    const message = result.message || 'Check-in failed';
+    
+    // Determine error type based on message content
+    if (message.includes('not enrolled in this session')) {
+        showEnhancedErrorMessage('not_enrolled_session', message);
+    } else if (message.includes('not enrolled in this class')) {
+        showEnhancedErrorMessage('not_enrolled_class', message);
+    } else if (message.includes('Student ID not found')) {
+        showEnhancedErrorMessage('student_not_found', message);
+    } else if (message.includes('Invalid or expired token')) {
+        showEnhancedErrorMessage('invalid_token', message);
+    } else if (message.includes('Token already used')) {
+        showEnhancedErrorMessage('token_used', message);
+    } else if (message.includes('already checked in')) {
+        showEnhancedErrorMessage('already_checked_in', message);
+    } else if (message.includes('device has already been used')) {
+        showEnhancedErrorMessage('device_already_used', message);
+    } else if (message.includes('No active attendance session')) {
+        showEnhancedErrorMessage('no_active_session', message);
+    } else if (message.includes('fingerprint') || message.includes('device blocked')) {
+        showEnhancedErrorMessage('device_blocked', message);
+    } else {
+        showEnhancedErrorMessage('generic_error', message);
+    }
+}
+
+/**
+ * Handle HTTP errors with enhanced messages
+ */
+function handleHttpError(status, response) {
+    switch (status) {
+        case 400:
+            showEnhancedErrorMessage('bad_request');
+            break;
+        case 401:
+            showEnhancedErrorMessage('unauthorized');
+            break;
+        case 403:
+            showEnhancedErrorMessage('forbidden');
+            break;
+        case 404:
+            showEnhancedErrorMessage('not_found');
+            break;
+        case 409:
+            showEnhancedErrorMessage('conflict');
+            break;
+        case 500:
+            showEnhancedErrorMessage('server_error');
+            break;
+        default:
+            showEnhancedErrorMessage('network_error');
+    }
+}
+
+/**
+ * Show enhanced error messages with icons and helpful information
+ */
+function showEnhancedErrorMessage(errorType, customMessage = null) {
+    const errorMessages = {
+        missing_student_id: {
+            icon: '⚠️',
+            title: 'Student ID Required',
+            message: 'Please enter your Student ID to check in.',
+            type: 'warning'
+        },
+        not_enrolled_session: {
+            icon: '🚫',
+            title: 'Not Enrolled in Session',
+            message: customMessage || 'You are not enrolled in this attendance session. Please contact your instructor to be added to the session.',
+            type: 'error',
+            suggestions: [
+                'Double-check your Student ID',
+                'Contact your instructor to verify enrollment',
+                'Make sure you\'re in the correct class session'
+            ]
+        },
+        not_enrolled_class: {
+            icon: '📚',
+            title: 'Not Enrolled in Class',
+            message: customMessage || 'You are not enrolled in this class. Please contact your instructor or academic advisor.',
+            type: 'error',
+            suggestions: [
+                'Verify you\'re attending the correct class',
+                'Check your class schedule',
+                'Contact your instructor for enrollment assistance'
+            ]
+        },
+        student_not_found: {
+            icon: '❓',
+            title: 'Student ID Not Found',
+            message: customMessage || 'Your Student ID was not found in the system database.',
+            type: 'error',
+            suggestions: [
+                'Double-check your Student ID for typos',
+                'Make sure you\'ve been properly registered',
+                'Contact the registrar\'s office if the problem persists'
+            ]
+        },
+        invalid_token: {
+            icon: '🔐',
+            title: 'Invalid QR Code',
+            message: customMessage || 'The QR code is invalid or has expired. Please scan a new QR code.',
+            type: 'error',
+            suggestions: [
+                'Ask your instructor to generate a new QR code',
+                'Make sure you\'re scanning the most recent QR code',
+                'Check if the session is still active'
+            ]
+        },
+        token_used: {
+            icon: '♻️',
+            title: 'QR Code Already Used',
+            message: customMessage || 'This QR code has already been used. Please scan a new QR code.',
+            type: 'error',
+            suggestions: [
+                'Ask your instructor for a new QR code',
+                'Wait for the system to generate a new code automatically'
+            ]
+        },
+        already_checked_in: {
+            icon: '✅',
+            title: 'Already Checked In',
+            message: customMessage || 'You have already checked in for this session.',
+            type: 'info',
+            suggestions: [
+                'Your attendance has been recorded',
+                'No further action is needed'
+            ]
+        },
+        device_already_used: {
+            icon: '📱',
+            title: 'Device Already Used',
+            message: customMessage || 'This device has already been used to check in for this session.',
+            type: 'error',
+            suggestions: [
+                'Use a different device if available',
+                'Contact your instructor if you believe this is an error',
+                'Make sure you haven\'t already checked in'
+            ]
+        },
+        no_active_session: {
+            icon: '⏰',
+            title: 'No Active Session',
+            message: customMessage || 'There is no active attendance session at the moment.',
+            type: 'warning',
+            suggestions: [
+                'Wait for your instructor to start the session',
+                'Verify you\'re in the correct class',
+                'Check if the session has ended'
+            ]
+        },
+        device_blocked: {
+            icon: '🔒',
+            title: 'Device Blocked',
+            message: customMessage || 'Your device has been temporarily blocked due to security restrictions.',
+            type: 'error',
+            suggestions: [
+                'Contact your instructor for assistance',
+                'Try using a different device',
+                'Wait for the restriction to be lifted automatically'
+            ]
+        },
+        network_error: {
+            icon: '🌐',
+            title: 'Network Error',
+            message: 'Unable to connect to the server. Please check your internet connection and try again.',
+            type: 'error',
+            suggestions: [
+                'Check your internet connection',
+                'Try refreshing the page',
+                'Contact technical support if the problem persists'
+            ]
+        },
+        server_error: {
+            icon: '⚙️',
+            title: 'Server Error',
+            message: 'The server encountered an error. Please try again later.',
+            type: 'error',
+            suggestions: [
+                'Wait a moment and try again',
+                'Contact your instructor if the problem persists'
+            ]
+        },
+        generic_error: {
+            icon: '❌',
+            title: 'Check-in Failed',
+            message: customMessage || 'An unexpected error occurred during check-in.',
+            type: 'error',
+            suggestions: [
+                'Try again in a few moments',
+                'Contact your instructor for assistance'
+            ]
+        }
+    };
+    
+    const error = errorMessages[errorType] || errorMessages.generic_error;
+    displayEnhancedMessage(error);
+}
+
+/**
+ * Show success message with enhanced styling
+ */
+function showSuccessMessage(message) {
+    const successData = {
+        icon: '🎉',
+        title: 'Check-in Successful!',
+        message: message,
+        type: 'success',
+        suggestions: [
+            'Your attendance has been recorded',
+            'You may now close this page'
+        ]
+    };
+    displayEnhancedMessage(successData);
+}
+
+/**
+ * Display enhanced message with styling and suggestions
+ */
+function displayEnhancedMessage(messageData) {
+    // Remove any existing enhanced messages
+    const existingMessages = document.querySelectorAll('.enhanced-message');
+    existingMessages.forEach(msg => msg.remove());
+    
+    const messageContainer = document.createElement('div');
+    messageContainer.className = `enhanced-message enhanced-message-${messageData.type}`;
+    
+    let suggestionsHtml = '';
+    if (messageData.suggestions && messageData.suggestions.length > 0) {
+        suggestionsHtml = `
+            <div class="suggestions">
+                <strong>Suggestions:</strong>
+                <ul>
+                    ${messageData.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    messageContainer.innerHTML = `
+        <div class="message-header">
+            <span class="message-icon">${messageData.icon}</span>
+            <span class="message-title">${messageData.title}</span>
+        </div>
+        <div class="message-content">
+            <p>${messageData.message}</p>
+            ${suggestionsHtml}
+        </div>
+        <button class="close-message" onclick="this.parentElement.remove()">×</button>
+    `;
+    
+    // Add enhanced styling
+    messageContainer.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 500px;
+        width: 90%;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        animation: slideInDown 0.3s ease-out;
+    `;
+    
+    // Set colors based on message type
+    const colors = {
+        success: { bg: '#d4edda', border: '#c3e6cb', text: '#155724' },
+        error: { bg: '#f8d7da', border: '#f5c6cb', text: '#721c24' },
+        warning: { bg: '#fff3cd', border: '#ffeaa7', text: '#856404' },
+        info: { bg: '#d1ecf1', border: '#bee5eb', text: '#0c5460' }
+    };
+    
+    const color = colors[messageData.type] || colors.error;
+    messageContainer.style.backgroundColor = color.bg;
+    messageContainer.style.border = `2px solid ${color.border}`;
+    messageContainer.style.color = color.text;
+    
+    // Style the header
+    const header = messageContainer.querySelector('.message-header');
+    if (header) {
+        header.style.cssText = `
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 18px;
+        `;
+    }
+    
+    // Style the icon
+    const icon = messageContainer.querySelector('.message-icon');
+    if (icon) {
+        icon.style.cssText = `
+            font-size: 24px;
+            margin-right: 10px;
+        `;
+    }
+    
+    // Style the close button
+    const closeBtn = messageContainer.querySelector('.close-message');
+    if (closeBtn) {
+        closeBtn.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: ${color.text};
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        `;
+        closeBtn.addEventListener('mouseenter', () => closeBtn.style.opacity = '1');
+        closeBtn.addEventListener('mouseleave', () => closeBtn.style.opacity = '0.7');
+    }
+    
+    // Style suggestions
+    const suggestions = messageContainer.querySelector('.suggestions');
+    if (suggestions) {
+        suggestions.style.cssText = `
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 6px;
+            font-size: 14px;
+        `;
+        
+        const ul = suggestions.querySelector('ul');
+        if (ul) {
+            ul.style.cssText = `
+                margin: 5px 0 0 0;
+                padding-left: 20px;
+            `;
+        }
+        
+        const lis = suggestions.querySelectorAll('li');
+        lis.forEach(li => {
+            li.style.cssText = `
+                margin: 3px 0;
+                line-height: 1.4;
+            `;
+        });
+    }
+    
+    // Add animation styles
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInDown {
+            from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(messageContainer);
+    
+    // Auto-remove success messages after 5 seconds
+    if (messageData.type === 'success') {
+        setTimeout(() => {
+            if (messageContainer.parentElement) {
+                messageContainer.remove();
+            }
+        }, 5000);
+    }
 }
