@@ -420,7 +420,7 @@ def update_student_attendance(student_id, status):
 @retry_db_operation()
 def mark_students_absent(session_id=None, cursor=None):
     """Mark students as absent if they didn't check in during active session.
-    Uses the new normalized schema with class_attendees table."""
+    Uses the new normalized schema with class_attendees table and session enrollments."""
     conn = None
     try:
         if cursor is None:
@@ -428,21 +428,51 @@ def mark_students_absent(session_id=None, cursor=None):
             cursor = conn.cursor()
         
         if session_id is None:
-            cursor.execute('SELECT id, class_table FROM attendance_sessions WHERE is_active = 1')
+            cursor.execute('SELECT id, class_table, profile_id FROM attendance_sessions WHERE is_active = 1')
             session = cursor.fetchone()
             if not session:
                 if conn:
                     conn.close()
                 return 0
-            session_id, course_name = session
+            session_id, course_name, profile_id = session
         else:
-            cursor.execute('SELECT class_table FROM attendance_sessions WHERE id = ?', (session_id,))
-            course_row = cursor.fetchone()
-            course_name = course_row[0] if course_row else None
+            cursor.execute('SELECT class_table, profile_id FROM attendance_sessions WHERE id = ?', (session_id,))
+            session_row = cursor.fetchone()
+            if session_row:
+                course_name, profile_id = session_row
+            else:
+                course_name, profile_id = None, None
 
         absent_count = 0
 
-        if course_name:  # Course-specific session: only mark students from that course
+        # Check if session was created from a profile
+        if profile_id:
+            print(f"Session created from profile {profile_id}, only marking enrolled students as absent")
+            
+            # Get students enrolled in the session profile
+            cursor.execute('''
+                SELECT se.student_id 
+                FROM session_enrollments se 
+                JOIN students s ON se.student_id = s.student_id 
+                WHERE se.profile_id = ?
+            ''', (profile_id,))
+            enrolled_student_ids = [row[0] for row in cursor.fetchall()]
+            
+            print(f"Found {len(enrolled_student_ids)} students enrolled in profile {profile_id}")
+            
+            # Get students who already checked in for this session
+            cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
+            checked_in_students = {row[0] for row in cursor.fetchall()}
+            
+            print(f"Found {len(checked_in_students)} students already checked in for session {session_id}")
+            
+            # Mark absent only enrolled students who didn't check in
+            for student_id in enrolled_student_ids:
+                if student_id not in checked_in_students:
+                    update_student_attendance(student_id, 'absent')
+                    absent_count += 1
+                    
+        elif course_name:  # Course-specific session: only mark students from that course
             # Get all students enrolled in this course from the main students table
             cursor.execute('SELECT student_id FROM students WHERE course = ?', (course_name,))
             course_student_ids = [row[0] for row in cursor.fetchall()]
@@ -697,150 +727,243 @@ def update_session_profile(profile_id, data):
         return False
 
 def delete_session_profile(profile_id):
-    """Delete session profile"""
+    """Delete session profile and all associated enrollments"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Delete associated enrollments first (handled by CASCADE)
         cursor.execute('DELETE FROM session_profiles WHERE id = ?', (profile_id,))
+        
         conn.commit()
         affected_rows = cursor.rowcount
         conn.close()
         return affected_rows > 0
     except Exception as e:
+        print(f"Error deleting session profile: {e}")
         return False
 
-def is_device_already_used_in_session(fingerprint_hash, session_id):
-    """Check if a device fingerprint has already been used to check in for a specific session"""
+def enroll_student_in_profile(profile_id, student_id):
+    """Enroll a student in a session profile"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Check if student exists
+        cursor.execute('SELECT 1 FROM students WHERE student_id = ?', (student_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Student not found'}
+        
+        # Check if profile exists
+        cursor.execute('SELECT 1 FROM session_profiles WHERE id = ?', (profile_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Session profile not found'}
+        
+        # Check if already enrolled
+        cursor.execute('SELECT 1 FROM session_enrollments WHERE profile_id = ? AND student_id = ?', 
+                      (profile_id, student_id))
+        if cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Student already enrolled in this session'}
+        
+        # Enroll student
         cursor.execute('''
-            SELECT COUNT(*) as count 
-            FROM class_attendees ca
+            INSERT INTO session_enrollments (profile_id, student_id, enrolled_at)
+            VALUES (?, ?, datetime('now'))
+        ''', (profile_id, student_id))
+        
+        conn.commit()
+        conn.close()
+        return {'success': True, 'message': 'Student enrolled successfully'}
+        
+    except Exception as e:
+        print(f"Error enrolling student: {e}")
+        return {'success': False, 'error': str(e)}
+
+def unenroll_student_from_profile(profile_id, student_id):
+    """Remove a student from a session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM session_enrollments WHERE profile_id = ? AND student_id = ?', 
+                      (profile_id, student_id))
+        
+        conn.commit()
+        affected_rows = cursor.rowcount
+        conn.close()
+        
+        if affected_rows > 0:
+            return {'success': True, 'message': 'Student unenrolled successfully'}
+        else:
+            return {'success': False, 'error': 'Student not found in this session'}
+            
+    except Exception as e:
+        print(f"Error unenrolling student: {e}")
+        return {'success': False, 'error': str(e)}
+
+def get_enrolled_students(profile_id):
+    """Get all students enrolled in a session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT s.student_id, s.name, s.course, s.year, se.enrolled_at
+            FROM session_enrollments se
+            JOIN students s ON se.student_id = s.student_id
+            WHERE se.profile_id = ?
+            ORDER BY s.name
+        ''', (profile_id,))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in results]
+        
+    except Exception as e:
+        print(f"Error getting enrolled students: {e}")
+        return []
+
+def get_available_students_for_enrollment(profile_id):
+    """Get students who are not yet enrolled in the session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT s.student_id, s.name, s.course, s.year
+            FROM students s
+            WHERE s.student_id NOT IN (
+                SELECT se.student_id 
+                FROM session_enrollments se 
+                WHERE se.profile_id = ?
+            )
+            ORDER BY s.name
+        ''', (profile_id,))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in results]
+        
+    except Exception as e:
+        print(f"Error getting available students: {e}")
+        return []
+
+def check_student_enrollment(profile_id, student_id):
+    """Check if a student is enrolled in a session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT 1 FROM session_enrollments WHERE profile_id = ? AND student_id = ?', 
+                      (profile_id, student_id))
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result is not None
+        
+    except Exception as e:
+        print(f"Error checking student enrollment: {e}")
+        return False
+
+def bulk_enroll_students(profile_id, student_ids):
+    """Enroll multiple students in a session profile"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        enrolled_count = 0
+        errors = []
+        
+        for student_id in student_ids:
+            try:
+                # Check if student exists and is not already enrolled
+                cursor.execute('SELECT 1 FROM students WHERE student_id = ?', (student_id,))
+                if not cursor.fetchone():
+                    errors.append(f"Student {student_id} not found")
+                    continue
+                
+                cursor.execute('SELECT 1 FROM session_enrollments WHERE profile_id = ? AND student_id = ?', 
+                              (profile_id, student_id))
+                if cursor.fetchone():
+                    errors.append(f"Student {student_id} already enrolled")
+                    continue
+                
+                # Enroll student
+                cursor.execute('''
+                    INSERT INTO session_enrollments (profile_id, student_id, enrolled_at)
+                    VALUES (?, ?, datetime('now'))
+                ''', (profile_id, student_id))
+                enrolled_count += 1
+                
+            except Exception as e:
+                errors.append(f"Error enrolling {student_id}: {str(e)}")
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            'success': True, 
+            'enrolled_count': enrolled_count, 
+            'errors': errors,
+            'message': f'Successfully enrolled {enrolled_count} students'
+        }
+        
+    except Exception as e:
+        print(f"Error in bulk enrollment: {e}")
+        return {'success': False, 'error': str(e)}
+
+def is_device_already_used_in_session(fingerprint_hash, session_id):
+    """Check if a device has already been used to check in for a specific session"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 1 FROM class_attendees ca
             JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
             WHERE df.fingerprint_hash = ? AND ca.session_id = ?
         ''', (fingerprint_hash, session_id))
+        
         result = cursor.fetchone()
         conn.close()
-        return result['count'] > 0 if result else False
+        return result is not None
+        
     except Exception as e:
-        print(f"Error checking device usage in session: {e}")
+        print(f"Error checking device usage: {e}")
         return False
 
-def is_student_in_class(student_id, course_name):
-    """Check if a student is enrolled in a specific course.
-    For normalized schema, this checks the main students table by course.
-    Falls back to checking classes.db for legacy class tables.
-    """
-    try:
-        # First check in main students table by course
-        if course_name:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM students WHERE student_id = ? AND course = ?', (student_id, course_name))
-            result = cursor.fetchone()
-            conn.close()
-            if result and result[0] > 0:
-                return True
-        
-        # Fallback: check in classes.db (legacy behavior)
-        # Convert course name to table name format
-        class_table = course_name.replace(' ', '_').replace('-', '_') if course_name else None
-        
-        if class_table:
-            import sqlite3
-            conn = sqlite3.connect('classes.db')
-            cursor = conn.cursor()
-            
-            # Check if the table exists
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (class_table,))
-            if cursor.fetchone():
-                # Check if student exists in the class table
-                cursor.execute(f'SELECT COUNT(*) as count FROM "{class_table}" WHERE student_id = ?', (student_id,))
-                result = cursor.fetchone()
-                conn.close()
-                return result[0] > 0 if result else False
-            conn.close()
-        
-        return False
-    except Exception as e:
-        print(f"Error checking student in class: {e}")
-        return False
-
-def is_student_already_checked_in_session(student_id, session_id):
-    """Check if a student has already checked in for a specific session (with any device)"""
+def is_student_in_class(student_id, course):
+    """Check if a student is enrolled in a specific course"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT COUNT(*) as count 
-            FROM class_attendees 
-            WHERE student_id = ? AND session_id = ?
-        ''', (student_id, session_id))
+        
+        cursor.execute('SELECT 1 FROM students WHERE student_id = ? AND course = ?', (student_id, course))
         result = cursor.fetchone()
         conn.close()
-        return result['count'] > 0 if result else False
+        return result is not None
+        
     except Exception as e:
-        print(f"Error checking student session attendance: {e}")
+        print(f"Error checking student class enrollment: {e}")
         return False
 
-def get_enriched_attendances(limit=100):
-    """Get attendance data with all related information for the frontend"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Join all related tables to get complete information
-    cursor.execute('''
-        SELECT 
-            ca.id,
-            ca.student_id,
-            ca.session_id,
-            ca.checked_in_at,
-            s.name,
-            s.course,
-            s.year,
-            t.token,
-            df.fingerprint_hash,
-            df.device_info,
-            CASE 
-                WHEN ca.checked_in_at LIKE '%-%-%T%:%:%.%Z' THEN 
-                    strftime('%s', ca.checked_in_at)
-                WHEN ca.checked_in_at LIKE '%-%-%T%:%:%' THEN 
-                    strftime('%s', ca.checked_in_at || 'Z')
-                WHEN ca.checked_in_at LIKE '%-%- %:%:%' THEN 
-                    strftime('%s', ca.checked_in_at)
-                ELSE 
-                    ca.checked_in_at
-            END as timestamp
-        FROM class_attendees ca
-        LEFT JOIN students s ON ca.student_id = s.student_id
-        LEFT JOIN tokens t ON ca.token_id = t.id
-        LEFT JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
-        ORDER BY ca.checked_in_at DESC
-        LIMIT ?
-    ''', (limit,))
-    
-    rows = cursor.fetchall()
-    conn.close()
-    
-    # Convert to list of dictionaries
-    result = []
-    for row in rows:
-        row_dict = dict(row)
-        # Ensure timestamp is numeric for frontend compatibility
-        try:
-            if row_dict['timestamp'] and row_dict['timestamp'] != row_dict['checked_in_at']:
-                row_dict['timestamp'] = float(row_dict['timestamp'])
-            else:
-                # Fallback: try to parse the timestamp manually
-                from datetime import datetime
-                dt = datetime.fromisoformat(row_dict['checked_in_at'].replace('Z', '+00:00'))
-                row_dict['timestamp'] = dt.timestamp()
-        except (ValueError, TypeError):
-            # If all else fails, use current time
-            import time
-            row_dict['timestamp'] = time.time()
+def is_student_already_checked_in_session(student_id, session_id):
+    """Check if a student has already checked in for a specific session"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
         
-        result.append(row_dict)
-    
-    return result
+        cursor.execute('SELECT 1 FROM class_attendees WHERE student_id = ? AND session_id = ?', 
+                      (student_id, session_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None
+        
+    except Exception as e:
+        print(f"Error checking student check-in: {e}")
+        return False

@@ -4,139 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sessions - ComSci Attendance System</title>
-    <link rel="stylesheet" href="/static/css/common.css">
-    <style>
-        /* Search Section */
-        .search-section {
-            margin-bottom: 30px;
-        }
-
-        .search-container {
-            position: relative;
-            max-width: 800px;
-            margin: 0 auto 30px auto;
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #666;
-            font-size: 16px;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 12px 15px 12px 45px;
-            border: 2px solid #28156E;
-            border-radius: 25px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.3s ease;
-        }
-
-        .search-input:focus {
-            border-color: #28156E;
-        }
-
-        /* No Profiles Message */
-        .no-profiles-message {
-            text-align: center;
-            margin-bottom: 40px;
-            color: #666;
-            font-size: 16px;
-        }
-
-        /* Create Profile Section */
-        .create-profile-section {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            border: 2px solid #28156E;
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        .create-profile-section h3 {
-            color: #333;
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 25px;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .form-group label {
-            font-size: 14px;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 8px;
-        }
-
-        .form-group input,
-        .form-group select {
-            padding: 12px 15px;
-            border: 2px solid #28156E;
-            border-radius: 8px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            border-color: #28156E;
-        }
-
-        .form-actions {
-            text-align: center;
-        }
-
-        .btn-create {
-            background: #ffc107;
-            color: #333;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .btn-create:hover {
-            background: #e0a800;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        /* Content Area */
-        .content {
-            padding: 30px;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-    </style>
-    <script src="/static/js/sessions.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sessions.css') }}">
 </head>
 <body>
     <div class="container">
         <!-- Sidebar -->
         <nav class="sidebar">
             <div class="logo">
-                <img src="/static/images/perps.png" alt="Logo" />
+                <img src="{{ url_for('static', filename='images/perps.png') }}" alt="Logo" />
                 <h3>ComSci Attendance System</h3>
             </div>
             <ul class="nav-menu">
@@ -165,7 +41,10 @@
         <main class="main-content">
             <!-- Header -->
             <header class="header">
-                <h1>Session Profiles</h1>
+                <div>
+                    <h1>Session Management</h1>
+                    <p>Manage attendance sessions and session profiles</p>
+                </div>
                 <div class="header-actions">
                     <button>🔔</button>
                     <button>⚙️</button>
@@ -175,53 +54,189 @@
 
             <!-- Content -->
             <div class="content">
-                <!-- Search Bar -->
-                <div class="search-section">
-                    <div class="search-container">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" id="searchProfiles" placeholder="Search session profiles..." class="search-input">
+                <!-- Active Session Status -->
+                <div id="activeSessionSection" class="active-session-section no-session">
+                    <div class="active-session-header">
+                        <h2 class="active-session-title">No Active Session</h2>
+                        <span class="session-status-badge">INACTIVE</span>
                     </div>
+                    <p>Start a new session or use a session profile to begin attendance tracking.</p>
                 </div>
 
-                <!-- No Profiles Message -->
-                <div class="no-profiles-message">
-                    <p>No session profiles created yet.</p>
-                </div>
-
-                <!-- Create Profile Form -->
-                <div class="create-profile-section">
-                    <h3>Create New Session Profile</h3>
-                    <form id="profileForm">
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="profileName">Profile Name</label>
-                                <input type="text" id="profileName" name="profile_name" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="professorName">Professor / Organizer / Speaker</label>
-                                <input type="text" id="professorName" name="organizer" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="buildingRoom">Building & Room No.</label>
-                                <input type="text" id="buildingRoom" name="building" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="roomType">Room Type</label>
-                                <input type="text" id="roomType" name="room_type" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="roomCapacity">Room Capacity</label>
-                                <input type="number" id="roomCapacity" name="capacity" required>
-                            </div>
+                <!-- Sessions Grid -->
+                <div class="sessions-grid">
+                    <!-- Session Profiles -->
+                    <div class="profiles-section">
+                        <div class="profiles-header">
+                            <h2 class="profiles-title">📋 Session Profiles</h2>
                         </div>
                         
-                        <div class="form-actions">
-                            <button type="submit" class="btn btn-create">Create Profile</button>
+                        <!-- Search Bar -->
+                        <div class="search-section">
+                            <div class="search-container">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="searchProfiles" placeholder="Search session profiles..." class="search-input">
+                            </div>
                         </div>
-                    </form>
+
+                        <!-- Profiles List -->
+                        <div id="profilesList" class="loading">
+                            Loading profiles...
+                        </div>
+                    </div>
+
+                    <!-- Create Profile Form -->
+                    <div class="create-profile-section">
+                        <h3>✨ Create New Session Profile</h3>
+                        <form id="profileForm">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="profileName">Profile Name *</label>
+                                    <input type="text" id="profileName" name="profile_name" required 
+                                           placeholder="e.g., CS101 Lecture">
+                                </div>
+                                <div class="form-group">
+                                    <label for="professorName">Professor / Organizer / Speaker *</label>
+                                    <input type="text" id="professorName" name="organizer" required
+                                           placeholder="e.g., Dr. John Smith">
+                                </div>
+                                <div class="form-group">
+                                    <label for="buildingRoom">Building & Room No. *</label>
+                                    <input type="text" id="buildingRoom" name="building" required
+                                           placeholder="e.g., Science Building Room 101">
+                                </div>
+                                <div class="form-group">
+                                    <label for="roomType">Room Type *</label>
+                                    <select id="roomType" name="room_type" required>
+                                        <option value="">Select room type</option>
+                                        <option value="Lecture Hall">Lecture Hall</option>
+                                        <option value="Laboratory">Laboratory</option>
+                                        <option value="Conference Room">Conference Room</option>
+                                        <option value="Classroom">Classroom</option>
+                                        <option value="Auditorium">Auditorium</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="roomCapacity">Room Capacity *</label>
+                                    <input type="number" id="roomCapacity" name="capacity" required min="1" max="1000"
+                                           placeholder="e.g., 50">
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-create">Create Profile</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </main>
     </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Session Profile</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="editProfileForm">
+                <input type="hidden" id="editProfileId" name="profile_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="editProfileName">Profile Name *</label>
+                        <input type="text" id="editProfileName" name="profile_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editProfessorName">Professor / Organizer *</label>
+                        <input type="text" id="editProfessorName" name="organizer" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editBuildingRoom">Building & Room *</label>
+                        <input type="text" id="editBuildingRoom" name="building" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRoomType">Room Type *</label>
+                        <select id="editRoomType" name="room_type" required>
+                            <option value="Lecture Hall">Lecture Hall</option>
+                            <option value="Laboratory">Laboratory</option>
+                            <option value="Conference Room">Conference Room</option>
+                            <option value="Classroom">Classroom</option>
+                            <option value="Auditorium">Auditorium</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRoomCapacity">Room Capacity *</label>
+                        <input type="number" id="editRoomCapacity" name="capacity" required min="1" max="1000">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-create">Update Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Manage Students Modal -->
+    <div id="manageStudentsModal" class="modal modal-large">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Manage Students - <span id="modalProfileName"></span></h3>
+                <span class="close">&times;</span>
+            </div>
+            
+            <div class="students-management">
+                <input type="hidden" id="manageProfileId">
+                
+                <!-- Enrolled Students Section -->
+                <div class="students-section">
+                    <div class="section-header">
+                        <h4>👥 Enrolled Students (<span id="enrolledCount">0</span>)</h4>
+                        <button type="button" class="btn btn-secondary" onclick="refreshEnrolledStudents()">🔄 Refresh</button>
+                    </div>
+                    
+                    <div class="search-container">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchEnrolledStudents" placeholder="Search enrolled students..." class="search-input">
+                    </div>
+                    
+                    <div id="enrolledStudentsList" class="students-list">
+                        <div class="loading">Loading enrolled students...</div>
+                    </div>
+                </div>
+                
+                <!-- Available Students Section -->
+                <div class="students-section">
+                    <div class="section-header">
+                        <h4>➕ Available Students (<span id="availableCount">0</span>)</h4>
+                        <div class="section-actions">
+                            <button type="button" class="btn btn-primary" onclick="enrollSelectedStudents()">📝 Enroll Selected</button>
+                            <button type="button" class="btn btn-secondary" onclick="refreshAvailableStudents()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    
+                    <div class="search-container">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchAvailableStudents" placeholder="Search available students..." class="search-input">
+                    </div>
+                    
+                    <div class="bulk-actions">
+                        <label>
+                            <input type="checkbox" id="selectAllAvailable" onchange="toggleSelectAllAvailable()">
+                            Select All Visible
+                        </label>
+                    </div>
+                    
+                    <div id="availableStudentsList" class="students-list">
+                        <div class="loading">Loading available students...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/sessions.js') }}"></script>
 </body>
 </html>

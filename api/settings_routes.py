@@ -19,7 +19,7 @@ Settings Management Features:
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_file
-from database.operations import get_settings, update_settings, get_all_data, get_enriched_attendances
+from database.operations import get_settings, update_settings, get_all_data
 from services.reports import reports_service
 
 settings_bp = Blueprint('settings', __name__)
@@ -27,7 +27,7 @@ settings_bp = Blueprint('settings', __name__)
 @settings_bp.route('/api/attendances')
 def api_attendances():
     try:
-        attendances = get_enriched_attendances()
+        attendances = get_all_data('class_attendees')
         for attendance in attendances:
             if 'fingerprint_hash' in attendance and attendance['fingerprint_hash']:
                 attendance['fingerprint_hash'] = attendance['fingerprint_hash'][:8] + '...'

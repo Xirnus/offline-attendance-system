@@ -179,6 +179,25 @@ def checkin():
         
         # Get session ID
         session_id = active_session.get('id')
+        profile_id = active_session.get('profile_id')
+        
+        # Check if student is enrolled in the session profile (if session was created from a profile)
+        if profile_id:
+            print(f"Checking enrollment for student {student_id} in profile {profile_id}")
+            from database.operations import check_student_enrollment
+            if not check_student_enrollment(profile_id, student_id):
+                print(f"Student {student_id} not enrolled in session profile {profile_id}")
+                enhanced_data = data.copy()
+                enhanced_data.update({
+                    'session_id': session_id,
+                    'profile_id': profile_id,
+                    'name': student.get('name', 'Unknown'),
+                    'course': student.get('course', 'Unknown'), 
+                    'year': str(student.get('year', 'Unknown'))
+                })
+                record_denied_attempt(enhanced_data, 'student_not_enrolled_in_profile')
+                return jsonify(status='error', message='You are not enrolled in this session. Please contact your instructor to be added.'), 403
+            print(f"Student {student_id} is enrolled in profile {profile_id}")
         
         # Check if already checked in
         if is_student_already_checked_in_session(student_id, session_id):

@@ -369,9 +369,9 @@ Attendance System"""
         scheduler_thread.start()
     
     def get_attendance_analytics(self):
-        """Generate comprehensive attendance analytics"""
+        """Generate comprehensive attendance analytics with correct table names"""
         students_data = get_students_with_attendance_data()
-        attendance_data = get_all_data('attendances')
+        attendance_data = get_all_data('class_attendees')  # Updated table name
         sessions_data = get_all_data('attendance_sessions')
         
         analytics = {
@@ -379,7 +379,7 @@ Attendance System"""
                 'total_students': len(students_data),
                 'total_sessions': len(sessions_data),
                 'total_checkins': len(attendance_data),
-                'active_sessions': len([s for s in sessions_data if s.get('status') == 'active'])
+                'active_sessions': len([s for s in sessions_data if s.get('is_active')])  # Updated field name
             },
             'attendance_rates': {},
             'course_breakdown': {},
@@ -387,27 +387,30 @@ Attendance System"""
             'attendance_status_breakdown': {}
         }
         
-        # Calculate attendance rates by student
+        # Calculate attendance rates by student using summary data
         for student in students_data:
-            student_checkins = len([att for att in attendance_data if att.get('student_id') == student.get('student_id')])
-            total_sessions_for_student = student_checkins + student.get('absent_count', 0)
-            if total_sessions_for_student > 0:
-                rate = (student_checkins / total_sessions_for_student) * 100
+            total_sessions = student.get('total_sessions', 0)
+            present_count = student.get('present_count', 0)
+            
+            if total_sessions > 0:
+                rate = (present_count / total_sessions) * 100
                 analytics['attendance_rates'][student.get('student_id')] = {
                     'name': student.get('name'),
                     'rate': round(rate, 2),
-                    'present': student_checkins,
-                    'absent': student.get('absent_count', 0)
+                    'present': present_count,
+                    'absent': student.get('absent_count', 0),
+                    'total_sessions': total_sessions
                 }
         
-        # Course breakdown
+        # Course breakdown using student summary data
         courses = {}
         for student in students_data:
             course = student.get('course', 'Unknown')
             if course not in courses:
-                courses[course] = {'students': 0, 'checkins': 0}
+                courses[course] = {'students': 0, 'total_present': 0, 'total_sessions': 0}
             courses[course]['students'] += 1
-            courses[course]['checkins'] += len([att for att in attendance_data if att.get('student_id') == student.get('student_id')])
+            courses[course]['total_present'] += student.get('present_count', 0)
+            courses[course]['total_sessions'] += student.get('total_sessions', 0)
         
         analytics['course_breakdown'] = courses
         
@@ -417,7 +420,10 @@ Attendance System"""
         for i in range(7):
             date = today - timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
-            # Count attendance for this date
+            # Count attendance for this date from actual attendance records
+            daily_checkins = len([att for att in attendance_data 
+                                if att.get('checked_in_at', '').startswith(date_str)])
+            analytics['attendance_trends'][date_str] = daily_checkins
             daily_count = len([att for att in attendance_data 
                              if att.get('timestamp') and 
                              datetime.fromtimestamp(att['timestamp']).strftime('%Y-%m-%d') == date_str])

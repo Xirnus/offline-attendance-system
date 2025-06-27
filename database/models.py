@@ -166,6 +166,19 @@ TABLES = {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
+    ''',
+    
+    'session_enrollments': '''
+        CREATE TABLE IF NOT EXISTS session_enrollments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL,
+            student_id TEXT NOT NULL,
+            enrolled_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (profile_id) REFERENCES session_profiles (id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
+            UNIQUE(profile_id, student_id)
+        )
     '''
 }
 
@@ -181,6 +194,8 @@ INDEXES = {
     'idx_device_fingerprints_hash': 'CREATE INDEX IF NOT EXISTS idx_device_fingerprints_hash ON device_fingerprints(fingerprint_hash)',
     'idx_sessions_profile': 'CREATE INDEX IF NOT EXISTS idx_sessions_profile ON attendance_sessions(profile_id)',
     'idx_sessions_active': 'CREATE INDEX IF NOT EXISTS idx_sessions_active ON attendance_sessions(is_active)',
+    'idx_enrollments_profile': 'CREATE INDEX IF NOT EXISTS idx_enrollments_profile ON session_enrollments(profile_id)',
+    'idx_enrollments_student': 'CREATE INDEX IF NOT EXISTS idx_enrollments_student ON session_enrollments(student_id)',
 }
 
 def create_all_tables():

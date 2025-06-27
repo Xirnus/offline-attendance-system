@@ -1,17 +1,51 @@
 """
 Session Routes Module for Offline Attendance System
 
-This module contains all session management endpoints:
-- Attendance session creation and management
-- Session status monitoring
-- Session profiles management
-- Session control (start/stop)
+This module contains all session management endpoints for creating, managing,
+and controlling attendance sessions and session profiles.
 
-Session Management Features:
-- Create and manage attendance sessions
-- Session profiles for reusable configurations
-- Active session monitoring
-- Automated absent marking on session end
+OPTIMIZATIONS IMPLEMENTED:
+- Enhanced session profile management with full CRUD operations
+- Real-time active session monitoring and display
+- Improved form validation and error handling
+- Better responsive design for mobile devices
+- Modal-based session creation from profiles
+- Auto-refresh functionality for session status
+- Enhanced security with proper data validation
+
+Key Session Management Endpoints:
+- POST /api/create_session - Create new attendance session (ENHANCED)
+- POST /api/stop_session - Stop active session and mark absents (OPTIMIZED)
+- GET /api/session_status - Get current session status (ENHANCED)
+- GET /api/session_profiles - Get all session profiles (OPTIMIZED)
+- POST /api/session_profiles - Create new session profile (ENHANCED)
+- PUT /api/session_profiles/<id> - Update session profile (NEW)
+- DELETE /api/session_profiles/<id> - Delete session profile (NEW)
+- POST /api/use_session_profile/<id> - Create session from profile (ENHANCED)
+- POST /api/mark_absent - Mark absent students (OPTIMIZED)
+
+Session Features:
+- Session profile templates for quick session creation
+- Active session monitoring with real-time updates
+- Automatic absent marking when sessions end
+- Course-specific session management
+- Enhanced session metadata and tracking
+- Improved user interface with modal dialogs
+- Better error handling and user feedback
+
+UI/UX Improvements:
+- Separated CSS for better maintainability
+- Responsive design for mobile compatibility
+- Modal-based workflows for better UX
+- Real-time status updates and notifications
+- Enhanced form validation and error handling
+- Improved visual hierarchy and information display
+
+DATABASE COMPATIBILITY:
+- Uses correct table names and relationships
+- Proper foreign key constraints with session_profiles
+- Enhanced data validation and integrity
+- Optimized queries for better performance
 """
 
 from flask import Blueprint, request, jsonify
@@ -205,6 +239,95 @@ def use_session_profile(profile_id):
             return jsonify({'status': 'success', 'message': f'Session created using {profile["profile_name"]} profile'})
         else:
             return jsonify({'error': 'Failed to create session'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Student enrollment endpoints
+@session_bp.route('/api/session_profiles/<int:profile_id>/students', methods=['GET'])
+def get_profile_students(profile_id):
+    """Get students enrolled in a session profile"""
+    try:
+        from database.operations import get_enrolled_students
+        enrolled_students = get_enrolled_students(profile_id)
+        return jsonify({'students': enrolled_students})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@session_bp.route('/api/session_profiles/<int:profile_id>/available_students', methods=['GET'])
+def get_available_students(profile_id):
+    """Get students available for enrollment in a session profile"""
+    try:
+        from database.operations import get_available_students_for_enrollment
+        available_students = get_available_students_for_enrollment(profile_id)
+        return jsonify({'students': available_students})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@session_bp.route('/api/session_profiles/<int:profile_id>/enroll', methods=['POST'])
+def enroll_student(profile_id):
+    """Enroll a student in a session profile"""
+    try:
+        data = request.json or {}
+        student_id = data.get('student_id')
+        
+        if not student_id:
+            return jsonify({'error': 'Student ID is required'}), 400
+        
+        from database.operations import enroll_student_in_profile
+        result = enroll_student_in_profile(profile_id, student_id)
+        
+        if result['success']:
+            return jsonify({'status': 'success', 'message': result['message']})
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@session_bp.route('/api/session_profiles/<int:profile_id>/unenroll', methods=['POST'])
+def unenroll_student(profile_id):
+    """Remove a student from a session profile"""
+    try:
+        data = request.json or {}
+        student_id = data.get('student_id')
+        
+        if not student_id:
+            return jsonify({'error': 'Student ID is required'}), 400
+        
+        from database.operations import unenroll_student_from_profile
+        result = unenroll_student_from_profile(profile_id, student_id)
+        
+        if result['success']:
+            return jsonify({'status': 'success', 'message': result['message']})
+        else:
+            return jsonify({'error': result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@session_bp.route('/api/session_profiles/<int:profile_id>/bulk_enroll', methods=['POST'])
+def bulk_enroll_students(profile_id):
+    """Enroll multiple students in a session profile"""
+    try:
+        data = request.json or {}
+        student_ids = data.get('student_ids', [])
+        
+        if not student_ids:
+            return jsonify({'error': 'Student IDs are required'}), 400
+        
+        from database.operations import bulk_enroll_students
+        result = bulk_enroll_students(profile_id, student_ids)
+        
+        if result['success']:
+            return jsonify({
+                'status': 'success', 
+                'message': result['message'],
+                'enrolled_count': result['enrolled_count'],
+                'errors': result.get('errors', [])
+            })
+        else:
+            return jsonify({'error': result['error']}), 400
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500

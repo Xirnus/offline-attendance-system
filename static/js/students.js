@@ -153,6 +153,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function loadStudents() {
+        // Show loading state
+        tableBody.innerHTML = '<tr><td colspan="9" class="table-loading">Loading students...</td></tr>';
+        
         fetch('/api/students_with_attendance?' + Date.now(), {
             headers: {
                 'Cache-Control': 'no-cache',
@@ -176,12 +179,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td>${formatYear(student.year)}</td>
                     <td><span class="status-badge ${getStatusClass(student.status)}">${formatStatus(student.status)}</span></td>
                     <td>${formatLastCheckIn(student.last_check_in)}</td>
-                    <td style="color: #28a745; font-weight: bold;">${student.present_count || 0}</td>
-                    <td style="color: #dc3545; font-weight: bold;">${student.absent_count || 0}</td>
-                    <td style="font-weight: bold;">${calculateAttendanceRatio(student.present_count, student.absent_count)}</td>
+                    <td class="count-present">${student.present_count || 0}</td>
+                    <td class="count-absent">${student.absent_count || 0}</td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="editStudent('${escapeHtml(student.student_id)}')">Edit</button>
                     </td>
+                    <td class="attendance-ratio">${calculateAttendanceRatio(student.present_count, student.absent_count)}</td>
                 `;
                 tableBody.appendChild(tr);
             });
