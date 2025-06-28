@@ -49,6 +49,8 @@ from database import init_db, migrate_database
 from utils.network import get_all_network_interfaces
 from sqlalchemy import Table, Column, Integer, String, MetaData
 from sqlalchemy.exc import SQLAlchemyError
+# Ensure optimized classes.db schema is created on startup
+from database.models import create_optimized_classes_schema
 import re
 
 app = Flask(__name__)
@@ -168,6 +170,7 @@ if __name__ == '__main__':
     try:
         init_db()
         migrate_database()
+        create_optimized_classes_schema()
         
         interfaces = get_all_network_interfaces()
         print(f"Primary IP: {interfaces[0]}")

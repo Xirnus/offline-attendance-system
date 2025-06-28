@@ -74,7 +74,6 @@ def create_session():
         end_time = data.get('end_time')
         profile_id = data.get('profile_id')
         class_table = data.get('class_table')
-        course = data.get('course')  # Use course instead of class_table
         reset_status = data.get('reset_status', True)  # Default to True
 
         if not all([session_name, start_time, end_time]):
@@ -84,22 +83,34 @@ def create_session():
         if reset_status:
             conn = get_db_connection()
             cursor = conn.cursor()
-            # Reset student attendance summary status instead of student table
             cursor.execute('UPDATE student_attendance_summary SET status = NULL')
             conn.commit()
             conn.close()
             print("Reset all student attendance status to null before creating session")
 
-        result = create_attendance_session(session_name, start_time, end_time, profile_id, course)
-        if result:
-            message = 'Attendance session created'
-            if profile_id:
-                message += ' using session profile'
-            if reset_status:
-                message += '. Student status reset.'
-            return jsonify(status='success', message=message)
+        # --- Optimized class-based session logic ---
+        if class_table is not None and str(class_table).strip().isdigit():
+            # Class-based session: set profile_id to None
+            result = create_attendance_session(session_name, start_time, end_time, None, class_table)
+            if result:
+                message = 'Attendance session created for class'
+                if reset_status:
+                    message += '. Student status reset.'
+                return jsonify(status='success', message=message)
+            else:
+                return jsonify(status='error', message='Failed to create class-based session')
+        # --- Profile-based or legacy session logic ---
         else:
-            return jsonify(status='error', message='Failed to create session')
+            result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table)
+            if result:
+                message = 'Attendance session created'
+                if profile_id:
+                    message += ' using session profile'
+                if reset_status:
+                    message += '. Student status reset.'
+                return jsonify(status='success', message=message)
+            else:
+                return jsonify(status='error', message='Failed to create session')
     except Exception as e:
         return jsonify(status='error', message=str(e))
 

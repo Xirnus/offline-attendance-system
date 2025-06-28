@@ -76,10 +76,11 @@ def extract_device_signature(user_agent):
     return device_info
 
 def generate_comprehensive_fingerprint(request_data):
-    """Generate comprehensive device fingerprint"""
+    """Generate comprehensive device fingerprint, including visitor_id if present"""
     device_sig = extract_device_signature(request_data.get('user_agent', ''))
     
     fingerprint_data = {
+        'visitor_id': request_data.get('visitor_id', ''),  # Add visitor_id from FingerprintJS
         'device_signature': device_sig,
         'screen_resolution': request_data.get('screen_resolution', ''),
         'timezone': request_data.get('timezone', ''),
@@ -110,8 +111,19 @@ def generate_comprehensive_fingerprint(request_data):
     
     return fingerprint_data
 
+
+def get_canonical_device_id(request_data):
+    """
+    Return the canonical device ID for this request: prefer visitor_id, fallback to hash.
+    """
+    visitor_id = request_data.get('visitor_id')
+    if visitor_id:
+        return visitor_id
+    return create_fingerprint_hash(request_data)
+
+
 def create_fingerprint_hash(request_data):
-    """Create a unique hash for device fingerprinting"""
+    """Create a unique hash for device fingerprinting (used if visitor_id is not present)"""
     fingerprint = generate_comprehensive_fingerprint(request_data)
     
     # Extract device signature for enhanced processing

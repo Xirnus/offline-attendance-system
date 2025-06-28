@@ -82,6 +82,7 @@ def store_device_fingerprint(fingerprint_hash, device_info):
     """Store or update device fingerprint and return the record"""
     import json
     try:
+        print(f"[DEBUG] store_device_fingerprint: fingerprint_hash={repr(fingerprint_hash)}")
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -113,6 +114,8 @@ def store_device_fingerprint(fingerprint_hash, device_info):
         cursor.execute('SELECT * FROM device_fingerprints WHERE id = ?', (device_id,))
         result = cursor.fetchone()
         conn.close()
+        
+        print(f"[DEBUG] store_device_fingerprint: device_id={device_id}")
         
         # Convert to dict format
         from database.operations import row_to_dict

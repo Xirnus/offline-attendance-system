@@ -133,9 +133,12 @@ def get_token(token):
     conn.close()
     return row_to_dict(result) 
 
-def update_token(token, **kwargs):
-    """Update token with new data"""
-    conn = get_db_connection()
+def update_token(token, conn=None, **kwargs):
+    """Update token with new data. Uses provided conn if given, else opens a new one."""
+    close_conn = False
+    if conn is None:
+        conn = get_db_connection()
+        close_conn = True
     cursor = conn.cursor()
     
     set_clauses = []
@@ -148,71 +151,42 @@ def update_token(token, **kwargs):
     values.append(token)
     
     cursor.execute(query, values)
-    conn.commit()
-    conn.close()
+    if close_conn:
+        conn.commit()
+        conn.close()
 
 @retry_db_operation()
-def record_attendance(data):
-    """Record attendance with device fingerprint reference"""
-    conn = None
+def record_attendance(data, conn=None):
+    """Record attendance with device fingerprint reference. Uses provided conn if given, else opens a new one."""
+    close_conn = False
     try:
-        conn = get_db_connection_with_retry()
+        if conn is None:
+            conn = get_db_connection_with_retry()
+            close_conn = True
         cursor = conn.cursor()
         current_time = datetime.utcnow().isoformat()
-        
         # First, create or get device fingerprint
-        device_fingerprint_id = None
-        if data.get('fingerprint_hash') or data.get('device_info'):
-            cursor.execute('''
-                INSERT OR IGNORE INTO device_fingerprints 
-                (fingerprint_hash, first_seen, last_seen, usage_count, device_info, is_blocked)
-                VALUES (?, ?, ?, 1, ?, FALSE)
-            ''', (
-                data.get('fingerprint_hash', 'unknown'),
-                current_time,
-                current_time,
-                data.get('device_info')
-            ))
-            
-            # Get the device fingerprint ID
-            cursor.execute('''
-                SELECT id FROM device_fingerprints 
-                WHERE fingerprint_hash = ? AND (device_info = ? OR (device_info IS NULL AND ? IS NULL))
-            ''', (
-                data.get('fingerprint_hash', 'unknown'),
-                data.get('device_info'),
-                data.get('device_info')
-            ))
-            result = cursor.fetchone()
-            if result:
-                device_fingerprint_id = result[0]
-                # Update usage count and last seen
-                cursor.execute('''
-                    UPDATE device_fingerprints 
-                    SET usage_count = usage_count + 1, last_seen = ?, updated_at = ?
-                    WHERE id = ?
-                ''', (current_time, current_time, device_fingerprint_id))
-        
+        device_fingerprint_id = data.get('device_fingerprint_id')
         # Record attendance
         cursor.execute('''
             INSERT INTO class_attendees 
             (student_id, session_id, token_id, device_fingerprint_id, checked_in_at)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, (SELECT id FROM tokens WHERE token = ?), ?, ?)
         ''', (
             data.get('student_id'),
             data.get('session_id'),
-            data.get('token_id'),
+            data.get('token'),
             device_fingerprint_id,
             current_time
         ))
-        
-        conn.commit()
+        if close_conn:
+            conn.commit()
     except Exception as e:
-        if conn:
+        if conn and close_conn:
             conn.rollback()
         raise e
     finally:
-        if conn:
+        if conn and close_conn:
             conn.close()
 
 @retry_db_operation()
@@ -578,29 +552,51 @@ def get_active_session():
 
 def create_attendance_session(session_name, start_time, end_time, profile_id=None, class_table=None):
     """Create attendance session with required profile_id
-    Note: class_table parameter is kept for backward compatibility but represents course name
+    For optimized class-based sessions, class_table must be a valid integer class ID.
+    For legacy/old sessions, class_table may be a course name or None.
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
+
         # If no profile_id provided, use default profile
         if profile_id is None:
             cursor.execute('SELECT id FROM session_profiles WHERE profile_name = ? LIMIT 1', ('Default Session',))
             profile_result = cursor.fetchone()
             profile_id = profile_result[0] if profile_result else 1
-        
+
         # Deactivate any existing active sessions
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1')
-        
-        cursor.execute('''
-            INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
-            VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
-        ''', (profile_id, session_name, start_time, end_time, class_table))
-        conn.commit()
-        conn.close()
-        print(f"Created attendance session: {session_name} for course: {class_table}")
-        return True
+
+        # --- Optimized class-based session logic ---
+        # If class_table is not None/empty and is a digit, treat as optimized class ID
+        if class_table is not None and str(class_table).strip().isdigit():
+            class_id = int(class_table)
+            cursor.execute('''
+                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
+                VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
+            ''', (profile_id, session_name, start_time, end_time, class_id))
+            conn.commit()
+            conn.close()
+            print(f"[Optimized] Created attendance session: {session_name} for class_id: {class_id}")
+            return True
+        # --- Legacy/old session logic ---
+        elif class_table is None or str(class_table).strip().lower() in ('', 'none', 'null') or not str(class_table).strip().isdigit():
+            # Accept legacy course name or None
+            legacy_value = class_table if class_table is not None else None
+            cursor.execute('''
+                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
+                VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
+            ''', (profile_id, session_name, start_time, end_time, legacy_value))
+            conn.commit()
+            conn.close()
+            print(f"[Legacy] Created attendance session: {session_name} for course: {legacy_value}")
+            return True
+        else:
+            # Invalid value for class_table
+            print(f"[ERROR] Invalid class_table value for session creation: {class_table}")
+            conn.close()
+            return False
     except Exception as e:
         print(f"Error creating session: {e}")
         return False

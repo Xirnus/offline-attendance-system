@@ -136,9 +136,14 @@ def checkin():
         data = request.json or {}
         student_id = data.get('student_id', '').strip()
         token = data.get('token', '').strip()
-        
+        session_id = data.get('session_id', '').strip()  # Accept session_id from frontend
+        visitor_id = data.get('visitor_id', '').strip()
+        screen_size = data.get('screen_size', '').strip()
+        user_agent = data.get('user_agent', '').strip()
+        timezone = data.get('timezone', '').strip()
+
         print(f"Check-in attempt - Student ID: {student_id}, Token: {token[:8]}...")
-        
+
         # Basic validation
         if not student_id:
             print("Missing student ID")
@@ -146,16 +151,19 @@ def checkin():
         if not token:
             print("Missing token")
             return jsonify(status='error', message='Token is required'), 400
-        
+        if not visitor_id:
+            print("Missing visitor_id")
+            return jsonify(status='error', message='Device identifier is required'), 400
+
         # Check if student exists
         print(f"Looking up student: {student_id}")
         student = get_student_by_id(student_id)
         if not student:
             print(f"Student not found: {student_id}")
             return jsonify(status='error', message='Student ID not found in database'), 404
-        
+
         print(f"Found student: {student['name']}")
-        
+
         # Check token validity
         print(f"Validating token: {token[:8]}...")
         token_data = get_token(token)
@@ -165,66 +173,56 @@ def checkin():
         if token_data.get('used'):
             print("Token already used")
             return jsonify(status='error', message='Token already used'), 409
-        
+
         print("Token is valid")
-        
+
         # Check for active session
         print("Checking for active session...")
         active_session = get_active_session()
         if not active_session:
             print("No active session")
             return jsonify(status='error', message='No active attendance session'), 400
-        
+
         print(f"Active session found: {active_session.get('session_name', 'Unnamed')}")
-        
-        # Get session ID
-        session_id = active_session.get('id')
+        # Get session ID from active session if not provided
+        if not session_id:
+            session_id = active_session.get('id')
         profile_id = active_session.get('profile_id')
-        
-        # Check if student is enrolled in the session profile (if session was created from a profile)
-        if profile_id:
-            print(f"Checking enrollment for student {student_id} in profile {profile_id}")
-            from database.operations import check_student_enrollment
-            if not check_student_enrollment(profile_id, student_id):
-                print(f"Student {student_id} not enrolled in session profile {profile_id}")
-                enhanced_data = data.copy()
-                enhanced_data.update({
-                    'session_id': session_id,
-                    'profile_id': profile_id,
-                    'name': student.get('name', 'Unknown'),
-                    'course': student.get('course', 'Unknown'), 
-                    'year': str(student.get('year', 'Unknown'))
-                })
-                record_denied_attempt(enhanced_data, 'student_not_enrolled_in_profile')
-                return jsonify(status='error', message='You are not enrolled in this session. Please contact your instructor to be added.'), 403
-            print(f"Student {student_id} is enrolled in profile {profile_id}")
-        
+        class_table = active_session.get('class_table')
+
+        # Enrollment checks (unchanged)
+        if class_table and str(class_table).strip().lower() not in ('', 'none', 'null'):
+            print(f"Class-based session detected (class_table={class_table}), skipping session profile enrollment check.")
+        else:
+            if profile_id:
+                print(f"Checking enrollment for student {student_id} in profile {profile_id}")
+                from database.operations import check_student_enrollment
+                if not check_student_enrollment(profile_id, student_id):
+                    print(f"Student {student_id} not enrolled in session profile {profile_id}")
+                    enhanced_data = data.copy()
+                    enhanced_data.update({
+                        'session_id': session_id,
+                        'profile_id': profile_id,
+                        'name': student.get('name', 'Unknown'),
+                        'course': student.get('course', 'Unknown'), 
+                        'year': str(student.get('year', 'Unknown'))
+                    })
+                    record_denied_attempt(enhanced_data, 'student_not_enrolled_in_profile')
+                    return jsonify(status='error', message='You are not enrolled in this session. Please contact your instructor to be added.'), 403
+                print(f"Student {student_id} is enrolled in profile {profile_id}")
+
         # Check if already checked in
         if is_student_already_checked_in_session(student_id, session_id):
             print(f"Student {student_id} already checked in for session {session_id}")
             return jsonify(status='error', message='You have already checked in for this session'), 409
-        
-        # Generate fingerprint
-        print("Generating fingerprint...")
-        request_data = {
-            'user_agent': data.get('user_agent', ''),
-            'screen_resolution': data.get('screen_resolution', ''),
-            'timezone': data.get('timezone', ''),
-            'language': data.get('language', ''),
-            'platform': data.get('platform', ''),
-        }
-        
-        fingerprint_data = generate_comprehensive_fingerprint(request_data)
-        fingerprint_hash = create_fingerprint_hash(request_data)
-        
-        print(f"Fingerprint generated: {fingerprint_hash[:8]}...")
-        
-        # Enhanced validation checks
-        print("Performing enhanced validation checks...")
-        
+
+        # Device uniqueness: use visitor_id as the canonical device identifier
+        device_id = visitor_id
+        print(f"Device ID (visitor_id): {device_id}")
+
         # Check if this device has already been used to check in for this session
-        if is_device_already_used_in_session(fingerprint_hash, session_id):
-            print(f"Device {fingerprint_hash[:8]}... already used in session {session_id}")
+        if is_device_already_used_in_session(device_id, session_id):
+            print(f"Device {device_id} already used in session {session_id}")
             enhanced_data = data.copy()
             enhanced_data.update({
                 'session_id': session_id,
@@ -234,19 +232,15 @@ def checkin():
             })
             record_denied_attempt(enhanced_data, 'device_already_used_in_session')
             return jsonify(status='error', message='This device has already been used to check in for this session'), 409
-        
-        # Check if student is enrolled in the session's class (if class is specified)
+
+        # Enrollment checks for class (unchanged)
         course = active_session.get('course')
         class_table = active_session.get('class_table')
-        
         if class_table:
             print(f"Checking enrollment for student {student_id} in class_table {class_table}")
             from database.operations import is_student_enrolled_in_class_id, is_student_in_class
-            
-            # Check if class_table is a numeric class_id (new optimized schema) or course name (legacy)
             try:
                 class_id = int(class_table)
-                # It's a numeric class_id, use optimized schema check
                 if not is_student_enrolled_in_class_id(student_id, class_id):
                     print(f"Student {student_id} not enrolled in class {class_id}")
                     enhanced_data = data.copy()
@@ -259,7 +253,6 @@ def checkin():
                     record_denied_attempt(enhanced_data, 'student_not_enrolled_in_class')
                     return jsonify(status='error', message='You are not enrolled in this class. Please contact your instructor to be added to the class.'), 403
             except ValueError:
-                # It's a string course name, use legacy check
                 if not is_student_in_class(student_id, class_table):
                     print(f"Student {student_id} not enrolled in course {class_table}")
                     enhanced_data = data.copy()
@@ -280,21 +273,14 @@ def checkin():
                 'course': student.get('course', 'Unknown'), 
                 'year': str(student.get('year', 'Unknown'))
             })
-            record_denied_attempt(enhanced_data, 'student_not_in_class')
+            record_denied_attempt(enhanced_data, 'student_not_enrolled_in_class')
             return jsonify(status='error', message='You are not enrolled in this class'), 403
-        
-        # Check if student has already checked in with a different device for this session
-        if is_student_already_checked_in_session(student_id, session_id):
-            print(f"Student {student_id} already checked in for session {session_id}")
-            return jsonify(status='error', message='You have already checked in for this session'), 409
-        
-        print("Enhanced validation checks passed")
-        
-        # Check fingerprint limits
-        print("Checking fingerprint limits...")
-        allowed, reason = is_fingerprint_allowed(fingerprint_hash)
+
+        # Check device limits (if any, using visitor_id)
+        print("Checking device limits...")
+        allowed, reason = is_fingerprint_allowed(device_id)
         if not allowed:
-            print(f"Fingerprint blocked: {reason}")
+            print(f"Device blocked: {reason}")
             enhanced_data = data.copy()
             enhanced_data.update({
                 'session_id': session_id,
@@ -302,46 +288,79 @@ def checkin():
                 'course': student.get('course', 'Unknown'), 
                 'year': str(student.get('year', 'Unknown'))
             })
-            record_denied_attempt(enhanced_data, 'fingerprint_blocked')
+            record_denied_attempt(enhanced_data, 'device_blocked')
             return jsonify(status='error', message=reason), 403
-        
-        print("Fingerprint allowed")
-        
-        # Store device fingerprint and get the record with ID
-        print("Storing device fingerprint...")
-        device_fingerprint_record = store_device_fingerprint(fingerprint_hash, json.dumps(fingerprint_data))
-        device_fingerprint_id = device_fingerprint_record['id']
-        print("Device fingerprint stored")
-        
-        # Update attendance records - no longer updating student status directly
-        print(f"Recording attendance for {student_id}...")
-        
-        print("Marking token as used...")
-        update_token(token, used=True, device_fingerprint_id=device_fingerprint_id)
-        print("Token marked as used")
-        
-        # Record attendance
-        print("Recording attendance...")
-        attendance_data = {
-            'session_id': session_id,
-            'student_id': student_id,
-            'device_fingerprint_id': device_fingerprint_id,
-            'token': token,
-            'name': student['name'],
-            'course': student['course'],
-            'year': str(student['year']),
-            'device_info': json.dumps(fingerprint_data),
-        }
-        
-        record_attendance(attendance_data)
-        print("Attendance recorded")
-        
+
+        print("Device allowed")
+
+        # Store device info (minimal) and record attendance in the same transaction
+        print("Storing device info and recording attendance in a single transaction...")
+        import sqlite3
+        from config import Config  # <-- FIX: import Config here
+        conn = sqlite3.connect(Config.DATABASE_PATH)
+        cursor = conn.cursor()
+        try:
+            # Store or update device fingerprint
+            import json
+            current_time = __import__('datetime').datetime.utcnow().isoformat()
+            # Use only the minimal device info sent by frontend
+            minimal_device_info = {
+                'visitor_id': visitor_id,
+                'screen_size': screen_size,
+                'user_agent': user_agent,
+                'timezone': timezone
+            }
+            device_info_str = json.dumps(minimal_device_info)
+            cursor.execute('SELECT id FROM device_fingerprints WHERE fingerprint_hash = ?', (device_id,))
+            row = cursor.fetchone()
+            if row:
+                device_fingerprint_id = row[0]
+                cursor.execute('''
+                    UPDATE device_fingerprints 
+                    SET last_seen = ?, usage_count = usage_count + 1, device_info = ?, updated_at = ?
+                    WHERE id = ?
+                ''', (current_time, device_info_str, current_time, device_fingerprint_id))
+            else:
+                cursor.execute('''
+                    INSERT INTO device_fingerprints 
+                    (fingerprint_hash, first_seen, last_seen, usage_count, device_info, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (device_id, current_time, current_time, 1, device_info_str, current_time, current_time))
+                device_fingerprint_id = cursor.lastrowid
+            print(f"[DEBUG] (TX) device_fingerprint_id={device_fingerprint_id}")
+            # Mark token as used
+            from database.operations import update_token
+            update_token(token, used=True, device_fingerprint_id=device_fingerprint_id, conn=conn)
+            print("Token marked as used")
+            # Record attendance
+            print("Recording attendance...")
+            attendance_data = {
+                'session_id': session_id,
+                'student_id': student_id,
+                'device_fingerprint_id': device_fingerprint_id,
+                'token': token,
+                'name': student['name'],
+                'course': student['course'],
+                'year': str(student['year']),
+                'device_info': device_info_str,
+            }
+            from database.operations import record_attendance
+            record_attendance(attendance_data, conn=conn)  # pass conn to avoid DB lock
+            print("Attendance recorded")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            print(f"Check-in error (transaction): {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify(status='error', message='Server error occurred'), 500
         print(f"Check-in successful for {student['name']}")
         return jsonify(
             status='success', 
             message=f'Welcome {student["name"]}! Attendance recorded successfully'
         )
-    
     except Exception as e:
         print(f"Check-in error: {str(e)}")
         import traceback

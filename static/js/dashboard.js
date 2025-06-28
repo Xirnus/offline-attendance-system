@@ -486,8 +486,13 @@ function createSession(sessionName, startTime, endTime, profileId = null, classI
     end_time: endTime
   };
 
-  if (profileId) requestBody.profile_id = parseInt(profileId);
-  if (classId) requestBody.class_table = classId;
+  // Only send one of profile_id or class_table
+  if (classId) {
+    requestBody.class_table = classId;
+    requestBody.profile_id = null;
+  } else if (profileId) {
+    requestBody.profile_id = parseInt(profileId);
+  }
 
   fetch('/api/create_session', {
     method: 'POST',
@@ -1142,30 +1147,49 @@ function updateDeviceTable() {
 }
 
 function formatTimestamp(timestamp) {
-  // Handle different timestamp formats
+  // Handle different timestamp formats and always show local time in 12-hour format
   if (!timestamp) return 'Unknown';
-  
-  // If it's already a number (Unix timestamp), multiply by 1000
+
+  let date;
   if (typeof timestamp === 'number') {
-    return new Date(timestamp * 1000).toLocaleString();
-  }
-  
-  // If it's a string (ISO format), parse directly
-  if (typeof timestamp === 'string') {
-    // Handle both ISO format (2025-06-27T13:31:07.041358) and space format (2025-06-27 20:24:34.228115)
-    const date = new Date(timestamp);
+    // Unix timestamp (seconds or ms)
+    if (timestamp > 1e12) {
+      // Already ms
+      date = new Date(timestamp);
+    } else {
+      // Seconds
+      date = new Date(timestamp * 1000);
+    }
+  } else if (typeof timestamp === 'string') {
+    // Normalize: replace space with T if needed
+    let normalized = timestamp.trim();
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(normalized)) {
+      normalized = normalized.replace(' ', 'T');
+    }
+    date = new Date(normalized);
     if (isNaN(date.getTime())) {
-      // If parsing failed, try treating as Unix timestamp
+      // Try parsing as float (unix seconds)
       const numTimestamp = parseFloat(timestamp);
       if (!isNaN(numTimestamp)) {
-        return new Date(numTimestamp * 1000).toLocaleString();
+        date = new Date(numTimestamp * 1000);
+      } else {
+        return 'Invalid Date';
       }
-      return 'Invalid Date';
     }
-    return date.toLocaleString();
+  } else {
+    return 'Invalid Date';
   }
-  
-  return 'Invalid Date';
+
+  // Use 12-hour format, local time
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
 }
 
 function formatDateTime(isoString) {

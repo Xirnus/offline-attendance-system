@@ -50,7 +50,9 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const data = await fetchWithLoading('/upload_class_record', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                // Do NOT set Content-Type header when sending FormData!
+                headers: {} // Ensure no Content-Type is set
             });
             
             console.log('Upload successful:', data);

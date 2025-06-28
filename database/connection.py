@@ -37,13 +37,14 @@ def retry_db_operation(max_retries=3, delay=0.1):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            _delay = delay  # Initialize local delay variable
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
                 except sqlite3.OperationalError as e:
                     if "database is locked" in str(e) and attempt < max_retries - 1:
-                        time.sleep(delay)
-                        delay *= 2  # Exponential backoff
+                        time.sleep(_delay)
+                        _delay *= 2  # Exponential backoff
                         continue
                     else:
                         raise e

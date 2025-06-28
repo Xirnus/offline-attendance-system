@@ -60,6 +60,7 @@ def upload_class_record():
             return jsonify({'error': 'No file part in the request'}), 400
             
         file = request.files['file']
+        file_name = file.filename  # <-- Move this up before using it
         
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
@@ -148,7 +149,6 @@ def upload_class_record():
             return jsonify({'error': 'No valid student data found in the file'}), 400
 
         # Create display name from filename (without extension) and professor name
-        file_name = file.filename
         if file_name.lower().endswith('.xlsx'):
             file_name = file_name[:-5]
         elif file_name.lower().endswith('.xls'):
