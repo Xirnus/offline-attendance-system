@@ -922,6 +922,103 @@ function sortByProperty(array, property, ascending = true) {
 }
 
 // =============================================================================
+// MISSING COMMON UTILITIES
+// =============================================================================
+
+/**
+ * Debounce function: returns a function, that, as long as it continues to be invoked, will not
+ * be triggered. The function will be called after it stops being called for N milliseconds.
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Milliseconds to wait
+ * @returns {Function}
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
+/**
+ * Throttle function: returns a function, that, as long as it continues to be invoked, will only
+ * trigger at most once every N milliseconds.
+ * @param {Function} func - Function to throttle
+ * @param {number} limit - Milliseconds to wait
+ * @returns {Function}
+ */
+function throttle(func, limit) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+/**
+ * Generate a random ID string
+ * @returns {string}
+ */
+function generateId() {
+  return 'id-' + Math.random().toString(36).substr(2, 9);
+}
+
+/**
+ * Deep clone an object or array
+ * @param {any} obj
+ * @returns {any}
+ */
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Check if a value is empty (null, undefined, empty string, array, or object)
+ * @param {any} value
+ * @returns {boolean}
+ */
+function isEmpty(value) {
+  if (value == null) return true;
+  if (Array.isArray(value) || typeof value === 'string') return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Simple localStorage wrapper
+ */
+const storage = {
+  set(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+  },
+  get(key) {
+    try {
+      return JSON.parse(localStorage.getItem(key));
+    } catch {
+      return null;
+    }
+  },
+  remove(key) {
+    localStorage.removeItem(key);
+  },
+  clear() {
+    localStorage.clear();
+  }
+};
+
+/**
+ * Validate email address format
+ * @param {string} email
+ * @returns {boolean}
+ */
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// =============================================================================
 // INITIALIZATION
 // =============================================================================
 

@@ -222,3 +222,13 @@ myenv/Scripts/qr.exe
 myenv/Scripts/tests.exe
 
 ofas/
+myenv/Include/site/python3.12/greenlet/greenlet.h
+myenv/Scripts/f2py.exe
+myenv/Scripts/fonttools.exe
+myenv/Scripts/keyring.exe
+myenv/Scripts/numpy-config.exe
+myenv/Scripts/pyftmerge.exe
+myenv/Scripts/pyftsubset.exe
+myenv/Scripts/ttx.exe
+myenv/Scripts/vba_extract.py
+myenv/share/man/man1/ttx.1

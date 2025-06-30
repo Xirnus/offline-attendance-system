@@ -454,14 +454,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function initializeFingerprinting() {
     const submitBtn = document.getElementById('submitBtn');
-    
     try {
-        // Generate session ID first
         sessionId = generateSessionId();
-        
-        // Remove the fingerprint generation notification
-        // showMessage('Generating device fingerprint...', 'info');
-        
         deviceInfo = {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
@@ -472,7 +466,6 @@ async function initializeFingerprinting() {
                 height: screen.height,
                 colorDepth: screen.colorDepth
             },
-            // Enhanced device characteristics
             pixelRatio: window.devicePixelRatio,
             touchSupport: 'ontouchstart' in window,
             maxTouchPoints: navigator.maxTouchPoints || 0,
@@ -484,20 +477,25 @@ async function initializeFingerprinting() {
             } : 'unknown'
         };
 
-        // Generate fingerprint first
-        if (window.FingerprintJS && window.FingerprintJS.load) {
-            try {
-                const fp = await FingerprintJS.load();
-                const result = await fp.get();
-                fingerprintHash = result.visitorId;
-            } catch (fpError) {
+        // --- Stable visitor_id logic ---
+        let storedVisitorId = localStorage.getItem('visitor_id');
+        if (storedVisitorId) {
+            fingerprintHash = storedVisitorId;
+        } else {
+            if (window.FingerprintJS && window.FingerprintJS.load) {
+                try {
+                    const fp = await FingerprintJS.load();
+                    const result = await fp.get();
+                    fingerprintHash = result.visitorId;
+                } catch (fpError) {
+                    fingerprintHash = generateFallbackFingerprint();
+                }
+            } else {
                 fingerprintHash = generateFallbackFingerprint();
             }
-        } else {
-            fingerprintHash = generateFallbackFingerprint();
+            localStorage.setItem('visitor_id', fingerprintHash);
         }
 
-        // After fingerprint is generated, check session status
         if (checkSessionStatus()) {
             showMessage('This device has already checked in during this session.', 'warning');
             submitBtn.disabled = true;
@@ -509,23 +507,16 @@ async function initializeFingerprinting() {
         document.getElementById('fingerprint_hash').value = fingerprintHash;
         document.getElementById('security-id').textContent = fingerprintHash.substring(0, 8) + '...';
         document.getElementById('device-info').textContent = getDeviceDescription();
-        
-        // Enable form
         submitBtn.disabled = false;
         submitBtn.textContent = 'Check In';
-        
-        // Clear initialization message
         document.getElementById('message').style.display = 'none';
-        
     } catch (error) {
         console.error('Fingerprinting failed:', error);
         showMessage('Device fingerprinting failed. Using basic security mode.', 'danger');
-        
         fingerprintHash = btoa(navigator.userAgent + Date.now()).substring(0, 16);
         document.getElementById('fingerprint_hash').value = fingerprintHash;
         document.getElementById('security-id').textContent = fingerprintHash.substring(0, 8) + '...';
         document.getElementById('device-info').textContent = getDeviceDescription();
-        
         submitBtn.disabled = false;
         submitBtn.textContent = 'Check In';
     }
@@ -554,21 +545,23 @@ function setupFormHandler() {
             const pathParts = window.location.pathname.split('/');
             const token = pathParts[pathParts.length - 1];
 
-            // --- FingerprintJS visitorId integration ---
-            let visitorId = '';
-            if (window.FingerprintJS && window.FingerprintJS.load) {
-                try {
-                    const fp = await FingerprintJS.load();
-                    const result = await fp.get();
-                    visitorId = result.visitorId;
-                } catch (fpError) {
-                    visitorId = fingerprintHash || generateFallbackFingerprint(); // fallback
+            // --- Always use visitor_id from localStorage ---
+            let visitorId = localStorage.getItem('visitor_id');
+            if (!visitorId) {
+                if (window.FingerprintJS && window.FingerprintJS.load) {
+                    try {
+                        const fp = await FingerprintJS.load();
+                        const result = await fp.get();
+                        visitorId = result.visitorId;
+                    } catch (fpError) {
+                        visitorId = fingerprintHash || generateFallbackFingerprint();
+                    }
+                } else {
+                    visitorId = fingerprintHash || generateFallbackFingerprint();
                 }
-            } else {
-                visitorId = fingerprintHash || generateFallbackFingerprint(); // fallback
+                localStorage.setItem('visitor_id', visitorId);
             }
 
-            // Only send required fields
             if (!visitorId || typeof visitorId !== 'string' || visitorId.trim() === '') {
                 visitorId = fingerprintHash || generateFallbackFingerprint();
             }
@@ -583,9 +576,7 @@ function setupFormHandler() {
                 session_id: sessionId
             };
             console.log('Check-in payload:', deviceData); // Debug log
-            
             const result = await postJSON('/checkin', deviceData);
-            
             if (result.status === 'success') {
                 markCheckedIn();
                 showMessage(result.message || 'Check-in successful!', 'success');

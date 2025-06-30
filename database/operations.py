@@ -435,7 +435,6 @@ def mark_students_absent(session_id=None, cursor=None):
         if cursor is None:
             conn = get_db_connection_with_retry()
             cursor = conn.cursor()
-        
         if session_id is None:
             cursor.execute('SELECT id, class_table, profile_id FROM attendance_sessions WHERE is_active = 1')
             session = cursor.fetchone()
@@ -443,22 +442,35 @@ def mark_students_absent(session_id=None, cursor=None):
                 if conn:
                     conn.close()
                 return 0
-            session_id, course_name, profile_id = session
+            session_id, class_table, profile_id = session
         else:
             cursor.execute('SELECT class_table, profile_id FROM attendance_sessions WHERE id = ?', (session_id,))
             session_row = cursor.fetchone()
             if session_row:
-                course_name, profile_id = session_row
+                class_table, profile_id = session_row
             else:
-                course_name, profile_id = None, None
-
+                class_table, profile_id = None, None
         absent_count = 0
-
-        # Check if session was created from a profile
-        if profile_id:
+        # --- Optimized class-based session logic ---
+        if class_table is not None and str(class_table).strip().isdigit():
+            print(f"Session created for class_id {class_table}, only marking enrolled class students as absent")
+            from database.class_table_manager import OptimizedClassManager
+            manager = OptimizedClassManager()
+            class_id = int(class_table)
+            enrolled_students = manager.get_class_students(class_id)
+            enrolled_student_ids = [student['student_id'] for student in enrolled_students]
+            print(f"[DEBUG] Enrolled students for class {class_id}: {enrolled_student_ids}")
+            cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
+            checked_in_students = {row[0] for row in cursor.fetchall()}
+            print(f"[DEBUG] Checked-in students for session {session_id}: {checked_in_students}")
+            for student_id in enrolled_student_ids:
+                if student_id not in checked_in_students:
+                    print(f"[DEBUG] Marking {student_id} as absent (class)")
+                    update_student_attendance(student_id, 'absent')
+                    absent_count += 1
+        # --- Session profile logic ---
+        elif profile_id:
             print(f"Session created from profile {profile_id}, only marking enrolled students as absent")
-            
-            # Get students enrolled in the session profile
             cursor.execute('''
                 SELECT se.student_id 
                 FROM session_enrollments se 
@@ -466,60 +478,44 @@ def mark_students_absent(session_id=None, cursor=None):
                 WHERE se.profile_id = ?
             ''', (profile_id,))
             enrolled_student_ids = [row[0] for row in cursor.fetchall()]
-            
-            print(f"Found {len(enrolled_student_ids)} students enrolled in profile {profile_id}")
-            
-            # Get students who already checked in for this session
+            print(f"[DEBUG] Enrolled students for profile {profile_id}: {enrolled_student_ids}")
             cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
             checked_in_students = {row[0] for row in cursor.fetchall()}
-            
-            print(f"Found {len(checked_in_students)} students already checked in for session {session_id}")
-            
-            # Mark absent only enrolled students who didn't check in
+            print(f"[DEBUG] Checked-in students for session {session_id}: {checked_in_students}")
             for student_id in enrolled_student_ids:
                 if student_id not in checked_in_students:
+                    print(f"[DEBUG] Marking {student_id} as absent (profile)")
                     update_student_attendance(student_id, 'absent')
                     absent_count += 1
-                    
-        elif course_name:  # Course-specific session: only mark students from that course
-            # Get all students enrolled in this course from the main students table
-            cursor.execute('SELECT student_id FROM students WHERE course = ?', (course_name,))
+        # --- Course/legacy/general logic ---
+        elif class_table:  # Course-specific session: only mark students from that course
+            cursor.execute('SELECT student_id FROM students WHERE course = ?', (class_table,))
             course_student_ids = [row[0] for row in cursor.fetchall()]
-            
-            print(f"Found {len(course_student_ids)} students in course '{course_name}'")
-            
-            # Get students who already checked in for this session
+            print(f"[DEBUG] Students in course '{class_table}': {course_student_ids}")
             cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
             checked_in_students = {row[0] for row in cursor.fetchall()}
-            
-            print(f"Found {len(checked_in_students)} students already checked in for session {session_id}")
-            
-            # Mark absent students from this course
+            print(f"[DEBUG] Checked-in students for session {session_id}: {checked_in_students}")
             for student_id in course_student_ids:
                 if student_id not in checked_in_students:
+                    print(f"[DEBUG] Marking {student_id} as absent (course)")
                     update_student_attendance(student_id, 'absent')
                     absent_count += 1
-                    
         else:  # General session: mark all students who didn't check in
-            # Get all students
             cursor.execute('SELECT student_id FROM students')
             all_student_ids = [row[0] for row in cursor.fetchall()]
-            
-            # Get students who already checked in for this session
+            print(f"[DEBUG] All students: {all_student_ids}")
             cursor.execute('SELECT student_id FROM class_attendees WHERE session_id = ?', (session_id,))
             checked_in_students = {row[0] for row in cursor.fetchall()}
-            
-            # Mark absent students
+            print(f"[DEBUG] Checked-in students for session {session_id}: {checked_in_students}")
             for student_id in all_student_ids:
                 if student_id not in checked_in_students:
+                    print(f"[DEBUG] Marking {student_id} as absent (general)")
                     update_student_attendance(student_id, 'absent')
                     absent_count += 1
-
         if conn:
             conn.commit()
         print(f"Marked {absent_count} students as absent for session {session_id}")
         return absent_count
-        
     except Exception as e:
         if conn:
             conn.rollback()

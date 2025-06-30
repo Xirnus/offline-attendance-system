@@ -42,11 +42,9 @@ function initializeSessionsPage() {
 function formatDateTime(date) {
     return date.toISOString().slice(0, 16);
 }
-
 async function loadActiveSession() {
     try {
-        const response = await fetchWithLoading('/api/session_status');
-        const data = await response.json();
+        const data = await fetchWithLoading('/api/session_status');
         activeSession = data.active_session;
         updateActiveSessionDisplay();
     } catch (error) {
@@ -152,11 +150,9 @@ async function stopActiveSession() {
 async function fetchProfiles(filter = '') {
     console.log('Fetching profiles...'); // Debug log
     try {
-        const response = await fetchWithLoading('/api/session_profiles');
-        const data = await response.json();
+        const data = await fetchWithLoading('/api/session_profiles');
         console.log('Profiles data:', data); // Debug log
         currentProfiles = Array.isArray(data.profiles) ? data.profiles : [];
-        
         if (filter) {
             filterProfiles(filter);
         } else {
@@ -378,7 +374,7 @@ function openManageStudentsModal(profileId) {
     refreshEnrolledStudents();
     refreshAvailableStudents();
     
-    document.getElementById('manageStudentsModal').style.display = 'block';
+    showModal('manageStudentsModal');
 }
 
 function setupStudentSearch() {

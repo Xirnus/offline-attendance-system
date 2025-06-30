@@ -26,11 +26,40 @@ let hiddenDeviceHashes = new Set();
 document.addEventListener('DOMContentLoaded', function() {
   loadHiddenData(); // Load hidden data from localStorage
   loadSettings();
-  loadData();
+  loadDashboardDataFromLocalStorage();
   loadSessionProfiles();
   setupEventListeners();
   setupSettingsEventListeners();
   checkSessionStatusWithExpiration();
+  
+  // --- SESSION CONTROL & INSTRUCTIONS LAYOUT ---
+  // Wrap session control and instructions in a flex container
+  const sessionControl = document.getElementById('session-control');
+  const instructions = document.getElementById('instructions');
+  if (sessionControl && instructions) {
+    // Create a flex wrapper
+    const flexWrapper = document.createElement('div');
+    flexWrapper.style.display = 'flex';
+    flexWrapper.style.justifyContent = 'center';
+    flexWrapper.style.alignItems = 'flex-start';
+    flexWrapper.style.gap = '32px';
+    flexWrapper.style.margin = '0 auto 24px auto';
+    flexWrapper.style.width = '100%';
+    // Style session control to be smaller
+    sessionControl.style.maxWidth = '340px';
+    sessionControl.style.minWidth = '260px';
+    sessionControl.style.width = '100%';
+    sessionControl.style.boxSizing = 'border-box';
+    sessionControl.style.margin = '0 auto';
+    // Style instructions to not be too wide
+    instructions.style.maxWidth = '500px';
+    instructions.style.width = '100%';
+    instructions.style.boxSizing = 'border-box';
+    // Move both into the flex wrapper
+    sessionControl.parentNode.insertBefore(flexWrapper, sessionControl);
+    flexWrapper.appendChild(sessionControl);
+    flexWrapper.appendChild(instructions);
+  }
   
   // Refresh intervals
   setInterval(loadData, 5000);
@@ -46,6 +75,91 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+// Load session profiles
+async function loadSessionProfiles() {
+  try {
+    const response = await fetch('/api/session_profiles');
+    const data = await response.json();
+    sessionProfiles = data.profiles || [];
+    console.log('Loaded session profiles:', sessionProfiles);
+  } catch (error) {
+    console.error('Error loading session profiles:', error);
+    sessionProfiles = [];
+  }
+}
+
+// Load dashboard data from localStorage if available
+function loadDashboardDataFromLocalStorage() {
+  try {
+    const attendances = localStorage.getItem('attendanceData');
+    const denied = localStorage.getItem('deniedAttempts');
+    const devices = localStorage.getItem('deviceFingerprints');
+    attendanceData = attendances ? JSON.parse(attendances) : [];
+    deniedAttempts = denied ? JSON.parse(denied) : [];
+    deviceFingerprints = devices ? JSON.parse(devices) : [];
+  } catch (e) {
+    attendanceData = [];
+    deniedAttempts = [];
+    deviceFingerprints = [];
+  }
+}
+
+// Save dashboard data to localStorage
+function saveDashboardDataToLocalStorage() {
+  try {
+    localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+    localStorage.setItem('deniedAttempts', JSON.stringify(deniedAttempts));
+    localStorage.setItem('deviceFingerprints', JSON.stringify(deviceFingerprints));
+  } catch (e) {}
+}
+
+// Helper to get current session ID from backend
+async function getCurrentSessionId() {
+  try {
+    const res = await fetch('/api/session_status');
+    const data = await res.json();
+    if (data && data.session && data.session.id) {
+      return data.session.id;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// Override loadData to filter by current session before saving to localStorage
+function loadData() {
+  if (loadDataTimeout) clearTimeout(loadDataTimeout);
+  loadDataTimeout = setTimeout(async () => {
+    try {
+      const sessionId = await getCurrentSessionId();
+      // Fetch from backend as usual
+      const [attRes, deniedRes, deviceRes] = await Promise.all([
+        fetch('/api/attendances'),
+        fetch('/api/denied_attempts'),
+        fetch('/api/device_fingerprints')
+      ]);
+      const [attData, deniedData, deviceData] = await Promise.all([
+        attRes.json(), deniedRes.json(), deviceRes.json()
+      ]);
+      // Filter by sessionId if available
+      attendanceData = sessionId ? (attData || []).filter(a => a.session_id == sessionId) : (attData || []);
+      deniedAttempts = sessionId ? (deniedData || []).filter(d => d.session_id == sessionId) : (deniedData || []);
+      deviceFingerprints = sessionId ? (deviceData || []).filter(dev => dev.last_session_id == sessionId || dev.session_id == sessionId) : (deviceData || []);
+      saveDashboardDataToLocalStorage();
+      loadDashboardDataFromLocalStorage();
+      updateAttendanceTable();
+      updateDeniedTable();
+      updateDeviceTable();
+      updateStatisticsGrid && updateStatisticsGrid();
+    } catch (e) {
+      loadDashboardDataFromLocalStorage();
+      updateAttendanceTable();
+      updateDeniedTable();
+      updateDeviceTable();
+      updateStatisticsGrid && updateStatisticsGrid();
+    }
+  }, 100);
+}
 
 // Load session profiles
 async function loadSessionProfiles() {
@@ -558,6 +672,11 @@ function stopSession() {
       const absentCount = data.absent_marked || 0;
       const dataCleared = data.data_cleared || false;
       const clearedCounts = data.cleared_counts || {};
+      
+      // Clear localStorage dashboard data
+      localStorage.removeItem('attendanceData');
+      localStorage.removeItem('deniedAttempts');
+      localStorage.removeItem('deviceFingerprints');
       
       let message = '';
       if (absentCount > 0) {

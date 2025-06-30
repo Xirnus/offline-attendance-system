@@ -36,5 +36,35 @@
 
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     <script src="{{ url_for('static', filename='js/checkin.js') }}"></script>
+    <script>
+      // Ensure visitor_id is present in URL for /scan/<token>
+      (function() {
+        function getVisitorId() {
+          try {
+            // Try FingerprintJS v3/v4 global
+            if (window.FingerprintJS && FingerprintJS.load) {
+              return FingerprintJS.load().then(fp => fp.get()).then(res => res.visitorId);
+            }
+            // Try localStorage
+            if (localStorage.getItem('visitor_id')) {
+              return Promise.resolve(localStorage.getItem('visitor_id'));
+            }
+          } catch (e) {}
+          return Promise.resolve(null);
+        }
+        function hasVisitorIdInUrl() {
+          return window.location.search.includes('visitor_id=');
+        }
+        if (!hasVisitorIdInUrl()) {
+          getVisitorId().then(function(visitorId) {
+            if (visitorId) {
+              var url = new URL(window.location.href);
+              url.searchParams.set('visitor_id', visitorId);
+              window.location.replace(url.toString());
+            }
+          });
+        }
+      })();
+    </script>
 </body>
 </html>

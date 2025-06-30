@@ -103,17 +103,21 @@ def scan(token):
             'user_agent': request.headers.get('User-Agent', ''),
             'language': request.headers.get('Accept-Language', ''),
             'platform': request.headers.get('Sec-Ch-Ua-Platform', '').replace('"', ''),
+            'visitor_id': request.args.get('visitor_id', '')  # <-- Ensure visitor_id is set from query param
         }
-        
+        # Only proceed if visitor_id is present
+        if not request_data.get('visitor_id'):
+            print("[DEBUG] No visitor_id present, not storing device fingerprint or linking token.")
+            return render_template('index.html', token=token)
         device_info = generate_comprehensive_fingerprint(request_data)
         device_sig = device_info.get('device_signature', {})
-        fingerprint_hash = create_fingerprint_hash(device_info)
+        fingerprint_hash = create_fingerprint_hash(request_data)
         
         # Get or create device fingerprint record
         device_fingerprint = store_device_fingerprint(fingerprint_hash, device_info)
         device_fingerprint_id = device_fingerprint['id']
         
-        valid, message = validate_token_access(token_data, device_fingerprint_id)
+        valid, message = validate_token_access(token_data, fingerprint_hash)
         if not valid:
             print(f"Token access validation failed: {message}")
             return f"<h3>{message}</h3>", 400
@@ -232,6 +236,30 @@ def checkin():
             })
             record_denied_attempt(enhanced_data, 'device_already_used_in_session')
             return jsonify(status='error', message='This device has already been used to check in for this session'), 409
+
+        # --- ENFORCE DEVICE MATCH: Only allow check-in from device that opened the QR code ---
+        token_device_fingerprint_id = token_data.get('device_fingerprint_id')
+        if token_device_fingerprint_id:
+            import sqlite3
+            from config import Config
+            conn = sqlite3.connect(Config.DATABASE_PATH)
+            cursor = conn.cursor()
+            # Get the fingerprint_hash for the device that opened the QR
+            cursor.execute('SELECT fingerprint_hash FROM device_fingerprints WHERE id = ?', (token_device_fingerprint_id,))
+            row = cursor.fetchone()
+            conn.close()
+            token_fingerprint_hash = row[0] if row else None
+            # Generate the current fingerprint hash using visitor_id and user_agent
+            from services.fingerprint import create_fingerprint_hash
+            current_fingerprint_hash = create_fingerprint_hash({
+                'visitor_id': visitor_id,
+                'user_agent': user_agent
+            })
+            # Compare the hashes
+            if str(token_fingerprint_hash) != str(current_fingerprint_hash):
+                print(f"Device mismatch: token opened by fingerprint_hash={token_fingerprint_hash}, current fingerprint_hash={current_fingerprint_hash}")
+                return jsonify(status='error', message='Check-in denied: Please use the same device that opened the QR code.'), 403
+        # --- END ENFORCE DEVICE MATCH ---
 
         # Enrollment checks for class (unchanged)
         course = active_session.get('course')

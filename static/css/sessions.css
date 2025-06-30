@@ -350,6 +350,10 @@
     background-color: rgba(0,0,0,0.5);
 }
 
+.modal.show {
+    display: block !important;
+}
+
 .modal-content {
     background-color: white;
     position: absolute;

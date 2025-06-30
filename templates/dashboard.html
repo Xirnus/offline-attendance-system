@@ -110,10 +110,24 @@
             </div>
 
             <!-- QR Code Section -->
-            <div class="qr-section">
-              <img id="qr-img" class="qr-code" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIFFSIENvZGU8L3RleHQ+PC9zdmc+" alt="QR Code" />
-              <button id="generate-btn" class="btn btn-primary" style="width: 100%;">Generate New QR Code</button>
-              <div id="qr-status" style="margin: 10px 0; font-size: 14px; color: #666;">Click to generate a QR code</div>
+            <div class="qr-section" style="display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 32px; width: 100%;">
+              <div style="flex: 0 0 auto; text-align: center;">
+                <img id="qr-img" class="qr-code" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIFFSIENvZGU8L3RleHQ+PC9zdmc+" alt="QR Code" />
+                <button id="generate-btn" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Generate New QR Code</button>
+                <div id="qr-status" style="margin: 10px 0; font-size: 14px; color: #666;">Click to generate a QR code</div>
+              </div>
+              <!-- Instructions Box -->
+              <div style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 18px 20px; min-width: 240px; max-width: 320px; font-size: 15px; color: #333; box-sizing: border-box; text-align: left;">
+                <h4 style="margin-top: 0; margin-bottom: 10px; color: #007bff; font-size: 17px; text-align: center;">Instructions</h4>
+                <ol style="padding-left: 18px; margin-bottom: 0;">
+                  <li style="margin-bottom: 8px;">Connect To Laptop Hotspot<br>
+                    <span style="margin-left: 8px; color: #555; font-size: 14px;">Name: <b>Attendance CS</b><br>Password: <b>12345678</b></span>
+                  </li>
+                  <li style="margin-bottom: 8px;">Scan New QR</li>
+                  <li style="margin-bottom: 8px;">Input Student ID <span style="color: #555; font-size: 14px;">(With Dash)</span></li>
+                  <li style="margin-bottom: 0; color: #b22222; font-size: 14px;">Only Works with Built-In Scanners</li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
