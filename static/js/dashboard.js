@@ -45,15 +45,17 @@ document.addEventListener('DOMContentLoaded', function() {
     flexWrapper.style.gap = '32px';
     flexWrapper.style.margin = '0 auto 24px auto';
     flexWrapper.style.width = '100%';
-    // Style session control to be smaller
-    sessionControl.style.maxWidth = '340px';
-    sessionControl.style.minWidth = '260px';
-    sessionControl.style.width = '100%';
-    sessionControl.style.boxSizing = 'border-box';
-    sessionControl.style.margin = '0 auto';
+    // Remove all previous JS width settings for sessionControl
+    // Add a style tag to force #session-control width via CSS
+    let styleTag = document.getElementById('force-session-control-width');
+    if (!styleTag) {
+      styleTag = document.createElement('style');
+      styleTag.id = 'force-session-control-width';
+      styleTag.innerHTML = `#session-control { max-width:260px !important; min-width:260px !important; width:260px !important; flex:0 0 260px !important; box-sizing:border-box !important; margin:0 auto !important; }`;
+      document.head.appendChild(styleTag);
+    }
     // Style instructions to not be too wide
     instructions.style.maxWidth = '500px';
-    instructions.style.width = '100%';
     instructions.style.boxSizing = 'border-box';
     // Move both into the flex wrapper
     sessionControl.parentNode.insertBefore(flexWrapper, sessionControl);
@@ -129,34 +131,92 @@ async function getCurrentSessionId() {
 // Override loadData to filter by current session before saving to localStorage
 function loadData() {
   if (loadDataTimeout) clearTimeout(loadDataTimeout);
+
   loadDataTimeout = setTimeout(async () => {
     try {
+      // Get the current active session ID
       const sessionId = await getCurrentSessionId();
-      // Fetch from backend as usual
-      const [attRes, deniedRes, deviceRes] = await Promise.all([
-        fetch('/api/attendances'),
-        fetch('/api/denied_attempts'),
-        fetch('/api/device_fingerprints')
-      ]);
-      const [attData, deniedData, deviceData] = await Promise.all([
-        attRes.json(), deniedRes.json(), deviceRes.json()
-      ]);
-      // Filter by sessionId if available
-      attendanceData = sessionId ? (attData || []).filter(a => a.session_id == sessionId) : (attData || []);
-      deniedAttempts = sessionId ? (deniedData || []).filter(d => d.session_id == sessionId) : (deniedData || []);
-      deviceFingerprints = sessionId ? (deviceData || []).filter(dev => dev.last_session_id == sessionId || dev.session_id == sessionId) : (deviceData || []);
-      saveDashboardDataToLocalStorage();
-      loadDashboardDataFromLocalStorage();
+
+      // Try to load from localStorage first
+      let attendances = localStorage.getItem('attendanceData');
+      let denied = localStorage.getItem('deniedAttempts');
+      let devices = localStorage.getItem('deviceFingerprints');
+      let loadedFromLocal = attendances && denied && devices;
+
+      if (loadedFromLocal) {
+        attendanceData = sessionId
+          ? (JSON.parse(attendances) || []).filter(a => a.session_id == sessionId)
+          : (JSON.parse(attendances) || []);
+        deniedAttempts = sessionId
+          ? (JSON.parse(denied) || []).filter(d => d.session_id == sessionId)
+          : (JSON.parse(denied) || []);
+        deviceFingerprints = sessionId
+          ? (JSON.parse(devices) || []).filter(dev =>
+              dev.last_session_id == sessionId ||
+              dev.session_id == sessionId
+            )
+          : (JSON.parse(devices) || []);
+      } else {
+        // Fallback: fetch from backend and save to localStorage
+        const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
+          fetchWithLoading('/api/attendances'),
+          fetchWithLoading('/api/denied'),
+          fetchWithLoading('/api/device_fingerprints')
+        ]);
+        attendanceData = sessionId
+          ? (attendanceRes || []).filter(a => a.session_id == sessionId)
+          : (attendanceRes || []);
+        deniedAttempts = sessionId
+          ? (deniedRes || []).filter(d => d.session_id == sessionId)
+          : (deniedRes || []);
+        deviceFingerprints = sessionId
+          ? (devicesRes || []).filter(dev =>
+              dev.last_session_id == sessionId ||
+              dev.session_id == sessionId
+            )
+          : (devicesRes || []);
+        saveDashboardDataToLocalStorage();
+      }
+
+      // Filter out hidden data
+      filterVisibleData();
+      
+      // Check for actually new data by comparing counts
+      const hasNewAttendance = attendanceData.length > previousAttendanceCount;
+      const hasNewDenied = deniedAttempts.length > previousDeniedCount;
+      const hasNewDevice = deviceFingerprints.length > previousDeviceCount;
+      const hasAnyNewData = hasNewAttendance || hasNewDenied || hasNewDevice;
+
+      // Check if current token has been used
+      if (currentToken && autoRegenerateEnabled) {
+        checkTokenUsageAndRegenerate(attendanceData, deniedAttempts);
+      }
+
       updateAttendanceTable();
       updateDeniedTable();
       updateDeviceTable();
-      updateStatisticsGrid && updateStatisticsGrid();
-    } catch (e) {
-      loadDashboardDataFromLocalStorage();
-      updateAttendanceTable();
-      updateDeniedTable();
-      updateDeviceTable();
-      updateStatisticsGrid && updateStatisticsGrid();
+      updateStatisticsGrid(); 
+      
+      // Only show notification for actually new data, and only after initial load
+      if (hasAnyNewData && lastUpdateTime > 0) {
+        let notificationMessage = 'New activity detected: ';
+        let activities = [];
+        if (hasNewAttendance) activities.push('check-ins');
+        if (hasNewDenied) activities.push('denied attempts');
+        if (hasNewDevice) activities.push('devices');
+        notificationMessage += activities.join(', ');
+        
+        showNotification(notificationMessage, 'info', 2000);
+      }
+      
+      // Update previous counts for next comparison
+      previousAttendanceCount = attendanceData.length;
+      previousDeniedCount = deniedAttempts.length;
+      previousDeviceCount = deviceFingerprints.length;
+      
+      lastUpdateTime = Date.now();
+    } catch (error) {
+      console.error('Error loading data:', error);
     }
   }, 100);
 }
@@ -179,17 +239,50 @@ function loadData() {
   
   loadDataTimeout = setTimeout(async () => {
     try {
-      const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
-        fetchWithLoading('/api/attendances'),
-        fetchWithLoading('/api/denied'),
-        fetchWithLoading('/api/device_fingerprints')
-      ]);
-      
-      // Store original data
-      attendanceData = attendanceRes;
-      deniedAttempts = deniedRes;
-      deviceFingerprints = devicesRes;
-      
+      // Get the current active session ID
+      const sessionId = await getCurrentSessionId();
+
+      // Try to load from localStorage first
+      let attendances = localStorage.getItem('attendanceData');
+      let denied = localStorage.getItem('deniedAttempts');
+      let devices = localStorage.getItem('deviceFingerprints');
+      let loadedFromLocal = attendances && denied && devices;
+
+      if (loadedFromLocal) {
+        attendanceData = sessionId
+          ? (JSON.parse(attendances) || []).filter(a => a.session_id == sessionId)
+          : (JSON.parse(attendances) || []);
+        deniedAttempts = sessionId
+          ? (JSON.parse(denied) || []).filter(d => d.session_id == sessionId)
+          : (JSON.parse(denied) || []);
+        deviceFingerprints = sessionId
+          ? (JSON.parse(devices) || []).filter(dev =>
+              dev.last_session_id == sessionId ||
+              dev.session_id == sessionId
+            )
+          : (JSON.parse(devices) || []);
+      } else {
+        // Fallback: fetch from backend and save to localStorage
+        const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
+          fetchWithLoading('/api/attendances'),
+          fetchWithLoading('/api/denied'),
+          fetchWithLoading('/api/device_fingerprints')
+        ]);
+        attendanceData = sessionId
+          ? (attendanceRes || []).filter(a => a.session_id == sessionId)
+          : (attendanceRes || []);
+        deniedAttempts = sessionId
+          ? (deniedRes || []).filter(d => d.session_id == sessionId)
+          : (deniedRes || []);
+        deviceFingerprints = sessionId
+          ? (devicesRes || []).filter(dev =>
+              dev.last_session_id == sessionId ||
+              dev.session_id == sessionId
+            )
+          : (devicesRes || []);
+        saveDashboardDataToLocalStorage();
+      }
+
       // Filter out hidden data
       filterVisibleData();
       
@@ -325,6 +418,109 @@ function setupEventListeners() {
     }
   });
 }
+
+// Add manual student input UI to the right column
+
+document.addEventListener('DOMContentLoaded', function() {
+  const manualStudentForm = document.getElementById('manual-student-form');
+  if (manualStudentForm) {
+    manualStudentForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const studentId = this.student_id.value.trim();
+      const studentName = this.student_name.value.trim();
+      const studentCourse = this.student_course.value.trim();
+      const studentYear = this.student_year.value.trim();
+      const messageBox = document.getElementById('manual-student-message');
+      
+      // Basic validation
+      if (!studentId || !studentName) {
+        messageBox.textContent = 'Student ID and Name are required.';
+        messageBox.style.color = 'red';
+        return;
+      }
+      
+      messageBox.textContent = 'Adding student...';
+      messageBox.style.color = '#007bff';
+      
+      try {
+        // Send data to server
+        const response = await fetch('/api/add_student_manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: studentId,
+            student_name: studentName,
+            student_course: studentCourse,
+            student_year: studentYear
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.status === 'success') {
+          messageBox.textContent = 'Student added successfully!';
+          messageBox.style.color = 'green';
+          
+          // Optionally, clear the form
+          this.reset();
+        } else {
+          throw new Error(result.message || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('Error adding student:', error);
+        messageBox.textContent = 'Error adding student: ' + error.message;
+        messageBox.style.color = 'red';
+      }
+    });
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Manual student input form handler
+  const manualStudentForm = document.getElementById('manual-student-form');
+  const manualStudentMessage = document.getElementById('manual-student-message');
+  if (manualStudentForm) {
+    manualStudentForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      if (manualStudentMessage) manualStudentMessage.textContent = '';
+      const student_id = document.getElementById('manual-student-id').value.trim();
+      const student_name = document.getElementById('manual-student-name').value.trim();
+      const student_course = document.getElementById('manual-student-course').value.trim();
+      const student_year = document.getElementById('manual-student-year').value.trim();
+      if (!student_id || !student_name) {
+        manualStudentMessage.textContent = 'Student ID and Name are required.';
+        manualStudentMessage.style.color = '#b22222';
+        return;
+      }
+      try {
+        const res = await fetch('/api/manual_attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id,
+            student_name,
+            student_course,
+            student_year
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          manualStudentMessage.textContent = 'Student attendance recorded!';
+          manualStudentMessage.style.color = '#28a745';
+          manualStudentForm.reset();
+          loadData && loadData();
+        } else {
+          manualStudentMessage.textContent = data.message || 'Failed to record attendance.';
+          manualStudentMessage.style.color = '#b22222';
+        }
+      } catch (err) {
+        manualStudentMessage.textContent = 'Error connecting to server.';
+        manualStudentMessage.style.color = '#b22222';
+      }
+    });
+  }
+});
 
 async function showSessionCreationModal() {
   // Fetch class list for the dropdown
