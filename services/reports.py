@@ -80,7 +80,7 @@ class ReportsService:
         
         # Get data
         students_data = get_students_with_attendance_data()
-        attendance_data = get_all_data('attendances')
+        attendance_data = get_all_data('student_attendance_summary')
         
         # Summary statistics
         total_students = len(students_data)
@@ -158,7 +158,7 @@ class ReportsService:
         
         # Get all data
         students_data = get_students_with_attendance_data()
-        attendance_data = get_all_data('attendances')
+        attendance_data = get_all_data('student_attendance_summary')
         sessions_data = get_all_data('attendance_sessions')
         denied_attempts = get_all_data('denied_attempts')
         
@@ -260,7 +260,7 @@ class ReportsService:
             data = get_students_with_attendance_data()
             headers = ['student_id', 'name', 'course', 'year', 'last_check_in', 'status', 'absent_count', 'created_at']
         elif data_type == "attendance":
-            data = get_all_data('attendances')
+            data = get_all_data('student_attendance_summary')
             headers = ['id', 'student_id', 'session_id', 'checkin_time', 'device_info', 'fingerprint_hash']
         elif data_type == "sessions":
             data = get_all_data('attendance_sessions')
