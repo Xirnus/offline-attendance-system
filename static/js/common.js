@@ -489,7 +489,22 @@ async function fetchWithLoading(url, options = {}, loadingButton = null) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Server error (${response.status}): ${errorText}`);
+      
+      // Try to parse error response as JSON to extract structured error messages
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.message) {
+          throw new Error(errorData.message);
+        } else if (errorData.error) {
+          throw new Error(errorData.error);
+        } else {
+          // If JSON but no message/error field, use the whole response
+          throw new Error(`Server error (${response.status}): ${errorText}`);
+        }
+      } catch (jsonError) {
+        // If not JSON, use the raw text
+        throw new Error(`Server error (${response.status}): ${errorText}`);
+      }
     }
     
     const contentType = response.headers.get('content-type');

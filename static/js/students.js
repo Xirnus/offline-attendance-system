@@ -217,90 +217,65 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showEditStudentModal(student) {
         const modalHTML = `
-            <div id="editStudentModal" style="
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-                background: rgba(0,0,0,0.5); display: flex; justify-content: center; 
-                align-items: center; z-index: 1000;">
-                <div style="
-                    background: white; padding: 30px; border-radius: 10px; 
-                    width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3 style="margin: 0; color: #333;">Edit Student: ${escapeHtml(student.name)}</h3>
-                        <button onclick="closeEditStudentModal()" style="
-                            border: none; background: #ccc; border-radius: 50%; 
-                            width: 30px; height: 30px; cursor: pointer; font-size: 18px;">×</button>
+            <div id="editStudentModal" class="modern-modal-overlay">
+                <div class="modern-modal">
+                    <div class="modern-modal-header">
+                        <h3>Edit Student: ${escapeHtml(student.name)}</h3>
+                        <button type="button" class="modern-modal-close" onclick="closeEditStudentModal()">×</button>
                     </div>
-                    
                     <form id="editStudentForm">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Student ID *</label>
-                            <input type="text" id="editStudentId" value="${escapeHtml(student.student_id)}" required readonly
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px; background: #f5f5f5;">
+                        <div class="modern-modal-group">
+                            <label>Student ID *</label>
+                            <input type="text" id="editStudentId" value="${escapeHtml(student.student_id)}" required readonly>
                         </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Name *</label>
-                            <input type="text" id="editStudentName" value="${escapeHtml(student.name)}" required
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                        <div class="modern-modal-group">
+                            <label>Name *</label>
+                            <input type="text" id="editStudentName" value="${escapeHtml(student.name)}" required>
                         </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Course *</label>
-                            <input type="text" id="editStudentCourse" value="${escapeHtml(student.course || '')}" required
-                                style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                        <div class="modern-modal-group">
+                            <label>Course *</label>
+                            <input type="text" id="editStudentCourse" value="${escapeHtml(student.course || '')}" required>
                         </div>
-                        
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Year *</label>
-                            <select id="editStudentYear" required 
-                                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                        <div class="modern-modal-group">
+                            <label>Year *</label>
+                            <select id="editStudentYear" required>
                                 <option value="">Select year</option>
                                 ${[1,2,3,4,5].map(year => 
                                     `<option value="${year}" ${student.year === year.toString() ? 'selected' : ''}>${year}${getOrdinalSuffix(year)} Year</option>`
                                 ).join('')}
                             </select>
                         </div>
-                        
-                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-                            <h4 style="margin-bottom: 15px; color: #555;">📊 Attendance Statistics:</h4>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="modern-modal-stats">
+                            <h4>📊 Attendance Statistics:</h4>
+                            <div class="modern-modal-stats-row">
                                 <div>
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #28a745;">Present Count:</label>
-                                    <input type="number" id="editPresentCount" value="${student.present_count || 0}" min="0" max="999"
-                                        style="width: 100%; padding: 8px; border: 1px solid #28a745; border-radius: 3px;">
+                                    <label>Present Count:</label>
+                                    <input type="number" id="editPresentCount" value="${student.present_count || 0}" min="0" max="999">
                                 </div>
-                                
                                 <div>
-                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #dc3545;">Absent Count:</label>
-                                    <input type="number" id="editAbsentCount" value="${student.absent_count || 0}" min="0" max="999"
-                                        style="width: 100%; padding: 8px; border: 1px solid #dc3545; border-radius: 3px;">
+                                    <label>Absent Count:</label>
+                                    <input type="number" id="editAbsentCount" value="${student.absent_count || 0}" min="0" max="999">
                                 </div>
                             </div>
-                            
-                            <div style="margin-bottom: 15px;">
-                                <label style="display: block; margin-bottom: 5px; font-weight: bold;">Current Status:</label>
-                                <select id="editStudentStatus" 
-                                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                            <div class="modern-modal-group">
+                                <label>Current Status:</label>
+                                <select id="editStudentStatus">
                                     <option value="">No Status</option>
                                     <option value="present" ${student.status === 'present' ? 'selected' : ''}>Present</option>
                                     <option value="absent" ${student.status === 'absent' ? 'selected' : ''}>Absent</option>
+                                    <option value="late" ${student.status === 'late' ? 'selected' : ''}>Late</option>
                                 </select>
                             </div>
-                            
-                            <div id="attendanceRate" style="
-                                padding: 10px; background: #e9ecef; border-radius: 3px; 
-                                text-align: center; font-weight: bold;">
+                            <div id="attendanceRate" class="modern-modal-rate">
                                 Attendance Rate: <span id="currentRate">${calculateAttendanceRatio(student.present_count, student.absent_count)}</span>
                             </div>
                         </div>
-                        
-                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                            <button type="button" onclick="closeEditStudentModal()" style="background: #6c757d; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
-                            <button type="button" onclick="deleteStudent('${student.student_id.replace(/'/g, "\\'")}')" style="background: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Delete</button>
-                            <button type="submit" style="background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer;">Save Changes</button>
+                        <div class="modern-modal-actions">
+                            <button type="button" class="modern-btn modern-btn-secondary" onclick="closeEditStudentModal()">Cancel</button>
+                            <button type="button" class="modern-btn modern-btn-danger" onclick="deleteStudent('${student.student_id.replace(/'/g, "\\'")})">Delete</button>
+                            <button type="submit" class="modern-btn modern-btn-primary">Save Changes</button>
                         </div>
+                        <div id="editStudentSuccessMsg" class="modern-modal-success" style="display:none;">Student updated successfully!</div>
                     </form>
                 </div>
             </div>
@@ -353,21 +328,20 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateStudent(originalStudentId) {
         const name = document.getElementById('editStudentName').value.trim();
         const course = document.getElementById('editStudentCourse').value.trim();
-        const year = document.getElementById('editStudentYear').value;
+        const year = parseInt(document.getElementById('editStudentYear').value, 10);
         const presentCount = parseInt(document.getElementById('editPresentCount').value) || 0;
         const absentCount = parseInt(document.getElementById('editAbsentCount').value) || 0;
         const status = document.getElementById('editStudentStatus').value || null;
-        
+
         if (!name || !course || !year) {
-            alert('Name, Course, and Year are required');
+            showModernModalError('Name, Course, and Year are required');
             return;
         }
-        
         if (presentCount < 0 || absentCount < 0) {
-            alert('Attendance counts cannot be negative');
+            showModernModalError('Attendance counts cannot be negative');
             return;
         }
-        
+
         fetch(`/api/students/${originalStudentId}`, {
             method: 'PUT',
             headers: {
@@ -389,20 +363,40 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             if (data.error) {
-                alert('Error: ' + data.error);
+                showModernModalError('Error: ' + data.error);
             } else {
-                alert('Student updated successfully!');
-                closeEditStudentModal();
-                loadStudents();
-                // Additional refreshes for data consistency
-                setTimeout(loadStudents, 500);
-                setTimeout(loadStudents, 1000);
+                // Show success message in modal, then close after a short delay
+                const msg = document.getElementById('editStudentSuccessMsg');
+                if (msg) {
+                    msg.style.display = 'block';
+                    setTimeout(() => {
+                        closeEditStudentModal();
+                        loadStudents();
+                    }, 1200);
+                } else {
+                    closeEditStudentModal();
+                    loadStudents();
+                }
             }
         })
         .catch(error => {
-            console.error('Error updating student:', error);
-            alert('Error updating student: ' + error.message);
+            showModernModalError('Error updating student: ' + error.message);
         });
+    }
+
+    // Show error in modal (modern look)
+    function showModernModalError(msg) {
+        let errorDiv = document.getElementById('editStudentErrorMsg');
+        if (!errorDiv) {
+            const form = document.getElementById('editStudentForm');
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'editStudentErrorMsg';
+            errorDiv.className = 'modern-modal-error';
+            form.insertBefore(errorDiv, form.firstChild);
+        }
+        errorDiv.textContent = msg;
+        errorDiv.style.display = 'block';
+        setTimeout(() => { if (errorDiv) errorDiv.style.display = 'none'; }, 2000);
     }
 
     window.deleteStudent = function(studentId) {
@@ -469,12 +463,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Utility functions
     function getStatusClass(status) {
         return status === 'present' ? 'status-present' : 
-               status === 'absent' ? 'status-absent' : 'status-na';
+               status === 'absent' ? 'status-absent' :
+               status === 'late' ? 'status-late' : 'status-na';
     }
     
     function formatStatus(status) {
         return status === 'present' ? 'Present' : 
-               status === 'absent' ? 'Absent' : 'N/A';
+               status === 'absent' ? 'Absent' :
+               status === 'late' ? 'Late' : 'N/A';
     }
     
     function formatLastCheckIn(lastCheckIn) {

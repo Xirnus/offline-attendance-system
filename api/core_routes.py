@@ -19,7 +19,7 @@ from database.operations import (
     get_active_session, create_token, get_token, 
     update_token, record_attendance, record_denied_attempt,
     is_device_already_used_in_session, is_student_in_class,
-    is_student_already_checked_in_session
+    is_student_already_checked_in_session, is_device_already_checked_in_session
 )
 from services.fingerprint import generate_comprehensive_fingerprint, create_fingerprint_hash
 from services.attendance import is_fingerprint_allowed, store_device_fingerprint
@@ -306,7 +306,7 @@ def checkin():
 
         # Check device limits (if any, using visitor_id)
         print("Checking device limits...")
-        allowed, reason = is_fingerprint_allowed(device_id)
+        allowed, reason = is_fingerprint_allowed(device_id, session_id)
         if not allowed:
             print(f"Device blocked: {reason}")
             enhanced_data = data.copy()
@@ -325,12 +325,13 @@ def checkin():
         print("Storing device info and recording attendance in a single transaction...")
         import sqlite3
         from config import Config  # <-- FIX: import Config here
+        from datetime import datetime, timedelta
         conn = sqlite3.connect(Config.DATABASE_PATH)
         cursor = conn.cursor()
         try:
             # Store or update device fingerprint
             import json
-            current_time = __import__('datetime').datetime.utcnow().isoformat()
+            current_time = datetime.utcnow().isoformat()
             # Use only the minimal device info sent by frontend
             minimal_device_info = {
                 'visitor_id': visitor_id,
@@ -360,6 +361,34 @@ def checkin():
             from database.operations import update_token
             update_token(token, used=True, device_fingerprint_id=device_fingerprint_id, conn=conn)
             print("Token marked as used")
+
+            # --- LATE ATTENDANCE LOGIC ---
+            # Determine if check-in is late
+            session_start = active_session.get('start_time')
+            late_minutes = active_session.get('late_minutes', 15)
+            session_end = active_session.get('end_time')
+            now_utc = datetime.utcnow().replace(tzinfo=None)
+            is_late = False
+            if session_start and session_end:
+                try:
+                    # Remove timezone info if present
+                    def strip_tz(dtstr):
+                        if dtstr.endswith('Z'):
+                            dtstr = dtstr[:-1]
+                        if '+' in dtstr:
+                            dtstr = dtstr.split('+')[0]
+                        if '-' in dtstr[10:]:
+                            # Handles e.g. 2024-07-02T12:00:00-04:00
+                            dtstr = dtstr[:19]
+                        return dtstr
+                    start_dt = datetime.fromisoformat(strip_tz(session_start))
+                    end_dt = datetime.fromisoformat(strip_tz(session_end))
+                    late_threshold = start_dt + timedelta(minutes=int(late_minutes))
+                    if now_utc >= late_threshold and now_utc < end_dt:
+                        is_late = True
+                except Exception as e:
+                    print(f"Error parsing session times for late logic: {e}")
+
             # Record attendance
             print("Recording attendance...")
             attendance_data = {
@@ -372,9 +401,16 @@ def checkin():
                 'year': str(student['year']),
                 'device_info': device_info_str,
             }
-            from database.operations import record_attendance
+            from database.operations import record_attendance, update_student_attendance
             record_attendance(attendance_data, conn=conn)  # pass conn to avoid DB lock
             print("Attendance recorded")
+            # Update student attendance summary for present or late count
+            if is_late:
+                update_student_attendance(student_id, 'late', conn=conn)
+                status_msg = 'late'
+            else:
+                update_student_attendance(student_id, 'present', conn=conn)
+                status_msg = 'present'
             conn.commit()
             conn.close()
         except Exception as e:
@@ -384,10 +420,11 @@ def checkin():
             import traceback
             traceback.print_exc()
             return jsonify(status='error', message='Server error occurred'), 500
-        print(f"Check-in successful for {student['name']}")
+        print(f"Check-in successful for {student['name']} (status: {status_msg})")
         return jsonify(
             status='success', 
-            message=f'Welcome {student["name"]}! Attendance recorded successfully'
+            message=f'Welcome {student["name"]}! Attendance recorded successfully',
+            attendance_status=status_msg
         )
     except Exception as e:
         print(f"Check-in error: {str(e)}")
@@ -444,4 +481,51 @@ def delete_all_data():
         return jsonify({
             'status': 'error',
             'message': f'Failed to delete data: {str(e)}'
+        }), 500
+
+
+@core_bp.route('/api/check_device_status', methods=['POST'])
+def check_device_status():
+    """Check if a device has already checked in for the current session"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        
+        fingerprint_hash = data.get('fingerprint_hash')
+        if not fingerprint_hash:
+            return jsonify({'status': 'error', 'message': 'Fingerprint hash required'}), 400
+        
+        # Get current active session
+        session = get_active_session()
+        if not session:
+            return jsonify({
+                'status': 'success', 
+                'has_checked_in': False,
+                'message': 'No active session'
+            })
+        
+        session_id = session['id']
+        
+        # Check if device has already been used in this session
+        already_used = is_device_already_used_in_session(fingerprint_hash, session_id)
+        
+        # Also check if any student with this device has already checked in
+        already_checked_in = is_device_already_checked_in_session(fingerprint_hash, session_id)
+        
+        return jsonify({
+            'status': 'success',
+            'has_checked_in': already_used or already_checked_in,
+            'session_id': session_id,
+            'session_name': session.get('session_name', 'Unknown'),
+            'message': 'Device already checked in for this session' if (already_used or already_checked_in) else 'Device can check in'
+        })
+        
+    except Exception as e:
+        print(f"Error checking device status: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to check device status: {str(e)}'
         }), 500

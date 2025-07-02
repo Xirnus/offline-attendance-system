@@ -78,6 +78,7 @@ TABLES = {
             session_name TEXT,
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
+            late_minutes INTEGER DEFAULT 15,
             is_active BOOLEAN DEFAULT FALSE,
             class_table TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -144,12 +145,12 @@ TABLES = {
             student_id TEXT NOT NULL,
             total_sessions INTEGER DEFAULT 0,
             present_count INTEGER DEFAULT 0,
+            late_count INTEGER DEFAULT 0,
             absent_count INTEGER DEFAULT 0,
             last_session_id INTEGER,
             last_check_in TEXT,
             status TEXT DEFAULT 'active',
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE CASCADE,
             FOREIGN KEY (last_session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL,
             UNIQUE(student_id)
         )

@@ -75,6 +75,11 @@ def create_session():
         profile_id = data.get('profile_id')
         class_table = data.get('class_table')
         reset_status = data.get('reset_status', True)  # Default to True
+        # Accept late_minutes as int, even if 0 or string
+        try:
+            late_minutes = int(data.get('late_minutes', 15))
+        except (ValueError, TypeError):
+            late_minutes = 15
 
         if not all([session_name, start_time, end_time]):
             return jsonify(status='error', message='Missing required fields')
@@ -91,7 +96,7 @@ def create_session():
         # --- Optimized class-based session logic ---
         if class_table is not None and str(class_table).strip().isdigit():
             # Class-based session: set profile_id to None
-            result = create_attendance_session(session_name, start_time, end_time, None, class_table)
+            result = create_attendance_session(session_name, start_time, end_time, None, class_table, late_minutes=late_minutes)
             if result:
                 message = 'Attendance session created for class'
                 if reset_status:
@@ -101,7 +106,7 @@ def create_session():
                 return jsonify(status='error', message='Failed to create class-based session')
         # --- Profile-based or legacy session logic ---
         else:
-            result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table)
+            result = create_attendance_session(session_name, start_time, end_time, profile_id, class_table, late_minutes=late_minutes)
             if result:
                 message = 'Attendance session created'
                 if profile_id:

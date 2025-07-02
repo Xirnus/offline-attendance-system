@@ -360,18 +360,18 @@ def get_student_by_id(student_id):
     return dict(result) if result else None
 
 @retry_db_operation()
-def update_student_attendance(student_id, status):
-    """Update student attendance status using new normalized schema"""
-    conn = None
+def update_student_attendance(student_id, status, conn=None):
+    """Update student attendance status using new normalized schema. Uses provided conn if given, else opens a new one."""
+    close_conn = False
     try:
-        conn = get_db_connection_with_retry()
+        if conn is None:
+            conn = get_db_connection_with_retry()
+            close_conn = True
         cursor = conn.cursor()
-        
         # Get current active session
         cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1 LIMIT 1')
         session = cursor.fetchone()
         session_id = session[0] if session else None
-        
         if status == 'present' and session_id:
             # Record attendance in class_attendees table
             cursor.execute('''
@@ -379,50 +379,69 @@ def update_student_attendance(student_id, status):
                 (student_id, session_id, checked_in_at)
                 VALUES (?, ?, ?)
             ''', (student_id, session_id, datetime.utcnow().isoformat()))
-            
             # Update student attendance summary
             cursor.execute('''
                 INSERT OR REPLACE INTO student_attendance_summary 
-                (student_id, total_sessions, present_count, absent_count, last_session_id, last_check_in, status, updated_at)
+                (student_id, total_sessions, present_count, late_count, absent_count, last_session_id, last_check_in, status, updated_at)
                 SELECT 
                     ?, 
                     COALESCE((SELECT total_sessions FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
                     COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT late_count FROM student_attendance_summary WHERE student_id = ?), 0),
                     COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0),
-                    ?,
+                    ?, 
                     ?,
                     'present',
                     datetime('now')
-            ''', (student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
-            
+            ''', (student_id, student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
             print(f"Updated {student_id} as present for session {session_id}")
-            
-        elif status == 'absent' and session_id:
-            # Update student attendance summary for absent
+        elif status == 'late' and session_id:
+            # Record attendance in class_attendees table (same as present)
+            cursor.execute('''
+                INSERT OR IGNORE INTO class_attendees 
+                (student_id, session_id, checked_in_at)
+                VALUES (?, ?, ?)
+            ''', (student_id, session_id, datetime.utcnow().isoformat()))
+            # Update student attendance summary for late
             cursor.execute('''
                 INSERT OR REPLACE INTO student_attendance_summary 
-                (student_id, total_sessions, present_count, absent_count, last_session_id, status, updated_at)
+                (student_id, total_sessions, present_count, late_count, absent_count, last_session_id, last_check_in, status, updated_at)
                 SELECT 
                     ?, 
                     COALESCE((SELECT total_sessions FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
                     COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0),
+                    COALESCE((SELECT late_count FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0),
+                    ?, 
+                    ?,
+                    'late',
+                    datetime('now')
+            ''', (student_id, student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
+            print(f"Updated {student_id} as late for session {session_id}")
+        elif status == 'absent' and session_id:
+            # Update student attendance summary for absent
+            cursor.execute('''
+                INSERT OR REPLACE INTO student_attendance_summary 
+                (student_id, total_sessions, present_count, late_count, absent_count, last_session_id, status, updated_at)
+                SELECT 
+                    ?, 
+                    COALESCE((SELECT total_sessions FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
+                    COALESCE((SELECT present_count FROM student_attendance_summary WHERE student_id = ?), 0),
+                    COALESCE((SELECT late_count FROM student_attendance_summary WHERE student_id = ?), 0),
                     COALESCE((SELECT absent_count FROM student_attendance_summary WHERE student_id = ?), 0) + 1,
                     ?,
                     'absent',
                     datetime('now')
-            ''', (student_id, student_id, student_id, student_id, session_id))
-            
+            ''', (student_id, student_id, student_id, student_id, student_id, session_id))
             print(f"Updated {student_id} as absent for session {session_id}")
-        
-        conn.commit()
-        
+        if close_conn:
+            conn.commit()
     except Exception as e:
-        if conn:
+        if conn and close_conn:
             conn.rollback()
-        print(f"Error updating student attendance: {e}")
         raise e
     finally:
-        if conn:
+        if conn and close_conn:
             conn.close()
 
             
@@ -546,32 +565,36 @@ def get_active_session():
     except Exception:
         return None
 
-def create_attendance_session(session_name, start_time, end_time, profile_id=None, class_table=None):
+def create_attendance_session(session_name, start_time, end_time, profile_id=None, class_table=None, late_minutes=15):
     """Create attendance session with required profile_id
     For optimized class-based sessions, class_table must be a valid integer class ID.
     For legacy/old sessions, class_table may be a course name or None.
     """
     try:
+        # Reset all student attendance status to null before creating a new session
         conn = get_db_connection()
         cursor = conn.cursor()
+        cursor.execute("UPDATE student_attendance_summary SET status = NULL")
+        conn.commit()
+        conn.close()
 
-        # If no profile_id provided, use default profile
+        # Reopen connection for session creation
+        conn = get_db_connection()
+        cursor = conn.cursor()
         if profile_id is None:
             cursor.execute('SELECT id FROM session_profiles WHERE profile_name = ? LIMIT 1', ('Default Session',))
             profile_result = cursor.fetchone()
             profile_id = profile_result[0] if profile_result else 1
-
         # Deactivate any existing active sessions
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1')
-
         # --- Optimized class-based session logic ---
         # If class_table is not None/empty and is a digit, treat as optimized class ID
         if class_table is not None and str(class_table).strip().isdigit():
             class_id = int(class_table)
             cursor.execute('''
-                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
-                VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
-            ''', (profile_id, session_name, start_time, end_time, class_id))
+                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, late_minutes, is_active, class_table, created_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'))
+            ''', (profile_id, session_name, start_time, end_time, late_minutes, class_id))
             conn.commit()
             conn.close()
             print(f"[Optimized] Created attendance session: {session_name} for class_id: {class_id}")
@@ -581,9 +604,9 @@ def create_attendance_session(session_name, start_time, end_time, profile_id=Non
             # Accept legacy course name or None
             legacy_value = class_table if class_table is not None else None
             cursor.execute('''
-                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, is_active, class_table, created_at)
-                VALUES (?, ?, ?, ?, 1, ?, datetime('now'))
-            ''', (profile_id, session_name, start_time, end_time, legacy_value))
+                INSERT INTO attendance_sessions (profile_id, session_name, start_time, end_time, late_minutes, is_active, class_table, created_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?, datetime('now'))
+            ''', (profile_id, session_name, start_time, end_time, late_minutes, legacy_value))
             conn.commit()
             conn.close()
             print(f"[Legacy] Created attendance session: {session_name} for course: {legacy_value}")
@@ -1009,6 +1032,26 @@ def is_student_already_checked_in_session(student_id, session_id):
         
     except Exception as e:
         print(f"Error checking student check-in: {e}")
+        return False
+
+def is_device_already_checked_in_session(fingerprint_hash, session_id):
+    """Check if a device (by fingerprint) has already checked in for a specific session"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 1 FROM class_attendees ca
+            JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+            WHERE df.fingerprint_hash = ? AND ca.session_id = ?
+        ''', (fingerprint_hash, session_id))
+        
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None
+        
+    except Exception as e:
+        print(f"Error checking device check-in: {e}")
         return False
 
 def get_denied_attempts_with_details(limit=100):

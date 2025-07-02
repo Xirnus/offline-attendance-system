@@ -392,6 +392,7 @@ function setupEventListeners() {
     'save-settings': saveSettings,
     'refresh-data': loadData,
     'clear-all-data': clearAllDataWithModal,
+    'clear-localstorage': clearLocalStorageWithModal,
     'restore-hidden-data': restoreHiddenData
   });
 
@@ -583,6 +584,11 @@ async function showSessionCreationModal() {
             <input type="time" id="manualEndTime" value="${getDefaultEndTime()}" 
                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
           </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Allowed Minutes Before Late:</label>
+            <input type="number" id="manualLateMinutes" min="1" max="120" value="15" 
+                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+          </div>
         </div>
         
         <!-- Profile Session Form -->
@@ -618,6 +624,11 @@ async function showSessionCreationModal() {
             <input type="time" id="profileEndTime" value="${getDefaultEndTime()}" 
                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
           </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Allowed Minutes Before Late:</label>
+            <input type="number" id="profileLateMinutes" min="1" max="120" value="15" 
+                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+          </div>
         </div>
 
         <!-- Class Session Form -->
@@ -636,6 +647,11 @@ async function showSessionCreationModal() {
           <div style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px; font-weight: bold;">End Time:</label>
             <input type="time" id="classEndTime" value="${getDefaultEndTime()}" 
+                   style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Allowed Minutes Before Late:</label>
+            <input type="number" id="classLateMinutes" min="1" max="120" value="15" 
                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
           </div>
         </div>
@@ -728,12 +744,13 @@ async function executeCreateSession() {
   const manualForm = document.getElementById('manualSessionForm');
   const profileForm = document.getElementById('profileSessionForm');
   const classForm = document.getElementById('classSessionForm');
-  let sessionName, endTime, profileId = null, classId = null;
+  let sessionName, endTime, profileId = null, classId = null, lateMinutes = 15;
 
   if (manualForm.style.display !== 'none') {
     // Manual session
     sessionName = document.getElementById('manualSessionName').value;
     endTime = document.getElementById('manualEndTime').value;
+    lateMinutes = Number(document.getElementById('manualLateMinutes').value) || 15;
     if (!sessionName || !endTime) {
       await customAlert('Please fill in all fields', 'Missing Information');
       return;
@@ -744,6 +761,7 @@ async function executeCreateSession() {
     profileId = profileSelect.value;
     sessionName = document.getElementById('profileSessionName').value;
     endTime = document.getElementById('profileEndTime').value;
+    lateMinutes = Number(document.getElementById('profileLateMinutes').value) || 15;
     if (!profileId || !endTime) {
       await customAlert('Please select a profile and set end time', 'Missing Information');
       return;
@@ -757,6 +775,7 @@ async function executeCreateSession() {
     const classSelect = document.getElementById('classSelect');
     classId = classSelect.value;
     endTime = document.getElementById('classEndTime').value;
+    lateMinutes = Number(document.getElementById('classLateMinutes').value) || 15;
     if (!classId || !endTime) {
       await customAlert('Please select a class and set end time', 'Missing Information');
       return;
@@ -779,10 +798,10 @@ async function executeCreateSession() {
   closeCreateSessionModal();
 
   // Add class_id to request if class session
-  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId, classId);
+  createSession(sessionName, now.toISOString(), endDateTime.toISOString(), profileId, classId, lateMinutes);
 }
 
-function createSession(sessionName, startTime, endTime, profileId = null, classId = null) {
+function createSession(sessionName, startTime, endTime, profileId = null, classId = null, lateMinutes = 15) {
   const createBtn = document.getElementById('create-session-btn');
   const originalText = createBtn ? createBtn.textContent : '';
   if (createBtn) {
@@ -793,7 +812,8 @@ function createSession(sessionName, startTime, endTime, profileId = null, classI
   const requestBody = {
     session_name: sessionName,
     start_time: startTime,
-    end_time: endTime
+    end_time: endTime,
+    late_minutes: lateMinutes
   };
 
   // Only send one of profile_id or class_table
@@ -828,7 +848,8 @@ function createSession(sessionName, startTime, endTime, profileId = null, classI
         start_time: startTime,
         end_time: endTime,
         profile_id: profileId,
-        class_table: classId
+        class_table: classId,
+        late_minutes: lateMinutes
       };
       updateButtonVisibility(true, sessionName);
       displaySessionDetails(sessionData);
@@ -920,9 +941,14 @@ function updateButtonVisibility(hasActiveSession, sessionName = '') {
   
   if (hasActiveSession) {
     if (sessionStatus) {
+      // Remove file extension from sessionName for display
+      let displaySessionName = sessionName.replace(/\.[^/.]+$/, '');
       sessionStatus.innerHTML = `
-        <strong>Active: ${sessionName}</strong><br>
-        <small id="session-details">Loading session details...</small>
+        <div class="modern-session-card">
+          <div class="modern-session-title">Active Session</div>
+          <strong>${displaySessionName}</strong>
+          <div id="session-details">Loading session details...</div>
+        </div>
       `;
     }
     if (createSessionBtn) {
@@ -958,11 +984,13 @@ function displaySessionDetails(session) {
     const startTime = new Date(session.start_time);
     const endTime = new Date(session.end_time);
     const now = new Date();
-    
+    const lateMinutes = session.late_minutes !== undefined ? Number(session.late_minutes) : 15;
+    const lateThreshold = new Date(startTime.getTime() + lateMinutes * 60000);
+
     const timeRemaining = endTime - now;
     const hoursRemaining = Math.floor(timeRemaining / (1000 * 60 * 60));
     const minutesRemaining = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
-    
+
     let timeRemainingText = '';
     if (timeRemaining > 0) {
       if (hoursRemaining > 0) {
@@ -975,27 +1003,31 @@ function displaySessionDetails(session) {
     } else {
       timeRemainingText = 'Session expired';
     }
-    
-    let detailsHTML = `
-      Started: ${startTime.toLocaleString()}<br>
-      Ends: ${endTime.toLocaleString()}<br>
-    `;
-    
+
+    let statusHTML = '';
+    if (now >= lateThreshold && now < endTime) {
+      statusHTML = `<span class="modern-session-status late">Late attendance is now active. Students will be marked late.</span>`;
+    } else if (now < lateThreshold) {
+      const mins = Math.ceil((lateThreshold - now) / 60000);
+      statusHTML = `<span class="modern-session-status upcoming">Late attendance will be active in ${mins} min${mins !== 1 ? 's' : ''}.</span>`;
+    } else if (now >= endTime) {
+      statusHTML = `<span class="modern-session-status expired">Session expired</span>`;
+    }
+
+    let detailsHTML = '';
+    detailsHTML += `<div class="modern-session-row"><span>Started:</span><span>${startTime.toLocaleString()}</span></div>`;
+    detailsHTML += `<div class="modern-session-row"><span>Ends:</span><span>${endTime.toLocaleString()}</span></div>`;
     if (session.profile_id) {
       const profile = sessionProfiles.find(p => p.id == session.profile_id);
       if (profile) {
-        detailsHTML += `Room: ${escapeHtml(profile.profile_name)} (${escapeHtml(profile.room_type.replace('-', ' '))})<br>`;
+        detailsHTML += `<div class="modern-session-row"><span>Room:</span><span>${escapeHtml(profile.profile_name)} (${escapeHtml(profile.room_type.replace('-', ' '))})</span></div>`;
       }
     }
-    
-    detailsHTML += `
-      <span style="color: ${timeRemaining > 0 ? '#28a745' : '#dc3545'};">
-        ${timeRemainingText}
-      </span>
-    `;
-    
+    detailsHTML += statusHTML;
+    detailsHTML += `<div class="modern-session-timer">${timeRemainingText}</div>`;
+
     sessionDetailsElement.innerHTML = detailsHTML;
-    
+
   } catch (error) {
     console.error('Error in displaySessionDetails:', error);
     sessionDetailsElement.innerHTML = 'Error loading session details';
@@ -1317,6 +1349,77 @@ Note: Data is preserved in database but will remain hidden even after refresh.`;
   } catch (error) {
     console.error('Error hiding data:', error);
     showNotification(`Failed to hide data: ${error.message}`, 'error');
+  }
+}
+
+// Clear all localStorage data with confirmation
+async function clearLocalStorageWithModal() {
+  try {
+    // Show confirmation dialog
+    const confirmed = await showCustomModal(
+      'This will permanently clear all locally stored data including:\n\n• Attendance records\n• Failed attempts\n• Device fingerprints\n• Hidden data records\n• Settings\n\nThis action cannot be undone and will reset the dashboard to a clean state.\n\nProceed with clearing localStorage?',
+      'Clear localStorage',
+      true // show cancel button
+    );
+
+    if (!confirmed) {
+      return; // User cancelled
+    }
+
+    // Show loading notification
+    showNotification('Clearing localStorage...', 'info');
+    
+    // Get current counts for notification
+    const currentCounts = {
+      attendances: attendanceData.length,
+      denied_attempts: deniedAttempts.length,
+      device_fingerprints: deviceFingerprints.length
+    };
+    
+    // Clear all localStorage data
+    localStorage.clear();
+    
+    // Reset all data arrays
+    attendanceData = [];
+    deniedAttempts = [];
+    deviceFingerprints = [];
+    hiddenAttendanceIds = new Set();
+    hiddenDeniedIds = new Set();
+    hiddenDeviceHashes = new Set();
+    
+    // Clear the tables immediately
+    document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+    document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+    document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+    
+    // Reset statistics grid
+    document.getElementById('total-attendances').textContent = '0';
+    document.getElementById('total-denied').textContent = '0';
+    document.getElementById('unique-devices').textContent = '0';
+    document.getElementById('recent-activity').textContent = '0';
+    
+    // Reset settings to defaults
+    document.getElementById('max-uses').value = '1';
+    document.getElementById('time-window').value = '24';
+    document.getElementById('enable-blocking').checked = true;
+    document.getElementById('auto-regenerate-qr').checked = true;
+    autoRegenerateEnabled = true;
+    
+    // Show success message with details
+    const successMessage = `localStorage cleared successfully:
+• ${currentCounts.attendances} attendance records removed
+• ${currentCounts.denied_attempts} failed attempts removed
+• ${currentCounts.device_fingerprints} device records removed
+• All settings reset to defaults
+• All hidden data cleared
+
+Dashboard has been reset to a clean state.`;
+
+    showNotification(successMessage, 'success');
+    
+  } catch (error) {
+    console.error('Error clearing localStorage:', error);
+    showNotification(`Failed to clear localStorage: ${error.message}`, 'error');
   }
 }
 
