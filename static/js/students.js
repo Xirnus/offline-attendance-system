@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="modern-modal-actions">
                             <button type="button" class="modern-btn modern-btn-secondary" onclick="closeEditStudentModal()">Cancel</button>
-                            <button type="button" class="modern-btn modern-btn-danger" onclick="deleteStudent('${student.student_id.replace(/'/g, "\\'")})">Delete</button>
+                            <button type="button" class="modern-btn modern-btn-danger" data-student-id="${escapeHtml(student.student_id)}" id="deleteStudentBtn">Delete</button>
                             <button type="submit" class="modern-btn modern-btn-primary">Save Changes</button>
                         </div>
                         <div id="editStudentSuccessMsg" class="modern-modal-success" style="display:none;">Student updated successfully!</div>
@@ -317,6 +317,12 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('editStudentForm').addEventListener('submit', function(e) {
             e.preventDefault();
             updateStudent(student.student_id);
+        });
+        
+        // Add delete button event listener
+        document.getElementById('deleteStudentBtn').addEventListener('click', function() {
+            const studentId = this.getAttribute('data-student-id');
+            deleteStudent(studentId);
         });
     }
 
@@ -407,12 +413,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const confirmHTML = `
             <div id="deleteConfirmModal" style="
                 position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-                background: rgba(0,0,0,0.7); display: flex; justify-content: center; 
-                align-items: center; z-index: 2000;">
+                background: rgba(0,0,0,0.8); display: flex; justify-content: center; 
+                align-items: center; z-index: 9999;">
                 <div style="
                     background: white; padding: 30px; border-radius: 10px; 
                     width: 90%; max-width: 400px; text-align: center;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 10000;">
                     <h3 style="margin-bottom: 20px; color: #dc3545;">⚠️ Confirm Deletion</h3>
                     <p style="margin-bottom: 25px; color: #333;">
                         Are you sure you want to delete this student?<br>
