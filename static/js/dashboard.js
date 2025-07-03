@@ -390,10 +390,7 @@ function setupEventListeners() {
   addEventListeners({
     'generate-btn': () => generateQR(false),
     'save-settings': saveSettings,
-    'refresh-data': loadData,
-    'clear-all-data': clearAllDataWithModal,
     'clear-localstorage': clearLocalStorageWithModal,
-    'restore-hidden-data': restoreHiddenData
   });
 
   // Add auto-regeneration toggle if it exists
@@ -419,109 +416,6 @@ function setupEventListeners() {
     }
   });
 }
-
-// Add manual student input UI to the right column
-
-document.addEventListener('DOMContentLoaded', function() {
-  const manualStudentForm = document.getElementById('manual-student-form');
-  if (manualStudentForm) {
-    manualStudentForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      
-      const studentId = this.student_id.value.trim();
-      const studentName = this.student_name.value.trim();
-      const studentCourse = this.student_course.value.trim();
-      const studentYear = this.student_year.value.trim();
-      const messageBox = document.getElementById('manual-student-message');
-      
-      // Basic validation
-      if (!studentId || !studentName) {
-        messageBox.textContent = 'Student ID and Name are required.';
-        messageBox.style.color = 'red';
-        return;
-      }
-      
-      messageBox.textContent = 'Adding student...';
-      messageBox.style.color = '#007bff';
-      
-      try {
-        // Send data to server
-        const response = await fetch('/api/add_student_manual', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id: studentId,
-            student_name: studentName,
-            student_course: studentCourse,
-            student_year: studentYear
-          })
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok && result.status === 'success') {
-          messageBox.textContent = 'Student added successfully!';
-          messageBox.style.color = 'green';
-          
-          // Optionally, clear the form
-          this.reset();
-        } else {
-          throw new Error(result.message || 'Unknown error');
-        }
-      } catch (error) {
-        console.error('Error adding student:', error);
-        messageBox.textContent = 'Error adding student: ' + error.message;
-        messageBox.style.color = 'red';
-      }
-    });
-  }
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-  // Manual student input form handler
-  const manualStudentForm = document.getElementById('manual-student-form');
-  const manualStudentMessage = document.getElementById('manual-student-message');
-  if (manualStudentForm) {
-    manualStudentForm.addEventListener('submit', async function(e) {
-      e.preventDefault();
-      if (manualStudentMessage) manualStudentMessage.textContent = '';
-      const student_id = document.getElementById('manual-student-id').value.trim();
-      const student_name = document.getElementById('manual-student-name').value.trim();
-      const student_course = document.getElementById('manual-student-course').value.trim();
-      const student_year = document.getElementById('manual-student-year').value.trim();
-      if (!student_id || !student_name) {
-        manualStudentMessage.textContent = 'Student ID and Name are required.';
-        manualStudentMessage.style.color = '#b22222';
-        return;
-      }
-      try {
-        const res = await fetch('/api/manual_attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id,
-            student_name,
-            student_course,
-            student_year
-          })
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          manualStudentMessage.textContent = 'Student attendance recorded!';
-          manualStudentMessage.style.color = '#28a745';
-          manualStudentForm.reset();
-          loadData && loadData();
-        } else {
-          manualStudentMessage.textContent = data.message || 'Failed to record attendance.';
-          manualStudentMessage.style.color = '#b22222';
-        }
-      } catch (err) {
-        manualStudentMessage.textContent = 'Error connecting to server.';
-        manualStudentMessage.style.color = '#b22222';
-      }
-    });
-  }
-});
 
 async function showSessionCreationModal() {
   // Fetch class list for the dropdown
@@ -1230,128 +1124,6 @@ async function saveSettings() {
   }
 }
 
-// Delete all dashboard data
-async function deleteAllData() {
-  // Show confirmation dialog with detailed warning
-  const confirmMessage = `⚠️ WARNING: This will permanently delete ALL data from the dashboard including:
-
-• All successful check-ins (attendances)
-• All failed check-in attempts (denied attempts) 
-• All device fingerprint records
-
-This action CANNOT be undone!
-
-Are you absolutely sure you want to proceed?`;
-
-  if (!confirm(confirmMessage)) {
-    return; // User cancelled
-  }
-
-  // Show second confirmation
-  if (!confirm('Last chance! This will delete ALL attendance data. Continue?')) {
-    return; // User cancelled
-  }
-
-  try {
-    // Show loading notification
-    showNotification('Deleting all data...', 'info');
-    
-    const response = await fetch('/api/delete_all_data', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json' 
-      }
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.status === 'success') {
-      // Show success message with details
-      const counts = result.deleted_counts;
-      const successMessage = `✅ Successfully deleted all data:
-      
-• ${counts.attendances} attendance records
-• ${counts.denied_attempts} failed attempts  
-• ${counts.device_fingerprints} device records
-
-${result.message}`;
-
-      showNotification(successMessage, 'success');
-      
-      // Refresh the data to show empty tables
-      setTimeout(() => {
-        loadData();
-      }, 1000);
-      
-    } else {
-      throw new Error(result.message || 'Unknown error occurred');
-    }
-    
-  } catch (error) {
-    console.error('Error deleting data:', error);
-    showNotification(`❌ Failed to delete data: ${error.message}`, 'error');
-  }
-}
-
-// Hide all data from display (preserve in database)
-async function clearAllDataWithModal() {
-  try {
-    // Show confirmation dialog
-    const confirmed = await showCustomModal(
-      'This will hide all current data from the dashboard view.\n\nThe data will remain in the database but will not be displayed even after refresh.\n\nTo permanently delete data, you would need to use the database management tools.\n\nProceed with hiding the data?',
-      'Hide All Data',
-      true // show cancel button
-    );
-
-    if (!confirmed) {
-      return; // User cancelled
-    }
-
-    // Show loading notification
-    showNotification('Hiding all data from display...', 'info');
-    
-    // Count current data for the notification
-    const currentCounts = {
-      attendances: attendanceData.length,
-      denied_attempts: deniedAttempts.length,
-      device_fingerprints: deviceFingerprints.length
-    };
-    
-    // Hide all current data
-    hideAllCurrentData();
-    
-    // Clear the data arrays (they will stay hidden even on refresh)
-    attendanceData = [];
-    deniedAttempts = [];
-    deviceFingerprints = [];
-    
-    // Clear the tables immediately
-    document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
-    document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-    document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
-    
-    // Reset statistics grid
-    document.getElementById('total-attendances').textContent = '0';
-    document.getElementById('total-denied').textContent = '0';
-    document.getElementById('unique-devices').textContent = '0';
-    document.getElementById('recent-activity').textContent = '0';
-    
-    // Show success message with details
-    const successMessage = `Data hidden successfully:
-• ${currentCounts.attendances} attendance records hidden
-• ${currentCounts.denied_attempts} failed attempts hidden
-• ${currentCounts.device_fingerprints} device records hidden
-
-Note: Data is preserved in database but will remain hidden even after refresh.`;
-
-    showNotification(successMessage, 'success');
-    
-  } catch (error) {
-    console.error('Error hiding data:', error);
-    showNotification(`Failed to hide data: ${error.message}`, 'error');
-  }
-}
-
 // Clear all localStorage data with confirmation
 async function clearLocalStorageWithModal() {
   try {
@@ -1423,43 +1195,6 @@ Dashboard has been reset to a clean state.`;
   }
 }
 
-function showDetailedDeviceInfo(deviceInfoStr) {
-  try {
-    if (!deviceInfoStr) return;
-    
-    const info = JSON.parse(deviceInfoStr);
-    let details = '';
-    
-    if (info.device_signature) {
-      const device = info.device_signature;
-      details += `<strong>Device Details:</strong><br>`;
-      details += `Type: ${device.type || 'Unknown'}<br>`;
-      details += `Brand: ${device.brand || 'Unknown'}<br>`;
-      details += `Model: ${device.model || 'Unknown'}<br>`;
-      details += `OS: ${device.os || 'Unknown'}`;
-      if (device.os_version) details += ` ${device.os_version}`;
-      details += `<br>Browser: ${device.browser || 'Unknown'}`;
-      if (device.browser_version) details += ` ${device.browser_version}`;
-      details += `<br><br>`;
-    }
-    
-    details += `<strong>Technical Info:</strong><br>`;
-    details += `Screen: ${info.screen_resolution || 'Unknown'}<br>`;
-    details += `Timezone: ${info.timezone || 'Unknown'}<br>`;
-    details += `Language: ${info.language || 'Unknown'}<br>`;
-    details += `Platform: ${info.platform || 'Unknown'}<br>`;
-    
-    if (info.color_depth) details += `Color Depth: ${info.color_depth}<br>`;
-    if (info.pixel_ratio) details += `Pixel Ratio: ${info.pixel_ratio}<br>`;
-    if (info.touch_support !== undefined) details += `Touch Support: ${info.touch_support ? 'Yes' : 'No'}<br>`;
-    
-    showDeviceModal(details);
-    
-  } catch (error) {
-    console.error('Error showing device details:', error);
-  }
-}
-
 function showDeviceModal(content) {
   const modal = document.createElement('div');
   modal.style.cssText = `
@@ -1504,15 +1239,6 @@ function updateAttendanceTable() {
       <td>${escapeHtml(item.name || 'Unknown')}</td>
       <td>${escapeHtml(item.course || 'Unknown')}</td>
       <td>${escapeHtml(item.year || 'Unknown')}</td>
-      <td>
-        <span 
-          style="cursor: pointer; color: #007bff; text-decoration: underline;" 
-          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info || '{}')}')"
-          title="Click for detailed device information"
-        >
-          ${getDeviceInfo(item.device_info)}
-        </span>
-      </td>
       <td>${item.token ? item.token.substring(0, 8) + '...' : 'N/A'}</td>
     </tr>
   `).join('');
@@ -1551,15 +1277,6 @@ function updateDeviceTable() {
       <td>${formatDateTime(item.first_seen)}</td>
       <td>${formatDateTime(item.last_seen)}</td>
       <td>${item.usage_count}</td>
-      <td>
-        <span 
-          style="cursor: pointer; color: #007bff; text-decoration: underline;" 
-          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info)}')"
-          title="Click for detailed device information"
-        >
-          ${getDeviceInfo(item.device_info)}
-        </span>
-      </td>
     </tr>
   `).join('');
 }
@@ -1823,40 +1540,4 @@ function filterVisibleData() {
   deviceFingerprints = deviceFingerprints.filter(item => {
     return !hiddenDeviceHashes.has(item.fingerprint_hash);
   });
-}
-
-// Function to restore all hidden data
-async function restoreHiddenData() {
-  try {
-    const confirmed = await showCustomModal(
-      'This will restore all previously hidden data and make it visible again.\n\nProceed?',
-      'Restore Hidden Data',
-      true
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    // Clear all hidden data sets
-    hiddenAttendanceIds.clear();
-    hiddenDeniedIds.clear();
-    hiddenDeviceHashes.clear();
-
-    // Clear localStorage
-    localStorage.removeItem('hiddenAttendanceIds');
-    localStorage.removeItem('hiddenDeniedIds');
-    localStorage.removeItem('hiddenDeviceHashes');
-
-    showNotification('Hidden data cleared. Refreshing data...', 'info');
-
-    // Reload data to show everything
-    setTimeout(() => {
-      loadData();
-    }, 500);
-
-  } catch (error) {
-    console.error('Error restoring hidden data:', error);
-    showNotification('Error restoring hidden data', 'error');
-  }
 }
