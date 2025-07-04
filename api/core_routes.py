@@ -22,7 +22,7 @@ from database.operations import (
     is_student_already_checked_in_session, is_device_already_checked_in_session
 )
 from services.fingerprint import generate_comprehensive_fingerprint, create_fingerprint_hash
-from services.attendance import is_fingerprint_allowed, store_device_fingerprint
+from services.attendance import store_device_fingerprint
 from services.token import generate_token, validate_token_access
 from services.rate_limiting import is_rate_limited, get_client_ip
 from utils.qr_generator import generate_qr_code, build_qr_url
@@ -304,23 +304,6 @@ def checkin():
             record_denied_attempt(enhanced_data, 'student_not_enrolled_in_class')
             return jsonify(status='error', message='You are not enrolled in this class'), 403
 
-        # Check device limits (if any, using visitor_id)
-        print("Checking device limits...")
-        allowed, reason = is_fingerprint_allowed(device_id, session_id)
-        if not allowed:
-            print(f"Device blocked: {reason}")
-            enhanced_data = data.copy()
-            enhanced_data.update({
-                'session_id': session_id,
-                'name': student.get('name', 'Unknown'),
-                'course': student.get('course', 'Unknown'), 
-                'year': str(student.get('year', 'Unknown'))
-            })
-            record_denied_attempt(enhanced_data, 'device_blocked')
-            return jsonify(status='error', message=reason), 403
-
-        print("Device allowed")
-
         # Store device info (minimal) and record attendance in the same transaction
         print("Storing device info and recording attendance in a single transaction...")
         import sqlite3
@@ -329,6 +312,71 @@ def checkin():
         conn = sqlite3.connect(Config.DATABASE_PATH)
         cursor = conn.cursor()
         try:
+            # Check device limits INSIDE the transaction to prevent race conditions
+            print("Checking device limits...")
+            
+            # Get the fingerprint hash for this device
+            from services.fingerprint import create_fingerprint_hash
+            fingerprint_hash = create_fingerprint_hash({
+                'visitor_id': visitor_id,
+                'user_agent': user_agent
+            })
+            
+            # Check if this device has already checked in for this session
+            cursor.execute('''
+                SELECT COUNT(*) as usage_count 
+                FROM class_attendees ca
+                JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+                WHERE df.fingerprint_hash = ? AND ca.session_id = ?
+            ''', (fingerprint_hash, session_id))
+            
+            existing_checkin = cursor.fetchone()[0]
+            if existing_checkin > 0:
+                conn.close()
+                print(f"Device blocked: already checked in for this session")
+                enhanced_data = data.copy()
+                enhanced_data.update({
+                    'session_id': session_id,
+                    'name': student.get('name', 'Unknown'),
+                    'course': student.get('course', 'Unknown'), 
+                    'year': str(student.get('year', 'Unknown'))
+                })
+                record_denied_attempt(enhanced_data, 'device_already_used_for_session')
+                return jsonify(status='error', message='This device has already been used to check in for this session. Please use a different device.'), 403
+            
+            # Also check the general device usage limits within time window
+            from database.operations import get_settings
+            import time
+            settings = get_settings()
+            if settings['enable_fingerprint_blocking']:
+                time_threshold = time.time() - (settings['time_window_minutes'] * 60)
+                cursor.execute('''
+                    SELECT COUNT(*) as usage_count 
+                    FROM class_attendees ca
+                    JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
+                    WHERE df.fingerprint_hash = ? AND ca.checked_in_at > datetime(?, 'unixepoch')
+                ''', (fingerprint_hash, time_threshold))
+                
+                usage_count = cursor.fetchone()[0]
+                max_uses = settings['max_uses_per_device']
+                print(f"Device usage: {usage_count}/{max_uses} in the last {settings['time_window_minutes']//60} hours")
+                
+                if usage_count >= max_uses:
+                    conn.close()
+                    hours = settings['time_window_minutes'] // 60
+                    message = f"Device already used {usage_count} times in the last {hours} hours. Maximum allowed: {max_uses}. Please use another device"
+                    print(f"BLOCKING: {message}")
+                    enhanced_data = data.copy()
+                    enhanced_data.update({
+                        'session_id': session_id,
+                        'name': student.get('name', 'Unknown'),
+                        'course': student.get('course', 'Unknown'), 
+                        'year': str(student.get('year', 'Unknown'))
+                    })
+                    record_denied_attempt(enhanced_data, 'device_blocked')
+                    return jsonify(status='error', message=message), 403
+
+            print("Device allowed")
             # Store or update device fingerprint
             import json
             current_time = datetime.utcnow().isoformat()
@@ -340,7 +388,7 @@ def checkin():
                 'timezone': timezone
             }
             device_info_str = json.dumps(minimal_device_info)
-            cursor.execute('SELECT id FROM device_fingerprints WHERE fingerprint_hash = ?', (device_id,))
+            cursor.execute('SELECT id FROM device_fingerprints WHERE fingerprint_hash = ?', (fingerprint_hash,))
             row = cursor.fetchone()
             if row:
                 device_fingerprint_id = row[0]
@@ -354,7 +402,7 @@ def checkin():
                     INSERT INTO device_fingerprints 
                     (fingerprint_hash, first_seen, last_seen, usage_count, device_info, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (device_id, current_time, current_time, 1, device_info_str, current_time, current_time))
+                ''', (fingerprint_hash, current_time, current_time, 1, device_info_str, current_time, current_time))
                 device_fingerprint_id = cursor.lastrowid
             print(f"[DEBUG] (TX) device_fingerprint_id={device_fingerprint_id}")
             # Mark token as used
