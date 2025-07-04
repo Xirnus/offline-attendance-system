@@ -232,4 +232,3 @@ myenv/Scripts/pyftsubset.exe
 myenv/Scripts/ttx.exe
 myenv/Scripts/vba_extract.py
 myenv/share/man/man1/ttx.1
-*.md

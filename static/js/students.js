@@ -524,4 +524,6 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }
     }
+    
+    // Remove duplicate escapeHtml function - now using common.js version
 });
