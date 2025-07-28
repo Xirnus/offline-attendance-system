@@ -30,7 +30,7 @@ import sqlite3
 import os
 import time
 from functools import wraps
-from config import Config
+from config.config import Config
 
 def retry_db_operation(max_retries=3, delay=0.1):
     """Decorator to retry database operations if database is locked"""

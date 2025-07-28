@@ -1,8 +1,9 @@
 import sqlite3
 import os
+from config.config import Config
 
 # Database path
-DB_PATH = os.path.join('database', 'attendance.db')
+DB_PATH = Config.DATABASE_PATH
 
 def get_db_connection():
     """Get database connection to existing database"""

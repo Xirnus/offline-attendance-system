@@ -41,7 +41,7 @@ Dependencies: Standard library (time, threading, collections), config settings
 import time
 import threading
 from collections import defaultdict
-from config import Config
+from config.config import Config
 
 # Rate limiting storage
 request_counts = defaultdict(list)

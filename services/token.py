@@ -44,7 +44,7 @@ Dependencies: Standard library (random, string, time), config settings
 import random
 import string
 import time
-from config import Config
+from config.config import Config
 
 def generate_token():
     """Generate random token"""

@@ -40,7 +40,7 @@ Dependencies: SQLite3, config settings
 """
 
 import sqlite3
-from config import Config, DEFAULT_SETTINGS
+from config.config import Config, DEFAULT_SETTINGS
 
 TABLES = {
     'students': '''
@@ -292,6 +292,10 @@ def migrate_tables():
     """Apply database migrations and updates"""
     try:
         print("Running database migrations...")
+        
+        # Ensure database directory exists
+        Config.ensure_database_directory()
+        
         conn = sqlite3.connect(Config.DATABASE_PATH)
         cursor = conn.cursor()
         
@@ -734,13 +738,17 @@ OPTIMIZED_CLASSES_VIEWS = {
     '''
 }
 
-def create_optimized_classes_schema(db_path='classes.db'):
+def create_optimized_classes_schema(db_path=None):
     """
     Create the optimized classes database schema to replace redundant table-per-class approach.
     This eliminates data duplication and improves performance.
     """
     import sqlite3
     
+    if db_path is None:
+        # Ensure database directory exists
+        Config.ensure_database_directory()
+        db_path = Config.CLASSES_DATABASE_PATH
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -773,7 +781,7 @@ def create_optimized_classes_schema(db_path='classes.db'):
     finally:
         conn.close()
 
-def migrate_existing_classes_data(old_db_path='classes.db', attendance_db_path='attendance.db'):
+def migrate_existing_classes_data(old_db_path=None, attendance_db_path=None):
     """
     Migrate existing class tables to the new optimized schema.
     Extracts class and professor information from table names and preserves student enrollments.
@@ -781,6 +789,11 @@ def migrate_existing_classes_data(old_db_path='classes.db', attendance_db_path='
     import sqlite3
     import re
     from datetime import datetime
+    
+    if old_db_path is None:
+        old_db_path = Config.CLASSES_DATABASE_PATH
+    if attendance_db_path is None:
+        attendance_db_path = Config.DATABASE_PATH
     
     # Create backup first
     import shutil

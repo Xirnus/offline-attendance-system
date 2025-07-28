@@ -184,7 +184,7 @@ if __name__ == '__main__':
             print(f"{rule.endpoint}: {rule.rule} -> {rule.methods}")
         print("========================\n")
         
-        app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
         
     except Exception as e:
         print(f"Error starting application: {e}")

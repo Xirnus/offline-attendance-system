@@ -37,7 +37,7 @@ Dependencies: Database connection module, config settings, retry decorators
 """
 
 from .connection import get_db_connection, get_db_connection_with_retry, retry_db_operation
-from config import DEFAULT_SETTINGS
+from config.config import DEFAULT_SETTINGS
 import time
 from datetime import datetime
 import sqlite3

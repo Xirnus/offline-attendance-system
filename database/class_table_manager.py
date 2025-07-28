@@ -1,4 +1,5 @@
 import sqlite3
+from config.config import Config
 
 def convert_year_to_integer(year_level):
     """Convert year level to integer for database storage"""
@@ -29,13 +30,15 @@ def convert_year_to_integer(year_level):
     print(f"Warning: Unable to parse year level: {year_level}, defaulting to 1")
     return 1
 
-def add_students_to_class(class_name, students, db_path='attendance.db'):
+def add_students_to_class(class_name, students, db_path=None):
     """
     Add students to the main students table with class_table identifier.
     :param class_name: Name of the class (will be sanitized and used as class_table value)
     :param students: List of student dictionaries
-    :param db_path: Path to the attendance database file (default: 'attendance.db')
+    :param db_path: Path to the attendance database file (default: Config.DATABASE_PATH)
     """
+    if db_path is None:
+        db_path = Config.DATABASE_PATH
     # Sanitize class name
     class_table = class_name.replace(' ', '_').replace('-', '_')
     class_table = ''.join(c for c in class_table if c.isalnum() or c == '_')
@@ -316,8 +319,10 @@ def get_session_attendance_for_course(course_name, session_id, db_path='attendan
         conn.close()
 
 # Legacy functions for backward compatibility (now redirect to new functions)
-def create_class_table(table_name, columns, db_path='classes.db'):
+def create_class_table(table_name, columns, db_path=None):
     """Create a table for a specific class in classes.db"""
+    if db_path is None:
+        db_path = Config.CLASSES_DATABASE_PATH
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -335,8 +340,10 @@ def create_class_table(table_name, columns, db_path='classes.db'):
     finally:
         conn.close()
 
-def insert_students(table_name, students, db_path='classes.db'):
+def insert_students(table_name, students, db_path=None):
     """Insert students into a specific class table in classes.db"""
+    if db_path is None:
+        db_path = Config.CLASSES_DATABASE_PATH
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -375,9 +382,9 @@ if __name__ == "__main__":
 class OptimizedClassManager:
     """Manages classes using the optimized normalized schema instead of table-per-class approach"""
     
-    def __init__(self, classes_db_path='classes.db', attendance_db_path='attendance.db'):
-        self.classes_db_path = classes_db_path
-        self.attendance_db_path = attendance_db_path
+    def __init__(self, classes_db_path=None, attendance_db_path=None):
+        self.classes_db_path = classes_db_path or Config.CLASSES_DATABASE_PATH
+        self.attendance_db_path = attendance_db_path or Config.DATABASE_PATH
     
     def create_class(self, class_name, professor_name, course_code=None, 
                     semester=None, academic_year=None):

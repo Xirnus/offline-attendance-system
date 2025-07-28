@@ -17,6 +17,7 @@ Class Management Features:
 import sqlite3
 import openpyxl
 from flask import Blueprint, request, jsonify
+from config.config import Config
 from database.class_table_manager import (
     create_class_table, insert_students as insert_class_students,
     OptimizedClassManager, create_class_optimized
@@ -194,8 +195,8 @@ def upload_class_record():
                 ('course', 'TEXT')
             ]
             
-            create_class_table(table_name, columns, db_path='classes.db')
-            insert_class_students(table_name, student_data, db_path='classes.db')
+            create_class_table(table_name, columns, db_path=Config.CLASSES_DATABASE_PATH)
+            insert_class_students(table_name, student_data, db_path=Config.CLASSES_DATABASE_PATH)
             success_message = f'Successfully imported {len(student_data)} students to class table'
         
         # Skip attendance.db insertion for uploaded class records
@@ -222,7 +223,7 @@ def upload_class_record():
 @class_bp.route('/api/class_tables', methods=['GET'])
 def get_class_tables():
     try:
-        db_path = 'classes.db'
+        db_path = Config.CLASSES_DATABASE_PATH
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
@@ -264,7 +265,7 @@ def delete_class_table():
         if not table_name:
             return jsonify({'error': 'Table name is required'}), 400
             
-        db_path = 'classes.db'
+        db_path = Config.CLASSES_DATABASE_PATH
         
         # Connect to the database
         conn = sqlite3.connect(db_path)
@@ -293,7 +294,7 @@ def delete_class_table():
 
 @class_bp.route('/api/classes')
 def get_classes():
-    db_path = 'classes.db'
+    db_path = Config.CLASSES_DATABASE_PATH
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     # Get all user tables (each table is a class)
@@ -337,7 +338,7 @@ def add_student_to_class(table_name):
         year_level_int = convert_year_to_integer(data['year_level'])
         
         # Validate table exists
-        db_path = 'classes.db'
+        db_path = Config.CLASSES_DATABASE_PATH
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
@@ -366,7 +367,7 @@ def add_student_to_class(table_name):
         # For manually added students, also add to attendance.db if not already there
         # (This is different from bulk uploads which are class-specific)
         try:
-            attendance_conn = sqlite3.connect('attendance.db')
+            attendance_conn = sqlite3.connect(Config.DATABASE_PATH)
             attendance_cursor = attendance_conn.cursor()
             
             # Check if student exists in attendance.db
@@ -404,7 +405,7 @@ def remove_student_from_class(table_name, student_id):
     """Remove a student from a specific class table"""
     try:
         # Validate table exists
-        db_path = 'classes.db'
+        db_path = Config.CLASSES_DATABASE_PATH
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         

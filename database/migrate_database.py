@@ -26,7 +26,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database.models import migrate_tables, verify_database_integrity
-from config import Config
+from config.config import Config
 
 def backup_database():
     """Create a backup of the current database"""

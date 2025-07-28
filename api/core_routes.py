@@ -285,7 +285,7 @@ def checkin():
         token_device_fingerprint_id = token_data.get('device_fingerprint_id')
         if token_device_fingerprint_id:
             import sqlite3
-            from config import Config
+            from config.config import Config
             conn = sqlite3.connect(Config.DATABASE_PATH)
             cursor = conn.cursor()
             # Get the fingerprint_hash for the device that opened the QR
@@ -351,7 +351,7 @@ def checkin():
         # Store device info (minimal) and record attendance in the same transaction
         print("Storing device info and recording attendance in a single transaction...")
         import sqlite3
-        from config import Config  # <-- FIX: import Config here
+        from config.config import Config  # <-- FIX: import Config here
         from datetime import datetime, timedelta
         conn = sqlite3.connect(Config.DATABASE_PATH)
         cursor = conn.cursor()

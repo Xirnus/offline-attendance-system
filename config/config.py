@@ -47,7 +47,10 @@ import os
 
 class Config:
     """Main application configuration"""
-    DATABASE_PATH = 'attendance.db'
+    # Get the project root directory (parent of config folder)
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'attendance.db')
+    CLASSES_DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'classes.db')
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
     
     # Rate limiting
@@ -57,6 +60,13 @@ class Config:
     # Token settings
     TOKEN_LENGTH = 16
     TOKEN_EXPIRY = 3600  # 1 hour
+    
+    @classmethod
+    def ensure_database_directory(cls):
+        """Ensure the database directory exists"""
+        db_dir = os.path.join(cls.PROJECT_ROOT, 'database', 'db')
+        os.makedirs(db_dir, exist_ok=True)
+        return db_dir
 
 # Default app settings
 DEFAULT_SETTINGS = {
