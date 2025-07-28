@@ -13,8 +13,6 @@ function setupEventListeners() {
     'export-excel': exportExcel,
     'export-csv': exportCSV,
     'send-email-report': sendEmailReport,
-    'view-analytics': viewAnalytics,
-    'refresh-analytics': refreshAnalytics,
     'setup-schedule': setupScheduledReports,
     'view-schedules': viewActiveSchedules,
     'export-custom': exportCustomData,
@@ -47,7 +45,11 @@ async function exportPDF() {
   try {
     showNotification('Generating PDF report...', 'info');
     const reportType = getElement('report-type')?.value || 'basic';
-    const response = await fetchWithLoading(`/api/export/pdf?type=${reportType}`);
+    const response = await fetch(`/api/export/pdf?type=${reportType}`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     
     if (response.ok) {
       const blob = await response.blob();
@@ -65,7 +67,11 @@ async function exportPDF() {
 async function exportExcel() {
   try {
     showNotification('Generating Excel report...', 'info');
-    const response = await fetchWithLoading('/api/export/excel');
+    const response = await fetch('/api/export/excel', {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     
     if (response.ok) {
       const blob = await response.blob();
@@ -83,20 +89,32 @@ async function exportExcel() {
 async function exportCSV() {
   try {
     showNotification('Generating CSV export...', 'info');
-    const response = await fetchWithLoading('/api/export/csv?type=all');
+    const dataType = 'all';
     
-    if (response.ok) {
-      const result = await response.json();
+    if (dataType === 'all') {
+      // For 'all' type, API returns JSON with file information
+      const result = await fetchWithLoading('/api/export/csv?type=all');
       if (result.files) {
         showNotification(`CSV files generated: ${result.files.length} files`, 'success');
         console.log('Generated CSV files:', result.files);
       } else {
-        const blob = await response.blob();
-        downloadFile(blob, `attendance_data_${getDateString()}.csv`);
-        showNotification('CSV export downloaded successfully', 'success');
+        showNotification('CSV export completed', 'success');
       }
     } else {
-      throw new Error('Failed to generate CSV export');
+      // For specific types, API returns the file directly
+      const response = await fetch(`/api/export/csv?type=${dataType}`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        downloadFile(blob, `attendance_data_${dataType}_${getDateString()}.csv`);
+        showNotification('CSV export downloaded successfully', 'success');
+      } else {
+        throw new Error('Failed to generate CSV export');
+      }
     }
   } catch (error) {
     console.error('Error exporting CSV:', error);
@@ -181,7 +199,8 @@ async function sendEmailReport() {
       report_type: reportType
     });
     
-    if (result.status === 'success') {
+    // Check if the response has a message field (success) or error field (failure)
+    if (result.message) {
       showNotification('Email report sent successfully', 'success');
       const emailInput = getElement('recipient-email');
       if (emailInput) emailInput.value = '';
@@ -192,116 +211,6 @@ async function sendEmailReport() {
     console.error('Error sending email report:', error);
     showNotification('Error sending email report', 'error');
   }
-}
-
-// Analytics Functions
-async function viewAnalytics() {
-  try {
-    showLoading('analytics-loading', true);
-    showNotification('Loading analytics...', 'info');
-    
-    const response = await fetchWithLoading('/api/reports/analytics');
-    
-    if (response.ok) {
-      const analytics = await response.json();
-      displayAnalytics(analytics);
-      const previewElement = getElement('analytics-preview');
-      if (previewElement) previewElement.classList.remove('hidden');
-      showNotification('Analytics loaded successfully', 'success');
-    } else {
-      throw new Error('Failed to load analytics');
-    }
-  } catch (error) {
-    console.error('Error loading analytics:', error);
-    showNotification('Error loading analytics', 'error');
-  } finally {
-    showLoading('analytics-loading', false);
-  }
-}
-
-async function refreshAnalytics() {
-  const analyticsPreview = getElement('analytics-preview');
-  if (analyticsPreview && !analyticsPreview.classList.contains('hidden')) {
-    await viewAnalytics();
-  } else {
-    showNotification('Click "View Analytics" first to load data', 'info');
-  }
-}
-
-function displayAnalytics(analytics) {
-  const content = getElement('analytics-content');
-  if (!content) return;
-  
-  let html = '<h3>📊 Attendance Overview</h3>';
-  html += '<div class="analytics-stats">';
-  
-  // Overview stats
-  const overview = analytics.overview;
-  html += `
-    <div class="analytics-stat">
-      <h4>Total Students</h4>
-      <div class="value">${overview.total_students}</div>
-    </div>
-    <div class="analytics-stat">
-      <h4>Total Sessions</h4>
-      <div class="value">${overview.total_sessions}</div>
-    </div>
-    <div class="analytics-stat">
-      <h4>Total Check-ins</h4>
-      <div class="value">${overview.total_checkins}</div>
-    </div>
-    <div class="analytics-stat">
-      <h4>Active Sessions</h4>
-      <div class="value">${overview.active_sessions}</div>
-    </div>
-  `;
-  
-  html += '</div>';
-  
-  // Course breakdown
-  if (analytics.course_breakdown && Object.keys(analytics.course_breakdown).length > 0) {
-    html += '<h4>📚 Students by Course</h4>';
-    html += '<div class="analytics-stats">';
-    
-    for (const [course, data] of Object.entries(analytics.course_breakdown)) {
-      html += `
-        <div class="analytics-stat">
-          <h4>${escapeHtml(course)}</h4>
-          <div class="value">${data.students}</div>
-          <small>${data.checkins} check-ins</small>
-        </div>
-      `;
-    }
-    
-    html += '</div>';
-  }
-  
-  // Top attendance rates
-  if (analytics.attendance_rates && Object.keys(analytics.attendance_rates).length > 0) {
-    html += '<h4>🏆 Top Attendance Rates</h4>';
-    html += '<table>';
-    html += '<tr><th>Student</th><th>Rate</th><th>Present</th><th>Absent</th></tr>';
-    
-    const sortedRates = Object.entries(analytics.attendance_rates)
-      .sort(([,a], [,b]) => b.rate - a.rate)
-      .slice(0, 10);
-    
-    for (const [studentId, data] of sortedRates) {
-      const rateColor = data.rate >= 90 ? '#28a745' : data.rate >= 75 ? '#ffc107' : '#dc3545';
-      html += `
-        <tr>
-          <td>${escapeHtml(studentId)}</td>
-          <td style="color: ${rateColor}; font-weight: bold;">${data.rate.toFixed(1)}%</td>
-          <td>${data.present}</td>
-          <td>${data.absent}</td>
-        </tr>
-      `;
-    }
-    
-    html += '</table>';
-  }
-  
-  content.innerHTML = html;
 }
 
 // Scheduled Reports

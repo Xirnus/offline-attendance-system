@@ -603,3 +603,61 @@ def unenroll_student_optimized(class_id, student_id):
             
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@class_bp.route('/api/optimized/classes/<int:class_id>/unenroll', methods=['POST'])
+def unenroll_students_optimized(class_id):
+    """Remove multiple students from a class using optimized schema (bulk operation)"""
+    try:
+        print(f"DEBUG: unenroll_students_optimized called with class_id={class_id}")
+        data = request.get_json()
+        print(f"DEBUG: Request data: {data}")
+        
+        if not data or 'student_ids' not in data:
+            print("DEBUG: Missing student_ids in request")
+            return jsonify({'error': 'Missing student_ids in request'}), 400
+        
+        student_ids = data['student_ids']
+        if not isinstance(student_ids, list) or not student_ids:
+            print("DEBUG: student_ids must be a non-empty list")
+            return jsonify({'error': 'student_ids must be a non-empty list'}), 400
+        
+        print(f"DEBUG: Processing student_ids: {student_ids}")
+        manager = OptimizedClassManager()
+        success_count = 0
+        failed_students = []
+        
+        for student_id in student_ids:
+            try:
+                print(f"DEBUG: Attempting to unenroll student {student_id} from class {class_id}")
+                success = manager.unenroll_student(class_id, student_id)
+                if success:
+                    success_count += 1
+                    print(f"DEBUG: Successfully unenrolled {student_id}")
+                else:
+                    failed_students.append(student_id)
+                    print(f"DEBUG: Failed to unenroll {student_id}")
+            except Exception as e:
+                print(f"DEBUG: Error unenrolling student {student_id}: {e}")
+                failed_students.append(student_id)
+        
+        if success_count > 0:
+            message = f'Successfully removed {success_count} student(s) from class'
+            if failed_students:
+                message += f'. Failed to remove: {", ".join(failed_students)}'
+            
+            print(f"DEBUG: Returning success response: {message}")
+            return jsonify({
+                'status': 'success',
+                'message': message,
+                'removed_count': success_count,
+                'failed_students': failed_students
+            })
+        else:
+            print("DEBUG: Failed to remove any students")
+            return jsonify({'error': 'Failed to remove any students from class'}), 500
+            
+    except Exception as e:
+        print(f"DEBUG: Exception in unenroll_students_optimized: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500

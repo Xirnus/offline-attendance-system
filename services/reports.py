@@ -24,6 +24,8 @@ from email import encoders
 import schedule
 import time
 import threading
+import tempfile
+import sys
 
 from database.operations import (
     get_all_data, get_students_with_attendance_data, 
@@ -41,18 +43,67 @@ EMAIL_CONFIG = {
 
 class ReportsService:
     def __init__(self):
-        self.reports_dir = "reports"
-        self.ensure_reports_directory()
+        self._reports_dir = None
+    
+    @property
+    def reports_dir(self):
+        """Get reports directory, creating it lazily when first accessed"""
+        if self._reports_dir is None:
+            self._reports_dir = self.get_reports_directory()
+            self.ensure_reports_directory()
+        return self._reports_dir
+    
+    def get_reports_directory(self):
+        """Get appropriate reports directory based on execution environment"""
+        print(f"Detecting execution environment: sys.frozen = {getattr(sys, 'frozen', False)}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Script location: {os.path.abspath(__file__)}")
+        
+        if getattr(sys, 'frozen', False):
+            # Running as PyInstaller executable
+            print("Running in PyInstaller environment")
+            # Use user's Documents folder or temp directory
+            try:
+                documents_path = os.path.join(os.path.expanduser("~"), "Documents", "AttendanceReports")
+                print(f"Using Documents directory for reports: {documents_path}")
+                return documents_path
+            except Exception as e:
+                print(f"Could not use Documents directory: {e}")
+                # Fallback to temp directory
+                temp_path = os.path.join(tempfile.gettempdir(), "AttendanceReports")
+                print(f"Using temp directory fallback: {temp_path}")
+                return temp_path
+        else:
+            # Running as Python script
+            reports_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+            print(f"Running as Python script, using reports directory: {reports_path}")
+            return reports_path
     
     def ensure_reports_directory(self):
         """Create reports directory if it doesn't exist"""
-        if not os.path.exists(self.reports_dir):
-            os.makedirs(self.reports_dir)
+        try:
+            if not os.path.exists(self._reports_dir):
+                os.makedirs(self._reports_dir, exist_ok=True)
+                print(f"Created reports directory: {self._reports_dir}")
+            else:
+                print(f"Reports directory already exists: {self._reports_dir}")
+        except Exception as e:
+            print(f"Warning: Could not create reports directory {self._reports_dir}: {e}")
+            # Fallback to temp directory
+            self._reports_dir = tempfile.gettempdir()
+            print(f"Using temp directory for reports: {self._reports_dir}")
     
     def generate_pdf_report(self, report_type="comprehensive", date_range=None):
         """Generate a professional PDF attendance report"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{self.reports_dir}/attendance_report_{report_type}_{timestamp}.pdf"
+        filename = os.path.join(self.reports_dir, f"attendance_report_{report_type}_{timestamp}.pdf")
+        
+        print(f"=== PDF Generation Debug ===")
+        print(f"Reports directory: {self.reports_dir}")
+        print(f"Full filename path: {filename}")
+        print(f"Directory exists: {os.path.exists(self.reports_dir)}")
+        print(f"Directory is writable: {os.access(self.reports_dir, os.W_OK) if os.path.exists(self.reports_dir) else 'N/A'}")
+        print(f"=== End Debug ===")
         
         doc = SimpleDocTemplate(filename, pagesize=A4)
         styles = getSampleStyleSheet()
@@ -80,18 +131,20 @@ class ReportsService:
         
         # Get data
         students_data = get_students_with_attendance_data()
-        attendance_data = get_all_data('student_attendance_summary')
+        # For total checkins, get actual attendance records, not summary
+        actual_attendance_data = get_all_data('class_attendees')  # Actual check-in records
         
         # Summary statistics
         total_students = len(students_data)
-        total_sessions = len(set([att.get('session_id') for att in attendance_data if att.get('session_id')]))
+        # Count unique sessions from actual attendance records
+        total_sessions = len(set([att.get('session_id') for att in actual_attendance_data if att.get('session_id')]))
         
         summary_data = [
             ['Metric', 'Value'],
             ['Total Students', str(total_students)],
             ['Total Sessions', str(total_sessions)],
-            ['Total Check-ins', str(len(attendance_data))],
-            ['Average Attendance', f"{(len(attendance_data) / max(total_students, 1) * 100):.1f}%"]
+            ['Total Check-ins', str(len(actual_attendance_data))],  # Actual check-ins count
+            ['Average Attendance', f"{(len(actual_attendance_data) / max(total_students, 1) * 100):.1f}%"]
         ]
         
         summary_table = Table(summary_data)
@@ -117,9 +170,10 @@ class ReportsService:
             student_table_data = [['Student ID', 'Name', 'Course', 'Present Count', 'Absent Count', 'Attendance Rate']]
             
             for student in students_data:
-                present_count = len([att for att in attendance_data if att.get('student_id') == student.get('student_id')])
+                # Use the present_count from the student summary data, not count occurrences
+                present_count = student.get('present_count', 0)
                 absent_count = student.get('absent_count', 0)
-                total_sessions_for_student = present_count + absent_count
+                total_sessions_for_student = student.get('total_sessions', 0)
                 attendance_rate = (present_count / max(total_sessions_for_student, 1)) * 100 if total_sessions_for_student > 0 else 0
                 
                 student_table_data.append([
@@ -154,11 +208,17 @@ class ReportsService:
         """Export attendance data to Excel with multiple sheets and formatting"""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.reports_dir}/attendance_data_{timestamp}.xlsx"
+            filename = os.path.join(self.reports_dir, f"attendance_data_{timestamp}.xlsx")
+        
+        print(f"=== Excel Export Debug ===")
+        print(f"Reports directory: {self.reports_dir}")
+        print(f"Full filename path: {filename}")
+        print(f"Directory exists: {os.path.exists(self.reports_dir)}")
+        print(f"=== End Debug ===")
         
         # Get all data
         students_data = get_students_with_attendance_data()
-        attendance_data = get_all_data('student_attendance_summary')
+        attendance_data = get_all_data('class_attendees')  # Use actual check-in records
         sessions_data = get_all_data('attendance_sessions')
         denied_attempts = get_all_data('denied_attempts')
         
@@ -254,23 +314,25 @@ class ReportsService:
         """Export data to CSV format"""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.reports_dir}/attendance_export_{data_type}_{timestamp}.csv"
+            filename = os.path.join(self.reports_dir, f"attendance_export_{data_type}_{timestamp}.csv")
+        
+        print(f"Exporting to CSV: {filename}")
         
         if data_type == "students":
             data = get_students_with_attendance_data()
             headers = ['student_id', 'name', 'course', 'year', 'last_check_in', 'status', 'absent_count', 'created_at']
         elif data_type == "attendance":
-            data = get_all_data('student_attendance_summary')
+            data = get_all_data('class_attendees')  # Use actual check-in records
             headers = ['id', 'student_id', 'session_id', 'checkin_time', 'device_info', 'fingerprint_hash']
         elif data_type == "sessions":
             data = get_all_data('attendance_sessions')
             headers = ['id', 'name', 'created_at', 'started_at', 'ended_at', 'status', 'token']
         else:  # all data
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.export_to_csv("students", f"{self.reports_dir}/students_{timestamp}.csv")
-            self.export_to_csv("attendance", f"{self.reports_dir}/attendance_{timestamp}.csv")
-            self.export_to_csv("sessions", f"{self.reports_dir}/sessions_{timestamp}.csv")
-            return f"{self.reports_dir}/complete_export_{timestamp}"
+            self.export_to_csv("students", os.path.join(self.reports_dir, f"students_{timestamp}.csv"))
+            self.export_to_csv("attendance", os.path.join(self.reports_dir, f"attendance_{timestamp}.csv"))
+            self.export_to_csv("sessions", os.path.join(self.reports_dir, f"sessions_{timestamp}.csv"))
+            return os.path.join(self.reports_dir, f"complete_export_{timestamp}")
         
         with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=headers)

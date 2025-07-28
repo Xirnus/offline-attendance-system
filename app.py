@@ -163,6 +163,19 @@ def save_class_upload():
     except SQLAlchemyError as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Shutdown endpoint for graceful server shutdown from GUI"""
+    try:
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func is None:
+            # For production WSGI servers, we can't shutdown gracefully
+            return jsonify({'message': 'Cannot shutdown WSGI server'}), 500
+        func()
+        return jsonify({'message': 'Server shutting down...'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     print("Starting Flask Attendance System")
     print("=" * 40)

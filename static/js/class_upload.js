@@ -318,18 +318,28 @@ document.addEventListener('DOMContentLoaded', function() {
     function deleteStudentFromClass(classId, studentId) {
         showLoading(true);
         
-        fetch(`/api/optimized/classes/${classId}/unenroll`, {
-            method: 'POST',
+        // Use the DELETE endpoint that we know works
+        fetch(`/api/optimized/classes/${classId}/students/${studentId}`, {
+            method: 'DELETE',
             headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                student_ids: [studentId]
-            })
+                'Accept': 'application/json',
+            }
         })
         .then(response => {
             if (!response.ok) {
-                return response.json().then(err => Promise.reject(err));
+                // Try to get response as text first to see what we're actually getting
+                return response.text().then(text => {
+                    console.error('Non-OK response body:', text);
+                    try {
+                        const jsonError = JSON.parse(text);
+                        return Promise.reject(jsonError);
+                    } catch (parseError) {
+                        return Promise.reject({
+                            error: `Server error (${response.status}): ${text}`,
+                            status: response.status
+                        });
+                    }
+                });
             }
             return response.json();
         })
