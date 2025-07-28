@@ -56,12 +56,25 @@ def api_attendances():
 @settings_bp.route('/api/denied')
 def api_denied():
     try:
-        denied = get_all_data('denied_attempts')
+        from database.operations import get_denied_attempts_with_details
+        denied = get_denied_attempts_with_details()
+        # Add session_id and device_signature for compatibility
         for attempt in denied:
-            if 'device_fingerprint_id' in attempt and attempt['device_fingerprint_id']:
-                attempt['device_fingerprint_id'] = attempt['device_fingerprint_id'][:8] + '...'
+            # Add device signature (truncated device fingerprint hash) for compatibility
+            if 'device_info' in attempt and attempt['device_info']:
+                try:
+                    import json
+                    device_info = json.loads(attempt['device_info']) if isinstance(attempt['device_info'], str) else attempt['device_info']
+                    # Create a simple signature from visitor_id if available
+                    visitor_id = device_info.get('visitor_id', 'unknown')
+                    attempt['device_signature'] = visitor_id[:12] if visitor_id != 'unknown' else 'unknown'
+                except:
+                    attempt['device_signature'] = 'unknown'
+            else:
+                attempt['device_signature'] = 'unknown'
         return jsonify(denied)
     except Exception as e:
+        print(f"Error getting denied attempts: {e}")
         return jsonify([])
 
 @settings_bp.route('/api/device_fingerprints', methods=['GET'])

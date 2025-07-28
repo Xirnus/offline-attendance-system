@@ -117,11 +117,13 @@ TABLES = {
             student_id TEXT,
             token_id INTEGER,
             device_fingerprint_id INTEGER,
+            session_id INTEGER,
             reason TEXT NOT NULL,
             attempted_at REAL NOT NULL,
             FOREIGN KEY (student_id) REFERENCES students (student_id) ON DELETE SET NULL,
             FOREIGN KEY (token_id) REFERENCES tokens (id) ON DELETE SET NULL,
-            FOREIGN KEY (device_fingerprint_id) REFERENCES device_fingerprints (id) ON DELETE SET NULL
+            FOREIGN KEY (device_fingerprint_id) REFERENCES device_fingerprints (id) ON DELETE SET NULL,
+            FOREIGN KEY (session_id) REFERENCES attendance_sessions (id) ON DELETE SET NULL
         )
     ''',
     
@@ -191,6 +193,7 @@ INDEXES = {
     'idx_tokens_device': 'CREATE INDEX IF NOT EXISTS idx_tokens_device ON tokens(device_fingerprint_id)',
     'idx_tokens_generated': 'CREATE INDEX IF NOT EXISTS idx_tokens_generated ON tokens(generated_at)',
     'idx_denied_attempts_device': 'CREATE INDEX IF NOT EXISTS idx_denied_attempts_device ON denied_attempts(device_fingerprint_id)',
+    'idx_denied_attempts_session': 'CREATE INDEX IF NOT EXISTS idx_denied_attempts_session ON denied_attempts(session_id)',
     'idx_denied_attempts_time': 'CREATE INDEX IF NOT EXISTS idx_denied_attempts_time ON denied_attempts(attempted_at)',
     'idx_device_fingerprints_hash': 'CREATE INDEX IF NOT EXISTS idx_device_fingerprints_hash ON device_fingerprints(fingerprint_hash)',
     'idx_sessions_profile': 'CREATE INDEX IF NOT EXISTS idx_sessions_profile ON attendance_sessions(profile_id)',

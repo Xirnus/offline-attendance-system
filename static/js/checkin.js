@@ -488,65 +488,128 @@ function showMessage(text, type) {
         messageElement.innerHTML = text;
         messageElement.style.display = 'block';
         
-        // Add special styling for device blocking messages
-        if (text.includes('DEVICE BLOCKED')) {
+        // Special styling for QR code related messages
+        if (text.includes('QR Code Already Used') || text.includes('QR code already used') || text.includes('This QR code has already been used')) {
             messageElement.style.cssText = `
                 display: block !important;
-                background-color: #f8d7da;
+                background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+                color: #8b6914;
+                border: 3px solid #f0ad4e;
+                border-radius: 16px;
+                padding: 25px;
+                margin: 25px 0;
+                font-weight: 600;
+                font-size: 16px;
+                text-align: center;
+                box-shadow: 0 12px 35px rgba(240, 173, 78, 0.25);
+                animation: gentle-bounce 0.6s ease-out;
+                position: relative;
+                overflow: hidden;
+                max-width: 450px;
+                margin-left: auto;
+                margin-right: auto;
+            `;
+            
+            // Add a subtle animation effect and glow
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes gentle-bounce {
+                    0% { transform: translateY(-25px) scale(0.95); opacity: 0; }
+                    50% { transform: translateY(8px) scale(1.02); opacity: 0.85; }
+                    100% { transform: translateY(0) scale(1); opacity: 1; }
+                }
+                @keyframes subtle-glow {
+                    0%, 100% { box-shadow: 0 12px 35px rgba(240, 173, 78, 0.25); }
+                    50% { box-shadow: 0 12px 35px rgba(240, 173, 78, 0.4); }
+                }
+                #message:has([style*="QR Code Already Used"]) {
+                    animation: gentle-bounce 0.6s ease-out, subtle-glow 2s ease-in-out infinite;
+                }
+            `;
+            if (!document.head.querySelector('#qr-message-styles')) {
+                style.id = 'qr-message-styles';
+                document.head.appendChild(style);
+            }
+        }
+        // Add special styling for DEVICE BLOCKED messages
+        else if (text.includes('DEVICE BLOCKED')) {
+            messageElement.style.cssText = `
+                display: block !important;
+                background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
                 color: #721c24;
-                border: 2px solid #f5c6cb;
-                border-radius: 8px;
-                padding: 15px;
+                border: 2px solid #dc3545;
+                border-radius: 12px;
+                padding: 20px;
                 margin: 20px 0;
                 font-weight: bold;
                 font-size: 16px;
                 text-align: center;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                box-shadow: 0 8px 25px rgba(220, 53, 69, 0.3);
+                animation: shake 0.6s ease-in-out;
             `;
-        } else if (type === 'danger') {
+            
+            // Add shake animation for blocked devices
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-5px); }
+                    75% { transform: translateX(5px); }
+                }
+            `;
+            if (!document.head.querySelector('#device-blocked-styles')) {
+                style.id = 'device-blocked-styles';
+                document.head.appendChild(style);
+            }
+        }
+        else if (type === 'danger') {
             messageElement.style.cssText = `
                 display: block !important;
                 background-color: #f8d7da;
                 color: #721c24;
                 border: 1px solid #f5c6cb;
-                border-radius: 4px;
-                padding: 10px;
+                border-radius: 8px;
+                padding: 15px;
                 margin: 15px 0;
                 font-weight: normal;
+                box-shadow: 0 2px 8px rgba(220, 53, 69, 0.1);
             `;
         } else if (type === 'warning') {
             messageElement.style.cssText = `
                 display: block !important;
-                background-color: #fff3cd;
+                background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
                 color: #856404;
-                border: 1px solid #ffeaa7;
-                border-radius: 4px;
-                padding: 10px;
+                border: 1px solid #f0ad4e;
+                border-radius: 8px;
+                padding: 15px;
                 margin: 15px 0;
-                font-weight: normal;
+                font-weight: 500;
+                box-shadow: 0 2px 8px rgba(240, 173, 78, 0.1);
             `;
         } else if (type === 'success') {
             messageElement.style.cssText = `
                 display: block !important;
-                background-color: #d4edda;
+                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
                 color: #155724;
-                border: 1px solid #c3e6cb;
-                border-radius: 4px;
-                padding: 10px;
+                border: 1px solid #28a745;
+                border-radius: 8px;
+                padding: 15px;
                 margin: 15px 0;
-                font-weight: normal;
+                font-weight: 500;
+                box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
             `;
         } else {
             // Default/info styling
             messageElement.style.cssText = `
                 display: block !important;
-                background-color: #d1ecf1;
+                background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
                 color: #0c5460;
-                border: 1px solid #bee5eb;
-                border-radius: 4px;
-                padding: 10px;
+                border: 1px solid #17a2b8;
+                border-radius: 8px;
+                padding: 15px;
                 margin: 15px 0;
-                font-weight: normal;
+                font-weight: 500;
+                box-shadow: 0 2px 8px rgba(23, 162, 184, 0.1);
             `;
         }
     }
@@ -767,14 +830,36 @@ function setupFormHandler() {
             
             // Check for other specific error types
             if (errorMessage.toLowerCase().includes('invalid token') || 
-                errorMessage.toLowerCase().includes('token')) {
+                errorMessage.toLowerCase().includes('expired token')) {
                 errorMessage = '🔒 Invalid or expired QR code. Please scan a new QR code.';
+                messageType = 'warning';
+            } else if (errorMessage.toLowerCase().includes('qr code already used') || 
+                       errorMessage.toLowerCase().includes('token already used')) {
+                errorMessage = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 12px;">🔄</div>
+                        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">QR Code Already Used</div>
+                        <div style="font-size: 14px; color: #6c5a00;">
+                            This QR code has already been scanned.<br>
+                            Please request a new QR code from your instructor.
+                        </div>
+                    </div>
+                `;
+                messageType = 'warning';
+                
+                // Disable the form since the QR code is invalid
+                document.getElementById('student_id').disabled = true;
+                document.getElementById('submitBtn').disabled = true;
+                document.getElementById('submitBtn').textContent = 'QR Code Expired';
+                
+                showMessage(errorMessage, messageType);
+                return; // Exit early to avoid the generic error message below
             } else if (errorMessage.toLowerCase().includes('student not found')) {
                 errorMessage = '👤 Student ID not found. Please check your student ID and try again.';
             } else if (errorMessage.toLowerCase().includes('already checked in')) {
                 errorMessage = '✅ You have already checked in for this session.';
             } else if (errorMessage.toLowerCase().includes('device has already been used')) {
-                errorMessage = '� This device has already been used for check-in. Please use a different device.';
+                errorMessage = '📱 This device has already been used for check-in. Please use a different device.';
             } else if (errorMessage.toLowerCase().includes('no active attendance session')) {
                 errorMessage = '📅 No active session. Please contact the instructor.';
             }
@@ -787,13 +872,19 @@ function setupFormHandler() {
     // Clear error messages when user starts typing again (unless device is blocked)
     addEventListenerSafe('student_id', 'input', function() {
         const submitBtn = document.getElementById('submitBtn');
-        // Only clear if the device is not blocked
-        if (submitBtn && submitBtn.textContent !== 'Device Blocked' && submitBtn.textContent !== 'Already Checked In') {
+        // Only clear if the device is not blocked and QR code is not expired
+        if (submitBtn && 
+            submitBtn.textContent !== 'Device Blocked' && 
+            submitBtn.textContent !== 'Already Checked In' &&
+            submitBtn.textContent !== 'QR Code Expired') {
             // Clear any persistent error messages
             clearMessage();
             
             // Re-enable the submit button if it was disabled due to non-blocking errors
-            if (submitBtn.disabled && submitBtn.textContent !== 'Device Blocked' && submitBtn.textContent !== 'Already Checked In') {
+            if (submitBtn.disabled && 
+                submitBtn.textContent !== 'Device Blocked' && 
+                submitBtn.textContent !== 'Already Checked In' &&
+                submitBtn.textContent !== 'QR Code Expired') {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Check In';
             }

@@ -62,7 +62,7 @@ def validate_token_access(token_data, device_fingerprint_hash):
     if not token_data:
         return False, "Invalid token"
     if token_data['used']:
-        return False, "Token already used"
+        return False, "QR code already used"
     if is_token_expired(token_data['generated_at']):
         return False, "Token expired"
     # Check device fingerprint consistency (compare hash, not DB id)

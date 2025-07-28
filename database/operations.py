@@ -198,6 +198,16 @@ def record_denied_attempt(data, reason):
         cursor = conn.cursor()
         current_time = time.time()
         
+        # Check if session_id column exists, add it if not
+        try:
+            cursor.execute("PRAGMA table_info(denied_attempts)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'session_id' not in columns:
+                cursor.execute("ALTER TABLE denied_attempts ADD COLUMN session_id INTEGER")
+                print("Added session_id column to denied_attempts table")
+        except Exception as e:
+            print(f"Note: Could not add session_id column (may already exist): {e}")
+        
         # First, create or get device fingerprint
         device_fingerprint_id = None
         if data.get('fingerprint_hash') or data.get('device_info'):
@@ -227,14 +237,15 @@ def record_denied_attempt(data, reason):
         
         cursor.execute('''
             INSERT INTO denied_attempts 
-            (student_id, token_id, device_fingerprint_id, reason, attempted_at)
-            VALUES (?, ?, ?, ?, ?)
+            (student_id, token_id, device_fingerprint_id, reason, attempted_at, session_id)
+            VALUES (?, ?, ?, ?, ?, ?)
         ''', (
             data.get('student_id'),
             data.get('token_id'),
             device_fingerprint_id,
             reason,
-            current_time
+            current_time,
+            data.get('session_id')
         ))
         
         conn.commit()
@@ -1069,7 +1080,8 @@ def get_denied_attempts_with_details(limit=100):
                 da.reason,
                 df.device_info,
                 t.token,
-                da.student_id
+                da.student_id,
+                da.session_id
             FROM denied_attempts da
             LEFT JOIN students s ON da.student_id = s.student_id
             LEFT JOIN device_fingerprints df ON da.device_fingerprint_id = df.id

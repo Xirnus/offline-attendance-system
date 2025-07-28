@@ -190,8 +190,8 @@ def checkin():
             print("Invalid token")
             return jsonify(status='error', message='Invalid or expired token'), 401
         if token_data.get('used'):
-            print("Token already used")
-            return jsonify(status='error', message='Token already used'), 409
+            print("QR code already used")
+            return jsonify(status='error', message='QR code already used'), 409
 
         print("Token is valid")
 
@@ -232,6 +232,28 @@ def checkin():
         # Check if already checked in
         if is_student_already_checked_in_session(student_id, session_id):
             print(f"Student {student_id} already checked in for session {session_id}")
+            
+            # Generate fingerprint hash for denied attempt record
+            from services.fingerprint import create_fingerprint_hash
+            fingerprint_hash = create_fingerprint_hash({
+                'visitor_id': visitor_id,
+                'user_agent': user_agent
+            })
+            
+            # Record this as a denied attempt
+            enhanced_data = data.copy()
+            enhanced_data.update({
+                'student_id': student_id,
+                'token_id': token_data.get('id'),  # Get the token ID from token_data
+                'session_id': session_id,
+                'name': student.get('name', 'Unknown'),
+                'course': student.get('course', 'Unknown'), 
+                'year': str(student.get('year', 'Unknown')),
+                'fingerprint_hash': fingerprint_hash,
+                'device_info': data.get('device_info', '{}')
+            })
+            record_denied_attempt(enhanced_data, 'already_checked_in')
+            
             return jsonify(status='error', message='You have already checked in for this session. Only one check-in per session is allowed.'), 409
 
         # Generate fingerprint hash from visitor_id for all device operations

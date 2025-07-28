@@ -74,24 +74,17 @@
                 <div class="stat-label">Last Hour</div>
               </div>
             </div>
+            
+            <!-- Statistics Refresh Button -->
+            <div style="text-align: center; margin: 10px 0;">
+              <button id="refresh-stats-btn" class="btn btn-secondary" style="padding: 8px 16px; font-size: 12px; border-radius: 4px;">
+                🔄 Refresh Stats
+              </button>
+            </div>
 
             <!-- Security Settings -->
             <div class="security-section">
               <h3>Security Settings</h3>
-              <div class="form-group">
-                <label for="auto-regenerate-qr">
-                  <input type="checkbox" id="auto-regenerate-qr" checked> 
-                  Auto-regenerate QR Code
-                </label>
-              </div>
-              <div class="form-group" style="opacity: 0.5;">
-                <label>Max Uses per Device: <small>(Deprecated - now per-session only)</small></label>
-                <input id="max-uses" type="number" min="1" max="10" value="1" disabled>
-              </div>
-              <div class="form-group" style="opacity: 0.5;">
-                <label>Time Window (Hours): <small>(Deprecated - now per-session only)</small></label>
-                <input id="time-window" type="number" min="1" max="168" value="24" disabled>
-              </div>
               <div class="checkbox-group">
                 <input id="enable-blocking" type="checkbox" checked>
                 <label for="enable-blocking">Enable Per-Session Device Blocking</label>
@@ -144,8 +137,6 @@
             <div style="display: flex; align-items: center; gap: 15px;">
               <h3>Successful Check-ins</h3>
               <button id="refresh-data" class="btn btn-refresh">Refresh</button>
-              <button id="clear-all-data" class="btn btn-danger" style="margin-left: 10px;">Clear All Data</button>
-              <button id="clear-localstorage" class="btn btn-danger" style="margin-left: 10px;">Clear localStorage</button>
             </div>
           </div>
           <table>
@@ -189,47 +180,8 @@
             </tbody>
           </table>
         </div>
-
-        <!-- Device Tracking -->
-        <div class="table-section">
-          <div class="table-header">
-            <h3>Device Tracking</h3>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 25%;">Device ID</th>
-                <th style="width: 20%;">First Seen</th>
-                <th style="width: 20%;">Last Seen</th>
-                <th style="width: 15%;">Usage Count</th>
-                <th style="width: 20%;">Device Info</th>
-              </tr>
-            </thead>
-            <tbody id="device-fingerprints">
-              <tr>
-                <td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </div>
     </main>
   </div>
-
-  <!-- Custom Modal -->
-  <div id="customModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <div id="modalTitle" class="modal-title">Confirmation</div>
-        <div id="modalMessage" class="modal-message">Are you sure?</div>
-      </div>
-      <div class="modal-actions">
-        <button id="modalCancel" class="modal-btn modal-btn-secondary">Cancel</button>
-        <button id="modalConfirm" class="modal-btn modal-btn-primary">Confirm</button>
-      </div>
-    </div>
-  </div>
-
-
 </body>
 </html>
