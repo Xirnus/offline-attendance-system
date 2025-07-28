@@ -5,10 +5,10 @@ let trendsChart, lateChart, courseChart, weeklyChart;
 document.addEventListener('DOMContentLoaded', function() {
     initializeCharts();
     loadAnalyticsData();
-    setupEventListeners();
+    initEventListeners();
 });
 
-function setupEventListeners() {
+function initEventListeners() {
     // Use common utility for efficient event listener setup
     const eventHandlers = {
         'refresh-trends': refreshTrends,
@@ -23,7 +23,11 @@ function setupEventListeners() {
     };
 
     // Add event listeners efficiently using common utility
-    setupEventListeners(eventHandlers);
+    if (typeof window.setupEventListeners === 'function') {
+        window.setupEventListeners(eventHandlers);
+    } else {
+        console.error('setupEventListeners function not found in common.js');
+    }
 }
 
 function initializeCharts() {

@@ -61,16 +61,6 @@ document.addEventListener('DOMContentLoaded', function() {
   setupSettingsEventListeners();
   checkSessionStatusWithExpiration();
   
-  // Add manual refresh button functionality
-  const refreshStatsBtn = document.getElementById('refresh-stats-btn');
-  if (refreshStatsBtn) {
-    refreshStatsBtn.addEventListener('click', function() {
-      console.log('Manual statistics refresh requested');
-      loadData();
-      showNotification('Refreshing dashboard data...', 'info', 1000);
-    });
-  }
-  
   // --- SESSION CONTROL & INSTRUCTIONS LAYOUT ---
   // Wrap session control and instructions in a flex container
   const sessionControl = document.getElementById('session-control');
@@ -698,16 +688,34 @@ function stopSession() {
       if (dataCleared) {
         message += ` All session data cleared: ${clearedCounts.attendances || 0} attendances, ${clearedCounts.denied_attempts || 0} failed attempts, ${clearedCounts.device_fingerprints || 0} devices.`;
         
-        // Clear the tables immediately since data was cleared
-        document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
-        document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-        document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+        // Clear the tables immediately since data was cleared (with null checks)
+        const attendancesTable = document.getElementById('attendances');
+        if (attendancesTable) {
+          attendancesTable.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
+        }
         
-        // Reset statistics grid
-        document.getElementById('total-attendances').textContent = '0';
-        document.getElementById('total-denied').textContent = '0';
-        document.getElementById('unique-devices').textContent = '0';
-        document.getElementById('recent-activity').textContent = '0';
+        const deniedTable = document.getElementById('denied-attendances');
+        if (deniedTable) {
+          deniedTable.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
+        }
+        
+        const deviceTable = document.getElementById('device-fingerprints');
+        if (deviceTable) {
+          deviceTable.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
+        }
+        
+        // Reset statistics grid (with null checks)
+        const totalAttendances = document.getElementById('total-attendances');
+        if (totalAttendances) totalAttendances.textContent = '0';
+        
+        const totalDenied = document.getElementById('total-denied');
+        if (totalDenied) totalDenied.textContent = '0';
+        
+        const uniqueDevices = document.getElementById('unique-devices');
+        if (uniqueDevices) uniqueDevices.textContent = '0';
+        
+        const recentActivity = document.getElementById('recent-activity');
+        if (recentActivity) recentActivity.textContent = '0';
       }
       
       showNotification(message, 'success');
