@@ -1,7 +1,6 @@
 // Global variables
 let attendanceData = [];
 let deniedAttempts = [];
-let deviceFingerprints = [];
 let sessionProfiles = [];
 let lastUpdateTime = 0;
 let loadDataTimeout;
@@ -12,56 +11,17 @@ let autoRegenerateEnabled = true;
 // Track previous data to detect actual new data
 let previousAttendanceCount = 0;
 let previousDeniedCount = 0;
-let previousDeviceCount = 0;
 
 // Track token regeneration to prevent spam
 let lastTokenRegeneratedTime = 0;
 
-// Hidden data management
-let hiddenAttendanceIds = new Set();
-let hiddenDeniedIds = new Set();
-let hiddenDeviceHashes = new Set();
-
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
-  loadHiddenData(); // Load hidden data from localStorage
   loadSettings();
-  loadDashboardDataFromLocalStorage();
   loadSessionProfiles();
   setupEventListeners();
   setupSettingsEventListeners();
   checkSessionStatusWithExpiration();
-  
-  // --- SESSION CONTROL & INSTRUCTIONS LAYOUT ---
-  // Wrap session control and instructions in a flex container
-  const sessionControl = document.getElementById('session-control');
-  const instructions = document.getElementById('instructions');
-  if (sessionControl && instructions) {
-    // Create a flex wrapper
-    const flexWrapper = document.createElement('div');
-    flexWrapper.style.display = 'flex';
-    flexWrapper.style.justifyContent = 'center';
-    flexWrapper.style.alignItems = 'flex-start';
-    flexWrapper.style.gap = '32px';
-    flexWrapper.style.margin = '0 auto 24px auto';
-    flexWrapper.style.width = '100%';
-    // Remove all previous JS width settings for sessionControl
-    // Add a style tag to force #session-control width via CSS
-    let styleTag = document.getElementById('force-session-control-width');
-    if (!styleTag) {
-      styleTag = document.createElement('style');
-      styleTag.id = 'force-session-control-width';
-      styleTag.innerHTML = `#session-control { max-width:260px !important; min-width:260px !important; width:260px !important; flex:0 0 260px !important; box-sizing:border-box !important; margin:0 auto !important; }`;
-      document.head.appendChild(styleTag);
-    }
-    // Style instructions to not be too wide
-    instructions.style.maxWidth = '500px';
-    instructions.style.boxSizing = 'border-box';
-    // Move both into the flex wrapper
-    sessionControl.parentNode.insertBefore(flexWrapper, sessionControl);
-    flexWrapper.appendChild(sessionControl);
-    flexWrapper.appendChild(instructions);
-  }
   
   // Refresh intervals
   setInterval(loadData, 5000);
@@ -91,44 +51,24 @@ async function loadSessionProfiles() {
   }
 }
 
-// Load dashboard data from localStorage if available
-function loadDashboardDataFromLocalStorage() {
-  try {
-    const attendances = localStorage.getItem('attendanceData');
-    const denied = localStorage.getItem('deniedAttempts');
-    const devices = localStorage.getItem('deviceFingerprints');
-    attendanceData = attendances ? JSON.parse(attendances) : [];
-    deniedAttempts = denied ? JSON.parse(denied) : [];
-    deviceFingerprints = devices ? JSON.parse(devices) : [];
-  } catch (e) {
-    attendanceData = [];
-    deniedAttempts = [];
-    deviceFingerprints = [];
-  }
-}
-
-// Save dashboard data to localStorage
-function saveDashboardDataToLocalStorage() {
-  try {
-    localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
-    localStorage.setItem('deniedAttempts', JSON.stringify(deniedAttempts));
-    localStorage.setItem('deviceFingerprints', JSON.stringify(deviceFingerprints));
-  } catch (e) {}
-}
-
 // Helper to get current session ID from backend
 async function getCurrentSessionId() {
   try {
     const res = await fetch('/api/session_status');
     const data = await res.json();
-    if (data && data.session && data.session.id) {
-      return data.session.id;
+    console.log('Session status response:', data); // Debug log
+    if (data && data.active_session && data.active_session.id) {
+      console.log('Found active session ID:', data.active_session.id); // Debug log
+      return data.active_session.id;
     }
-  } catch (e) {}
+    console.log('No active session found in response'); // Debug log
+  } catch (e) {
+    console.error('Error getting session ID:', e); // Debug log
+  }
   return null;
 }
 
-// Override loadData to filter by current session before saving to localStorage
+// Override loadData to always fetch fresh data from server
 function loadData() {
   if (loadDataTimeout) clearTimeout(loadDataTimeout);
 
@@ -136,56 +76,39 @@ function loadData() {
     try {
       // Get the current active session ID
       const sessionId = await getCurrentSessionId();
+      console.log('Current session ID:', sessionId);
 
-      // Try to load from localStorage first
-      let attendances = localStorage.getItem('attendanceData');
-      let denied = localStorage.getItem('deniedAttempts');
-      let devices = localStorage.getItem('deviceFingerprints');
-      let loadedFromLocal = attendances && denied && devices;
+      // Always fetch fresh data from backend to ensure real-time updates
+      const [attendanceRes, deniedRes] = await Promise.all([
+        fetchWithLoading('/api/attendances'),
+        fetchWithLoading('/api/denied')
+      ]);
+      
+      console.log('Raw data counts:', {
+        attendances: attendanceRes?.length || 0,
+        denied: deniedRes?.length || 0
+      });
 
-      if (loadedFromLocal) {
-        attendanceData = sessionId
-          ? (JSON.parse(attendances) || []).filter(a => a.session_id == sessionId)
-          : (JSON.parse(attendances) || []);
-        deniedAttempts = sessionId
-          ? (JSON.parse(denied) || []).filter(d => d.session_id == sessionId)
-          : (JSON.parse(denied) || []);
-        deviceFingerprints = sessionId
-          ? (JSON.parse(devices) || []).filter(dev =>
-              dev.last_session_id == sessionId ||
-              dev.session_id == sessionId
-            )
-          : (JSON.parse(devices) || []);
+      // Only show data from current active session (no data if no active session)
+      if (sessionId) {
+        attendanceData = (attendanceRes || []).filter(a => a.session_id == sessionId);
+        deniedAttempts = (deniedRes || []).filter(d => d.session_id == sessionId);
+        
+        console.log('Filtered data counts for session', sessionId, ':', {
+          attendances: attendanceData.length,
+          denied: deniedAttempts.length
+        });
       } else {
-        // Fallback: fetch from backend and save to localStorage
-        const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
-          fetchWithLoading('/api/attendances'),
-          fetchWithLoading('/api/denied'),
-          fetchWithLoading('/api/device_fingerprints')
-        ]);
-        attendanceData = sessionId
-          ? (attendanceRes || []).filter(a => a.session_id == sessionId)
-          : (attendanceRes || []);
-        deniedAttempts = sessionId
-          ? (deniedRes || []).filter(d => d.session_id == sessionId)
-          : (deniedRes || []);
-        deviceFingerprints = sessionId
-          ? (devicesRes || []).filter(dev =>
-              dev.last_session_id == sessionId ||
-              dev.session_id == sessionId
-            )
-          : (devicesRes || []);
-        saveDashboardDataToLocalStorage();
+        // No active session - show no data
+        attendanceData = [];
+        deniedAttempts = [];
+        console.log('No active session - showing no data');
       }
-
-      // Filter out hidden data
-      filterVisibleData();
       
       // Check for actually new data by comparing counts
       const hasNewAttendance = attendanceData.length > previousAttendanceCount;
       const hasNewDenied = deniedAttempts.length > previousDeniedCount;
-      const hasNewDevice = deviceFingerprints.length > previousDeviceCount;
-      const hasAnyNewData = hasNewAttendance || hasNewDenied || hasNewDevice;
+      const hasAnyNewData = hasNewAttendance || hasNewDenied;
 
       // Check if current token has been used
       if (currentToken && autoRegenerateEnabled) {
@@ -194,7 +117,6 @@ function loadData() {
 
       updateAttendanceTable();
       updateDeniedTable();
-      updateDeviceTable();
       updateStatisticsGrid(); 
       
       // Only show notification for actually new data, and only after initial load
@@ -203,7 +125,6 @@ function loadData() {
         let activities = [];
         if (hasNewAttendance) activities.push('check-ins');
         if (hasNewDenied) activities.push('denied attempts');
-        if (hasNewDevice) activities.push('devices');
         notificationMessage += activities.join(', ');
         
         showNotification(notificationMessage, 'info', 2000);
@@ -212,7 +133,6 @@ function loadData() {
       // Update previous counts for next comparison
       previousAttendanceCount = attendanceData.length;
       previousDeniedCount = deniedAttempts.length;
-      previousDeviceCount = deviceFingerprints.length;
       
       lastUpdateTime = Date.now();
     } catch (error) {
@@ -234,99 +154,6 @@ async function loadSessionProfiles() {
   }
 }
 
-function loadData() {
-  if (loadDataTimeout) clearTimeout(loadDataTimeout);
-  
-  loadDataTimeout = setTimeout(async () => {
-    try {
-      // Get the current active session ID
-      const sessionId = await getCurrentSessionId();
-
-      // Try to load from localStorage first
-      let attendances = localStorage.getItem('attendanceData');
-      let denied = localStorage.getItem('deniedAttempts');
-      let devices = localStorage.getItem('deviceFingerprints');
-      let loadedFromLocal = attendances && denied && devices;
-
-      if (loadedFromLocal) {
-        attendanceData = sessionId
-          ? (JSON.parse(attendances) || []).filter(a => a.session_id == sessionId)
-          : (JSON.parse(attendances) || []);
-        deniedAttempts = sessionId
-          ? (JSON.parse(denied) || []).filter(d => d.session_id == sessionId)
-          : (JSON.parse(denied) || []);
-        deviceFingerprints = sessionId
-          ? (JSON.parse(devices) || []).filter(dev =>
-              dev.last_session_id == sessionId ||
-              dev.session_id == sessionId
-            )
-          : (JSON.parse(devices) || []);
-      } else {
-        // Fallback: fetch from backend and save to localStorage
-        const [attendanceRes, deniedRes, devicesRes] = await Promise.all([
-          fetchWithLoading('/api/attendances'),
-          fetchWithLoading('/api/denied'),
-          fetchWithLoading('/api/device_fingerprints')
-        ]);
-        attendanceData = sessionId
-          ? (attendanceRes || []).filter(a => a.session_id == sessionId)
-          : (attendanceRes || []);
-        deniedAttempts = sessionId
-          ? (deniedRes || []).filter(d => d.session_id == sessionId)
-          : (deniedRes || []);
-        deviceFingerprints = sessionId
-          ? (devicesRes || []).filter(dev =>
-              dev.last_session_id == sessionId ||
-              dev.session_id == sessionId
-            )
-          : (devicesRes || []);
-        saveDashboardDataToLocalStorage();
-      }
-
-      // Filter out hidden data
-      filterVisibleData();
-      
-      // Check for actually new data by comparing counts
-      const hasNewAttendance = attendanceData.length > previousAttendanceCount;
-      const hasNewDenied = deniedAttempts.length > previousDeniedCount;
-      const hasNewDevice = deviceFingerprints.length > previousDeviceCount;
-      const hasAnyNewData = hasNewAttendance || hasNewDenied || hasNewDevice;
-
-      // Check if current token has been used
-      if (currentToken && autoRegenerateEnabled) {
-        checkTokenUsageAndRegenerate(attendanceData, deniedAttempts);
-      }
-
-      updateAttendanceTable();
-      updateDeniedTable();
-      updateDeviceTable();
-      updateStatisticsGrid(); 
-      
-      // Only show notification for actually new data, and only after initial load
-      if (hasAnyNewData && lastUpdateTime > 0) {
-        let notificationMessage = 'New activity detected: ';
-        let activities = [];
-        if (hasNewAttendance) activities.push('check-ins');
-        if (hasNewDenied) activities.push('denied attempts');
-        if (hasNewDevice) activities.push('devices');
-        notificationMessage += activities.join(', ');
-        
-        showNotification(notificationMessage, 'info', 2000);
-      }
-      
-      // Update previous counts for next comparison
-      previousAttendanceCount = attendanceData.length;
-      previousDeniedCount = deniedAttempts.length;
-      previousDeviceCount = deviceFingerprints.length;
-      
-      lastUpdateTime = Date.now();
-      
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-  }, 100);
-}
-
 // Add this new function to update the statistics grid
 function updateStatisticsGrid() {
   try {
@@ -338,9 +165,9 @@ function updateStatisticsGrid() {
     const totalDenied = deniedAttempts.length;
     document.getElementById('total-denied').textContent = totalDenied;
     
-    // Update unique devices
-    const uniqueDevices = deviceFingerprints.length;
-    document.getElementById('unique-devices').textContent = uniqueDevices;
+    // Update unique students count instead of devices
+    const uniqueStudents = new Set(attendanceData.map(item => item.name)).size;
+    document.getElementById('unique-devices').textContent = uniqueStudents;
     
     // Calculate recent activity (last hour)
     const oneHourAgo = Date.now() - (60 * 60 * 1000);
@@ -390,10 +217,7 @@ function setupEventListeners() {
   addEventListeners({
     'generate-btn': () => generateQR(false),
     'save-settings': saveSettings,
-    'refresh-data': loadData,
-    'clear-all-data': clearAllDataWithModal,
-    'clear-localstorage': clearLocalStorageWithModal,
-    'restore-hidden-data': restoreHiddenData
+    'refresh-data': loadData
   });
 
   // Add auto-regeneration toggle if it exists
@@ -890,11 +714,6 @@ function stopSession() {
       const dataCleared = data.data_cleared || false;
       const clearedCounts = data.cleared_counts || {};
       
-      // Clear localStorage dashboard data
-      localStorage.removeItem('attendanceData');
-      localStorage.removeItem('deniedAttempts');
-      localStorage.removeItem('deviceFingerprints');
-      
       let message = '';
       if (absentCount > 0) {
         message += `Session stopped successfully. ${absentCount} students marked absent.`;
@@ -903,12 +722,11 @@ function stopSession() {
       }
       
       if (dataCleared) {
-        message += ` All session data cleared: ${clearedCounts.attendances || 0} attendances, ${clearedCounts.denied_attempts || 0} failed attempts, ${clearedCounts.device_fingerprints || 0} devices.`;
+        message += ` All session data cleared: ${clearedCounts.attendances || 0} attendances, ${clearedCounts.denied_attempts || 0} failed attempts.`;
         
         // Clear the tables immediately since data was cleared
         document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
         document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-        document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
         
         // Reset statistics grid
         document.getElementById('total-attendances').textContent = '0';
@@ -1230,199 +1048,6 @@ async function saveSettings() {
   }
 }
 
-// Delete all dashboard data
-async function deleteAllData() {
-  // Show confirmation dialog with detailed warning
-  const confirmMessage = `⚠️ WARNING: This will permanently delete ALL data from the dashboard including:
-
-• All successful check-ins (attendances)
-• All failed check-in attempts (denied attempts) 
-• All device fingerprint records
-
-This action CANNOT be undone!
-
-Are you absolutely sure you want to proceed?`;
-
-  if (!confirm(confirmMessage)) {
-    return; // User cancelled
-  }
-
-  // Show second confirmation
-  if (!confirm('Last chance! This will delete ALL attendance data. Continue?')) {
-    return; // User cancelled
-  }
-
-  try {
-    // Show loading notification
-    showNotification('Deleting all data...', 'info');
-    
-    const response = await fetch('/api/delete_all_data', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json' 
-      }
-    });
-    
-    const result = await response.json();
-    
-    if (response.ok && result.status === 'success') {
-      // Show success message with details
-      const counts = result.deleted_counts;
-      const successMessage = `✅ Successfully deleted all data:
-      
-• ${counts.attendances} attendance records
-• ${counts.denied_attempts} failed attempts  
-• ${counts.device_fingerprints} device records
-
-${result.message}`;
-
-      showNotification(successMessage, 'success');
-      
-      // Refresh the data to show empty tables
-      setTimeout(() => {
-        loadData();
-      }, 1000);
-      
-    } else {
-      throw new Error(result.message || 'Unknown error occurred');
-    }
-    
-  } catch (error) {
-    console.error('Error deleting data:', error);
-    showNotification(`❌ Failed to delete data: ${error.message}`, 'error');
-  }
-}
-
-// Hide all data from display (preserve in database)
-async function clearAllDataWithModal() {
-  try {
-    // Show confirmation dialog
-    const confirmed = await showCustomModal(
-      'This will hide all current data from the dashboard view.\n\nThe data will remain in the database but will not be displayed even after refresh.\n\nTo permanently delete data, you would need to use the database management tools.\n\nProceed with hiding the data?',
-      'Hide All Data',
-      true // show cancel button
-    );
-
-    if (!confirmed) {
-      return; // User cancelled
-    }
-
-    // Show loading notification
-    showNotification('Hiding all data from display...', 'info');
-    
-    // Count current data for the notification
-    const currentCounts = {
-      attendances: attendanceData.length,
-      denied_attempts: deniedAttempts.length,
-      device_fingerprints: deviceFingerprints.length
-    };
-    
-    // Hide all current data
-    hideAllCurrentData();
-    
-    // Clear the data arrays (they will stay hidden even on refresh)
-    attendanceData = [];
-    deniedAttempts = [];
-    deviceFingerprints = [];
-    
-    // Clear the tables immediately
-    document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
-    document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-    document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
-    
-    // Reset statistics grid
-    document.getElementById('total-attendances').textContent = '0';
-    document.getElementById('total-denied').textContent = '0';
-    document.getElementById('unique-devices').textContent = '0';
-    document.getElementById('recent-activity').textContent = '0';
-    
-    // Show success message with details
-    const successMessage = `Data hidden successfully:
-• ${currentCounts.attendances} attendance records hidden
-• ${currentCounts.denied_attempts} failed attempts hidden
-• ${currentCounts.device_fingerprints} device records hidden
-
-Note: Data is preserved in database but will remain hidden even after refresh.`;
-
-    showNotification(successMessage, 'success');
-    
-  } catch (error) {
-    console.error('Error hiding data:', error);
-    showNotification(`Failed to hide data: ${error.message}`, 'error');
-  }
-}
-
-// Clear all localStorage data with confirmation
-async function clearLocalStorageWithModal() {
-  try {
-    // Show confirmation dialog
-    const confirmed = await showCustomModal(
-      'This will permanently clear all locally stored data including:\n\n• Attendance records\n• Failed attempts\n• Device fingerprints\n• Hidden data records\n• Settings\n\nThis action cannot be undone and will reset the dashboard to a clean state.\n\nProceed with clearing localStorage?',
-      'Clear localStorage',
-      true // show cancel button
-    );
-
-    if (!confirmed) {
-      return; // User cancelled
-    }
-
-    // Show loading notification
-    showNotification('Clearing localStorage...', 'info');
-    
-    // Get current counts for notification
-    const currentCounts = {
-      attendances: attendanceData.length,
-      denied_attempts: deniedAttempts.length,
-      device_fingerprints: deviceFingerprints.length
-    };
-    
-    // Clear all localStorage data
-    localStorage.clear();
-    
-    // Reset all data arrays
-    attendanceData = [];
-    deniedAttempts = [];
-    deviceFingerprints = [];
-    hiddenAttendanceIds = new Set();
-    hiddenDeniedIds = new Set();
-    hiddenDeviceHashes = new Set();
-    
-    // Clear the tables immediately
-    document.getElementById('attendances').innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No attendance data</td></tr>';
-    document.getElementById('denied-attendances').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts</td></tr>';
-    document.getElementById('device-fingerprints').innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No device data available</td></tr>';
-    
-    // Reset statistics grid
-    document.getElementById('total-attendances').textContent = '0';
-    document.getElementById('total-denied').textContent = '0';
-    document.getElementById('unique-devices').textContent = '0';
-    document.getElementById('recent-activity').textContent = '0';
-    
-    // Reset settings to defaults
-    document.getElementById('max-uses').value = '1';
-    document.getElementById('time-window').value = '24';
-    document.getElementById('enable-blocking').checked = true;
-    document.getElementById('auto-regenerate-qr').checked = true;
-    autoRegenerateEnabled = true;
-    
-    // Show success message with details
-    const successMessage = `localStorage cleared successfully:
-• ${currentCounts.attendances} attendance records removed
-• ${currentCounts.denied_attempts} failed attempts removed
-• ${currentCounts.device_fingerprints} device records removed
-• All settings reset to defaults
-• All hidden data cleared
-
-Dashboard has been reset to a clean state.`;
-
-    showNotification(successMessage, 'success');
-    
-  } catch (error) {
-    console.error('Error clearing localStorage:', error);
-    showNotification(`Failed to clear localStorage: ${error.message}`, 'error');
-  }
-}
-
 function showDetailedDeviceInfo(deviceInfoStr) {
   try {
     if (!deviceInfoStr) return;
@@ -1494,7 +1119,14 @@ function updateAttendanceTable() {
   const tbody = document.getElementById('attendances');
   
   if (attendanceData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6">No check-ins yet</td></tr>';
+    // Check if there's an active session to show appropriate message
+    getCurrentSessionId().then(sessionId => {
+      if (sessionId) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No check-ins for current session yet</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #666;">No active session - Create a session to see attendance data</td></tr>';
+      }
+    });
     return;
   }
   
@@ -1522,7 +1154,14 @@ function updateDeniedTable() {
   const tbody = document.getElementById('denied-attendances');
   
   if (deniedAttempts.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5">No failed attempts</td></tr>';
+    // Check if there's an active session to show appropriate message
+    getCurrentSessionId().then(sessionId => {
+      if (sessionId) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No failed attempts for current session</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: #666;">No active session</td></tr>';
+      }
+    });
     return;
   }
   
@@ -1533,33 +1172,6 @@ function updateDeniedTable() {
       <td>${formatReason(item.reason)}</td>
       <td>${item.token ? item.token.substring(0, 8) + '...' : 'N/A'}</td>
       <td>${item.device_signature ? item.device_signature.substring(0, 12) + '...' : 'N/A'}</td>
-    </tr>
-  `).join('');
-}
-
-function updateDeviceTable() {
-  const tbody = document.getElementById('device-fingerprints');
-  
-  if (deviceFingerprints.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5">No device data available</td></tr>';
-    return;
-  }
-  
-  tbody.innerHTML = deviceFingerprints.map(item => `
-    <tr>
-      <td>${item.fingerprint_hash.substring(0, 12)}...</td>
-      <td>${formatDateTime(item.first_seen)}</td>
-      <td>${formatDateTime(item.last_seen)}</td>
-      <td>${item.usage_count}</td>
-      <td>
-        <span 
-          style="cursor: pointer; color: #007bff; text-decoration: underline;" 
-          onclick="showDetailedDeviceInfo('${escapeHtml(item.device_info)}')"
-          title="Click for detailed device information"
-        >
-          ${getDeviceInfo(item.device_info)}
-        </span>
-      </td>
     </tr>
   `).join('');
 }
@@ -1697,9 +1309,14 @@ function getDeviceInfo(deviceInfoStr) {
 
 // Add visual indicator for device blocking status
 function updateDeviceBlockingStatus() {
-  const enableBlocking = document.getElementById('enable-blocking').checked;
-  const maxUses = document.getElementById('max-uses').value;
-  const timeWindow = document.getElementById('time-window').value;
+  const enableBlockingEl = document.getElementById('enable-blocking');
+  if (!enableBlockingEl) return; // Exit if element doesn't exist
+  
+  const enableBlocking = enableBlockingEl.checked;
+  const maxUsesEl = document.getElementById('max-uses');
+  const timeWindowEl = document.getElementById('time-window');
+  const maxUses = maxUsesEl ? maxUsesEl.value : null;
+  const timeWindow = timeWindowEl ? timeWindowEl.value : null;
   
   // Create or update status indicator
   let statusIndicator = document.getElementById('device-blocking-status');
@@ -1711,8 +1328,12 @@ function updateDeviceBlockingStatus() {
       text-align: center; font-weight: bold;
     `;
     
-    const enableBlockingElement = document.getElementById('enable-blocking').parentElement;
-    enableBlockingElement.appendChild(statusIndicator);
+    const enableBlockingElement = document.getElementById('enable-blocking');
+    if (enableBlockingElement && enableBlockingElement.parentElement) {
+      enableBlockingElement.parentElement.appendChild(statusIndicator);
+    } else {
+      return; // Exit if we can't find where to append the status
+    }
   }
   
   if (enableBlocking) {
@@ -1739,124 +1360,4 @@ function setupSettingsEventListeners() {
       element.addEventListener('input', updateDeviceBlockingStatus);
     }
   });
-}
-
-// Call setupSettingsEventListeners on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', setupSettingsEventListeners);
-
-// Hidden data management functions
-function loadHiddenData() {
-  try {
-    const hiddenAttendance = localStorage.getItem('hiddenAttendanceIds');
-    const hiddenDenied = localStorage.getItem('hiddenDeniedIds');
-    const hiddenDevices = localStorage.getItem('hiddenDeviceHashes');
-    
-    hiddenAttendanceIds = hiddenAttendance ? new Set(JSON.parse(hiddenAttendance)) : new Set();
-    hiddenDeniedIds = hiddenDenied ? new Set(JSON.parse(hiddenDenied)) : new Set();
-    hiddenDeviceHashes = hiddenDevices ? new Set(JSON.parse(hiddenDevices)) : new Set();
-    
-    console.log('Loaded hidden data:', {
-      attendance: hiddenAttendanceIds.size,
-      denied: hiddenDeniedIds.size,
-      devices: hiddenDeviceHashes.size
-    });
-  } catch (error) {
-    console.error('Error loading hidden data:', error);
-    hiddenAttendanceIds = new Set();
-    hiddenDeniedIds = new Set();
-    hiddenDeviceHashes = new Set();
-  }
-}
-
-function saveHiddenData() {
-  try {
-    localStorage.setItem('hiddenAttendanceIds', JSON.stringify([...hiddenAttendanceIds]));
-    localStorage.setItem('hiddenDeniedIds', JSON.stringify([...hiddenDeniedIds]));
-    localStorage.setItem('hiddenDeviceHashes', JSON.stringify([...hiddenDeviceHashes]));
-  } catch (error) {
-    console.error('Error saving hidden data:', error);
-  }
-}
-
-function hideAllCurrentData() {
-  // Add all current data IDs to hidden sets
-  attendanceData.forEach(item => {
-    if (item.id) hiddenAttendanceIds.add(item.id);
-    else if (item.timestamp && item.name) {
-      // Create a unique identifier if no ID exists
-      hiddenAttendanceIds.add(`${item.timestamp}_${item.name}_${item.token || ''}`);
-    }
-  });
-  
-  deniedAttempts.forEach(item => {
-    if (item.id) hiddenDeniedIds.add(item.id);
-    else if (item.timestamp && item.name) {
-      // Create a unique identifier if no ID exists
-      hiddenDeniedIds.add(`${item.timestamp}_${item.name}_${item.reason || ''}`);
-    }
-  });
-  
-  deviceFingerprints.forEach(item => {
-    if (item.fingerprint_hash) hiddenDeviceHashes.add(item.fingerprint_hash);
-  });
-  
-  // Save to localStorage
-  saveHiddenData();
-}
-
-function filterVisibleData() {
-  // Filter out hidden attendance data
-  attendanceData = attendanceData.filter(item => {
-    if (item.id && hiddenAttendanceIds.has(item.id)) return false;
-    const fallbackId = `${item.timestamp}_${item.name}_${item.token || ''}`;
-    return !hiddenAttendanceIds.has(fallbackId);
-  });
-  
-  // Filter out hidden denied attempts
-  deniedAttempts = deniedAttempts.filter(item => {
-    if (item.id && hiddenDeniedIds.has(item.id)) return false;
-    const fallbackId = `${item.timestamp}_${item.name}_${item.reason || ''}`;
-    return !hiddenDeniedIds.has(fallbackId);
-  });
-  
-  // Filter out hidden device fingerprints
-  deviceFingerprints = deviceFingerprints.filter(item => {
-    return !hiddenDeviceHashes.has(item.fingerprint_hash);
-  });
-}
-
-// Function to restore all hidden data
-async function restoreHiddenData() {
-  try {
-    const confirmed = await showCustomModal(
-      'This will restore all previously hidden data and make it visible again.\n\nProceed?',
-      'Restore Hidden Data',
-      true
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    // Clear all hidden data sets
-    hiddenAttendanceIds.clear();
-    hiddenDeniedIds.clear();
-    hiddenDeviceHashes.clear();
-
-    // Clear localStorage
-    localStorage.removeItem('hiddenAttendanceIds');
-    localStorage.removeItem('hiddenDeniedIds');
-    localStorage.removeItem('hiddenDeviceHashes');
-
-    showNotification('Hidden data cleared. Refreshing data...', 'info');
-
-    // Reload data to show everything
-    setTimeout(() => {
-      loadData();
-    }, 500);
-
-  } catch (error) {
-    console.error('Error restoring hidden data:', error);
-    showNotification('Error restoring hidden data', 'error');
-  }
 }
