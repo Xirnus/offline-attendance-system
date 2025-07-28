@@ -23,15 +23,20 @@ function setupEventListeners() {
     addEventListenerSafe('editProfileForm', 'submit', handleEditProfile);
     
     // Modal controls (using common utility)
-    setupModalControls();
+    initializeModalControls();
     
     // Auto-refresh every 30 seconds
     setInterval(loadActiveSession, 30000);
 }
 
-function setupModalControls() {
-    // Using common modal controls utility
-    // This is now handled by common.js setupModalControls()
+function initializeModalControls() {
+    // Set up modal controls for edit profile modal using common.js utility
+    if (typeof window.setupModalControls === 'function') {
+        window.setupModalControls();
+    }
+    
+    // Set up specific controls for manage students modal
+    // We handle this one separately due to its complexity
 }
 
 function initializeSessionsPage() {
@@ -345,6 +350,7 @@ function refreshData() {
 // Global functions for button handlers
 window.openEditProfileModal = openEditProfileModal;
 window.openManageStudentsModal = openManageStudentsModal;
+window.closeManageStudentsModal = closeManageStudentsModal;
 window.deleteProfile = deleteProfile;
 window.stopActiveSession = stopActiveSession;
 window.refreshData = refreshData;
@@ -374,7 +380,98 @@ function openManageStudentsModal(profileId) {
     refreshEnrolledStudents();
     refreshAvailableStudents();
     
+    // Show the modal
     showModal('manageStudentsModal');
+    
+    // Ensure modal controls are working properly
+    setupManageStudentsModalControls();
+}
+
+function setupManageStudentsModalControls() {
+    const modal = document.getElementById('manageStudentsModal');
+    if (!modal) {
+        console.warn('manageStudentsModal not found');
+        return;
+    }
+    
+    console.log('Setting up modal controls for manageStudentsModal');
+    
+    // Set up close button
+    const closeBtn = modal.querySelector('.close');
+    if (closeBtn) {
+        console.log('Found close button, setting up click handler');
+        // Remove any existing click handler to prevent duplicates
+        closeBtn.removeEventListener('click', closeManageStudentsModal);
+        closeBtn.addEventListener('click', function(e) {
+            console.log('Close button clicked');
+            e.preventDefault();
+            e.stopPropagation();
+            closeManageStudentsModal();
+        });
+    } else {
+        console.warn('Close button not found in manageStudentsModal');
+    }
+    
+    // Set up click outside to close (remove existing first)
+    modal.removeEventListener('click', handleModalBackgroundClick);
+    modal.addEventListener('click', handleModalBackgroundClick);
+    
+    // Set up ESC key handler for this specific modal
+    document.addEventListener('keydown', handleEscapeKey);
+}
+
+function handleModalBackgroundClick(e) {
+    if (e.target.id === 'manageStudentsModal') {
+        console.log('Clicked outside modal content');
+        closeManageStudentsModal();
+    }
+}
+
+function handleEscapeKey(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('manageStudentsModal');
+        if (modal && (modal.style.display === 'block' || modal.classList.contains('show'))) {
+            console.log('Escape key pressed, closing modal');
+            closeManageStudentsModal();
+        }
+    }
+}
+
+function closeManageStudentsModal() {
+    console.log('closeManageStudentsModal called');
+    
+    // Add a temporary alert for debugging
+    // alert('Closing modal'); // Uncomment this line if console logs aren't visible
+    
+    const modal = document.getElementById('manageStudentsModal');
+    if (modal) {
+        console.log('Modal found, hiding it');
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+        
+        // Force hide with important styles as fallback
+        modal.style.setProperty('display', 'none', 'important');
+    } else {
+        console.error('Modal not found!');
+    }
+    
+    currentManageProfileId = null;
+    
+    // Clear search inputs
+    const enrolledSearch = document.getElementById('searchEnrolledStudents');
+    const availableSearch = document.getElementById('searchAvailableStudents');
+    const selectAll = document.getElementById('selectAllAvailable');
+    
+    if (enrolledSearch) enrolledSearch.value = '';
+    if (availableSearch) availableSearch.value = '';
+    if (selectAll) selectAll.checked = false;
+    
+    // Remove event listeners to prevent memory leaks
+    const modal2 = document.getElementById('manageStudentsModal');
+    if (modal2) {
+        modal2.removeEventListener('click', handleModalBackgroundClick);
+    }
+    document.removeEventListener('keydown', handleEscapeKey);
 }
 
 function setupStudentSearch() {

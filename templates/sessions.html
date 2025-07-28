@@ -184,7 +184,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">Manage Students - <span id="modalProfileName"></span></h3>
-                <span class="close">&times;</span>
+                <span class="close" onclick="closeManageStudentsModal()">&times;</span>
             </div>
             
             <div class="students-management">
@@ -233,6 +233,11 @@
                         <div class="loading">Loading available students...</div>
                     </div>
                 </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeManageStudentsModal()">Close</button>
             </div>
         </div>
     </div>

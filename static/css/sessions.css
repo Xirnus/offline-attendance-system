@@ -386,10 +386,30 @@
     font-weight: bold;
     cursor: pointer;
     line-height: 1;
+    padding: 5px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    user-select: none;
+    z-index: 9999;
+    position: relative;
 }
 
 .close:hover {
     color: #000;
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding-top: 20px;
+    margin-top: auto;
+    border-top: 1px solid #e0e0e0;
+}
+
+.modal-footer .btn {
+    margin-left: 10px;
 }
 
 /* Student Management Modal Styles */
