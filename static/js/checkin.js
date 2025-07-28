@@ -13,7 +13,6 @@
 
 let fingerprintHash = '';
 let deviceInfo = {};
-let sessionId = '';
 let hasCheckedIn = false;
 
 // Utility function to validate API response format
@@ -22,11 +21,6 @@ function validateDeviceStatusResponse(data) {
            typeof data === 'object' && 
            typeof data.status === 'string' && 
            typeof data.has_checked_in === 'boolean';
-}
-
-// Generate a unique session ID
-function generateSessionId() {
-    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
 // Check if device has already checked in this session using database
@@ -576,7 +570,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeFingerprinting() {
     const submitBtn = document.getElementById('submitBtn');
     try {
-        sessionId = generateSessionId();
+        // Note: sessionId generation removed - backend uses database session ID
         deviceInfo = {
             userAgent: navigator.userAgent,
             platform: navigator.platform,
@@ -703,8 +697,8 @@ function setupFormHandler() {
                 user_agent: navigator.userAgent,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 token: token,
-                student_id: studentId,
-                session_id: sessionId
+                student_id: studentId
+                // Note: session_id removed - backend will use database session ID
             };
             console.log('Check-in payload:', deviceData); // Debug log
             
@@ -777,8 +771,12 @@ function setupFormHandler() {
                 errorMessage = '🔒 Invalid or expired QR code. Please scan a new QR code.';
             } else if (errorMessage.toLowerCase().includes('student not found')) {
                 errorMessage = '👤 Student ID not found. Please check your student ID and try again.';
-            } else if (errorMessage.toLowerCase().includes('session')) {
-                errorMessage = '📅 Session error. Please contact the instructor.';
+            } else if (errorMessage.toLowerCase().includes('already checked in')) {
+                errorMessage = '✅ You have already checked in for this session.';
+            } else if (errorMessage.toLowerCase().includes('device has already been used')) {
+                errorMessage = '� This device has already been used for check-in. Please use a different device.';
+            } else if (errorMessage.toLowerCase().includes('no active attendance session')) {
+                errorMessage = '📅 No active session. Please contact the instructor.';
             }
             
             showMessage('❌ Check-in failed: ' + errorMessage, messageType);

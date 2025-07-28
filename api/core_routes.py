@@ -3,7 +3,22 @@ Core Routes Module for Offline Attendance System
 
 This module contains the core functionality routes:
 - QR Code Generation: Creates secure tokens and QR codes for attendance sessions
-- Student Check-in: Processes attendance submissions with device fingerprinting
+- Student Check-in: Processes         # Device uniqueness: use visitor_id as the canonical device identifier
+        device_id = visitor_id
+        print(f"Device ID (visitor_id): {device_id}")
+
+        # Check if this device has already been used to check in for this session
+        if is_device_already_used_in_session(fingerprint_hash, session_id):
+            print(f"Device {device_id} (hash: {fingerprint_hash[:16]}...) already used in session {session_id}")
+            enhanced_data = data.copy()
+            enhanced_data.update({
+                'session_id': session_id,
+                'name': student.get('name', 'Unknown'),
+                'course': student.get('course', 'Unknown'), 
+                'year': str(student.get('year', 'Unknown'))
+            })
+            record_denied_attempt(enhanced_data, 'device_already_used_for_session')
+            return jsonify(status='error', message='This device has already been used to check in for this session. Please use a different device.'), 403ssions with device fingerprinting
 - Token Validation: Handles QR code scanning and validation
 
 Security Features:
@@ -140,7 +155,7 @@ def checkin():
         data = request.json or {}
         student_id = data.get('student_id', '').strip()
         token = data.get('token', '').strip()
-        session_id = data.get('session_id', '').strip()  # Accept session_id from frontend
+        # Note: Ignore session_id from frontend to avoid ID conflicts - we'll use database session ID
         visitor_id = data.get('visitor_id', '').strip()
         screen_size = data.get('screen_size', '').strip()
         user_agent = data.get('user_agent', '').strip()
@@ -188,9 +203,8 @@ def checkin():
             return jsonify(status='error', message='No active attendance session'), 400
 
         print(f"Active session found: {active_session.get('session_name', 'Unnamed')}")
-        # Get session ID from active session if not provided
-        if not session_id:
-            session_id = active_session.get('id')
+        # Always use the database session ID to ensure consistency
+        session_id = active_session.get('id')
         profile_id = active_session.get('profile_id')
         class_table = active_session.get('class_table')
 
@@ -218,15 +232,23 @@ def checkin():
         # Check if already checked in
         if is_student_already_checked_in_session(student_id, session_id):
             print(f"Student {student_id} already checked in for session {session_id}")
-            return jsonify(status='error', message='You have already checked in for this session'), 409
+            return jsonify(status='error', message='You have already checked in for this session. Only one check-in per session is allowed.'), 409
+
+        # Generate fingerprint hash from visitor_id for all device operations
+        from services.fingerprint import create_fingerprint_hash
+        fingerprint_hash = create_fingerprint_hash({
+            'visitor_id': visitor_id,
+            'user_agent': user_agent
+        })
+        print(f"Generated fingerprint hash: {fingerprint_hash[:16]}...")
 
         # Device uniqueness: use visitor_id as the canonical device identifier
         device_id = visitor_id
         print(f"Device ID (visitor_id): {device_id}")
 
         # Check if this device has already been used to check in for this session
-        if is_device_already_used_in_session(device_id, session_id):
-            print(f"Device {device_id} already used in session {session_id}")
+        if is_device_already_used_in_session(fingerprint_hash, session_id):
+            print(f"Device {device_id} (hash: {fingerprint_hash[:16]}...) already used in session {session_id}")
             enhanced_data = data.copy()
             enhanced_data.update({
                 'session_id': session_id,
@@ -234,8 +256,8 @@ def checkin():
                 'course': student.get('course', 'Unknown'), 
                 'year': str(student.get('year', 'Unknown'))
             })
-            record_denied_attempt(enhanced_data, 'device_already_used_in_session')
-            return jsonify(status='error', message='This device has already been used to check in for this session'), 409
+            record_denied_attempt(enhanced_data, 'device_already_used_for_session')
+            return jsonify(status='error', message='This device has already been used to check in for this session. Please use a different device.'), 409
 
         # --- ENFORCE DEVICE MATCH: Only allow check-in from device that opened the QR code ---
         token_device_fingerprint_id = token_data.get('device_fingerprint_id')
@@ -315,12 +337,8 @@ def checkin():
             # Check device limits INSIDE the transaction to prevent race conditions
             print("Checking device limits...")
             
-            # Get the fingerprint hash for this device
-            from services.fingerprint import create_fingerprint_hash
-            fingerprint_hash = create_fingerprint_hash({
-                'visitor_id': visitor_id,
-                'user_agent': user_agent
-            })
+            # Use the fingerprint_hash that was already generated above
+            print(f"Using fingerprint hash: {fingerprint_hash[:16]}...")
             
             # Check if this device has already checked in for this session
             cursor.execute('''
@@ -342,41 +360,9 @@ def checkin():
                     'year': str(student.get('year', 'Unknown'))
                 })
                 record_denied_attempt(enhanced_data, 'device_already_used_for_session')
-                return jsonify(status='error', message='This device has already been used to check in for this session. Please use a different device.'), 403
-            
-            # Also check the general device usage limits within time window
-            from database.operations import get_settings
-            import time
-            settings = get_settings()
-            if settings['enable_fingerprint_blocking']:
-                time_threshold = time.time() - (settings['time_window_minutes'] * 60)
-                cursor.execute('''
-                    SELECT COUNT(*) as usage_count 
-                    FROM class_attendees ca
-                    JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
-                    WHERE df.fingerprint_hash = ? AND ca.checked_in_at > datetime(?, 'unixepoch')
-                ''', (fingerprint_hash, time_threshold))
-                
-                usage_count = cursor.fetchone()[0]
-                max_uses = settings['max_uses_per_device']
-                print(f"Device usage: {usage_count}/{max_uses} in the last {settings['time_window_minutes']//60} hours")
-                
-                if usage_count >= max_uses:
-                    conn.close()
-                    hours = settings['time_window_minutes'] // 60
-                    message = f"Device already used {usage_count} times in the last {hours} hours. Maximum allowed: {max_uses}. Please use another device"
-                    print(f"BLOCKING: {message}")
-                    enhanced_data = data.copy()
-                    enhanced_data.update({
-                        'session_id': session_id,
-                        'name': student.get('name', 'Unknown'),
-                        'course': student.get('course', 'Unknown'), 
-                        'year': str(student.get('year', 'Unknown'))
-                    })
-                    record_denied_attempt(enhanced_data, 'device_blocked')
-                    return jsonify(status='error', message=message), 403
+                return jsonify(status='error', message='This device has already been used to check in for this session. Please use a different device.'), 409
 
-            print("Device allowed")
+            print("Device allowed - per-session check passed")
             # Store or update device fingerprint
             import json
             current_time = datetime.utcnow().isoformat()

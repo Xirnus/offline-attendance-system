@@ -30,9 +30,9 @@ Security Settings:
 - RATE_LIMIT_*: Request throttling to prevent abuse
 
 Device Policy Settings:
-- max_uses_per_device: Maximum check-ins per device per time window
-- time_window_minutes: Time period for device usage limits
-- enable_fingerprint_blocking: Toggle device fingerprint validation
+- max_uses_per_device: [DEPRECATED] Previously used for time-window limits, now unused
+- time_window_minutes: [DEPRECATED] Previously used for time-window limits, now unused  
+- enable_fingerprint_blocking: Toggle device fingerprint validation per session
 
 Development vs Production:
 - Environment variable support for sensitive settings

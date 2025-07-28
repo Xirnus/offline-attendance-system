@@ -28,7 +28,7 @@ flask run
 ## 📋 Development Roadmap
 
 ### 🔥 Immediate Priorities
-- [x] Fix device usage limit enforcement
+- [x] Fix device usage limit enforcement - **CHANGED to per-session blocking only**
 - [x] Correct device information display
 - [x] Improve QR code system reliability
 - [ ] Add proper error handling for network issues

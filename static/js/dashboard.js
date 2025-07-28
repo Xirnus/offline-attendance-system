@@ -1719,12 +1719,12 @@ function updateDeviceBlockingStatus() {
     statusIndicator.style.backgroundColor = '#d4edda';
     statusIndicator.style.color = '#155724';
     statusIndicator.style.border = '1px solid #c3e6cb';
-    statusIndicator.textContent = `Device blocking ENABLED: Max ${maxUses} use(s) per ${timeWindow} hour(s)`;
+    statusIndicator.textContent = `Device blocking ENABLED: Per-session blocking (one device per session)`;
   } else {
     statusIndicator.style.backgroundColor = '#f8d7da';
     statusIndicator.style.color = '#721c24';
     statusIndicator.style.border = '1px solid #f5c6cb';
-    statusIndicator.textContent = 'Device blocking DISABLED: All devices allowed';
+    statusIndicator.textContent = 'Device blocking DISABLED: Multiple devices allowed per session';
   }
 }
 
