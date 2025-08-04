@@ -25,6 +25,7 @@ from .session_routes import session_bp
 from .analytics_routes import analytics_bp
 from .class_routes import class_bp
 from .settings_routes import settings_bp
+from .system_routes import system_bp
 
 # Create main API blueprint
 api_bp = Blueprint('api', __name__)
@@ -43,6 +44,7 @@ def register_routes(app):
     app.register_blueprint(analytics_bp)
     app.register_blueprint(class_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(system_bp)
     
     # Register the main API blueprint (for any remaining routes)
     app.register_blueprint(api_bp)

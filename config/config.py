@@ -44,6 +44,7 @@ Dependencies: Standard library (os for environment variables)
 """
 
 import os
+import secrets
 
 class Config:
     """Main application configuration"""
@@ -51,7 +52,25 @@ class Config:
     PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'attendance.db')
     CLASSES_DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'classes.db')
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
+    
+    # Generate secure secret key if not provided via environment
+    _DEFAULT_SECRET = 'dev-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    
+    if not SECRET_KEY:
+        # Check if we're in development (presence of .git directory)
+        git_dir = os.path.join(PROJECT_ROOT, '.git')
+        if os.path.exists(git_dir):
+            # Development environment - use deterministic but secure key
+            import hashlib
+            project_hash = hashlib.sha256(PROJECT_ROOT.encode()).hexdigest()[:32]
+            SECRET_KEY = f"dev_{project_hash}"
+        else:
+            # Production environment - generate random key
+            SECRET_KEY = secrets.token_urlsafe(32)
+            print("⚠️  WARNING: Generated new SECRET_KEY for production.")
+            print("   Please set SECRET_KEY environment variable to persist this key.")
+            print(f"   Current key: {SECRET_KEY}")
     
     # Rate limiting
     RATE_LIMIT_REQUESTS = 5

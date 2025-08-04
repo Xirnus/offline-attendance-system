@@ -7,6 +7,7 @@ Flask-based attendance system. It includes:
 - Real-time log display
 - System status monitoring
 - Quick access to web interface
+- Network detection for hotspot access
 """
 
 import tkinter as tk
@@ -35,14 +36,88 @@ class AttendanceSystemGUI:
         self.log_queue = queue.Queue()
         self.stop_event = threading.Event()
         
+        # Network detection
+        self.server_url = "http://localhost:5000"  # Default fallback
+        self.network_ips = []
+        
         # Create GUI components
         self.setup_gui()
         
         # Start log monitoring
         self.start_log_monitoring()
         
+        # Detect network interfaces
+        self.detect_network_interfaces()
+        
         # Handle window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+    
+    def detect_network_interfaces(self):
+        """Detect available network interfaces for server access"""
+        try:
+            # Try to import network utilities
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from utils.network import get_all_network_interfaces
+            
+            self.network_ips = get_all_network_interfaces()
+            if self.network_ips:
+                primary_ip = self.network_ips[0]
+                self.server_url = f"http://{primary_ip}:5000"
+                self.log_message(f"Detected network IP: {primary_ip}")
+                
+                # Update URL label
+                if hasattr(self, 'url_label'):
+                    self.url_label.config(text=f"Primary URL: {self.server_url}")
+                
+                # Log additional IPs
+                if len(self.network_ips) > 1:
+                    self.log_message(f"Additional IPs available: {', '.join(self.network_ips[1:3])}")
+            else:
+                self.log_message("Using localhost - network detection failed", "WARNING")
+                
+        except Exception as e:
+            self.log_message(f"Network detection error: {str(e)}", "WARNING")
+            self.log_message("Using localhost as fallback", "INFO")
+    
+    def update_network_display(self):
+        """Update the network URLs display"""
+        try:
+            if hasattr(self, 'url_list_text'):
+                self.url_list_text.delete(1.0, tk.END)
+                
+                if self.network_ips:
+                    # Show primary URL
+                    primary_url = f"http://{self.network_ips[0]}:5000"
+                    self.url_list_text.insert(tk.END, f"Primary (Hotspot/Network): {primary_url}\n")
+                    
+                    # Show additional URLs
+                    for i, ip in enumerate(self.network_ips[1:4], 1):  # Show up to 3 additional
+                        url = f"http://{ip}:5000"
+                        self.url_list_text.insert(tk.END, f"Alternative {i}: {url}\n")
+                    
+                    # Add usage instructions
+                    self.url_list_text.insert(tk.END, "\nFor mobile access:\n")
+                    self.url_list_text.insert(tk.END, "1. Enable hotspot on this laptop\n")
+                    self.url_list_text.insert(tk.END, "2. Connect phone to hotspot\n")
+                    self.url_list_text.insert(tk.END, f"3. Open {primary_url} on phone")
+                else:
+                    self.url_list_text.insert(tk.END, "Network detection failed - using localhost only\n")
+                    self.url_list_text.insert(tk.END, "http://localhost:5000")
+                
+                # Make read-only
+                self.url_list_text.config(state=tk.DISABLED)
+        except Exception as e:
+            self.log_message(f"Error updating network display: {str(e)}", "ERROR")
+    
+    def copy_primary_url(self):
+        """Copy primary URL to clipboard"""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(self.server_url)
+            self.root.update()  # Required for clipboard to work
+            self.log_message(f"Copied to clipboard: {self.server_url}")
+        except Exception as e:
+            self.log_message(f"Failed to copy URL: {str(e)}", "ERROR")
     
     def setup_gui(self):
         """Create and arrange GUI components"""
@@ -87,13 +162,40 @@ class AttendanceSystemGUI:
         # Quick access frame
         access_frame = ttk.LabelFrame(main_frame, text="Quick Access", padding="10")
         access_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        access_frame.columnconfigure(1, weight=1)
         
+        # Browser button
         self.open_browser_btn = ttk.Button(access_frame, text="Open in Browser", 
                                           command=self.open_browser, width=20, state="disabled")
         self.open_browser_btn.grid(row=0, column=0, padx=(0, 10))
         
-        self.url_label = ttk.Label(access_frame, text="URL: http://localhost:5000")
-        self.url_label.grid(row=0, column=1)
+        # Primary URL label
+        self.url_label = ttk.Label(access_frame, text="Primary URL: http://localhost:5000")
+        self.url_label.grid(row=0, column=1, sticky=(tk.W, tk.E))
+        
+        # Network info frame
+        network_frame = ttk.Frame(access_frame)
+        network_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
+        network_frame.columnconfigure(1, weight=1)
+        
+        # Network URLs label
+        self.network_label = ttk.Label(network_frame, text="Network URLs:", font=("Arial", 9, "bold"))
+        self.network_label.grid(row=0, column=0, sticky=tk.W)
+        
+        # URL list text (small)
+        self.url_list_text = tk.Text(network_frame, height=3, width=60, 
+                                    font=("Consolas", 8), wrap=tk.WORD)
+        self.url_list_text.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(2, 0))
+        
+        # URL list scrollbar
+        url_scrollbar = ttk.Scrollbar(network_frame, orient="vertical", command=self.url_list_text.yview)
+        url_scrollbar.grid(row=1, column=2, sticky=(tk.N, tk.S))
+        self.url_list_text.configure(yscrollcommand=url_scrollbar.set)
+        
+        # Copy URL button
+        self.copy_url_btn = ttk.Button(network_frame, text="Copy Primary URL", 
+                                      command=self.copy_primary_url, width=20)
+        self.copy_url_btn.grid(row=2, column=0, pady=(5, 0))
         
         # Log frame
         log_frame = ttk.LabelFrame(main_frame, text="Server Logs", padding="10")
@@ -158,6 +260,10 @@ class AttendanceSystemGUI:
             self.log_message("Starting Flask server...")
             self.stop_event.clear()
             
+            # Re-detect network interfaces before starting
+            self.detect_network_interfaces()
+            self.update_network_display()
+            
             # Start the server in a separate thread
             self.server_thread = threading.Thread(target=self.run_flask_server, daemon=True)
             self.server_thread.start()
@@ -165,6 +271,7 @@ class AttendanceSystemGUI:
             self.is_running = True
             self.update_ui_state()
             self.log_message("Server started successfully")
+            self.log_message(f"Primary access URL: {self.server_url}")
             
             # Wait a moment then try to verify server is responding
             self.root.after(3000, self.verify_server_status)
@@ -238,10 +345,16 @@ class AttendanceSystemGUI:
     def verify_server_status(self):
         """Verify that the server is responding"""
         try:
+            # Re-detect network interfaces in case they changed
+            self.detect_network_interfaces()
+            self.update_network_display()
+            
             import urllib.request
-            response = urllib.request.urlopen("http://localhost:5000", timeout=5)
+            response = urllib.request.urlopen(self.server_url, timeout=5)
             if response.getcode() == 200:
-                self.log_message("Server is responding on http://localhost:5000")
+                self.log_message(f"✓ Server is responding on {self.server_url}")
+                if self.network_ips:
+                    self.log_message(f"✓ Available on {len(self.network_ips)} network interface(s)")
             else:
                 self.log_message(f"Server responded with code: {response.getcode()}", "WARNING")
         except Exception as e:
@@ -255,7 +368,11 @@ class AttendanceSystemGUI:
             return
         
         try:
-            webbrowser.open("http://localhost:5000")
+            # Use the detected server URL instead of localhost
+            webbrowser.open(self.server_url)
+            self.log_message(f"Opening browser to {self.server_url}")
+        except Exception as e:
+            self.log_message(f"Failed to open browser: {str(e)}", "ERROR")
             self.log_message("Opened web interface in browser")
         except Exception as e:
             self.log_message(f"Failed to open browser: {str(e)}", "ERROR")
@@ -279,6 +396,16 @@ class AttendanceSystemGUI:
             self.stop_btn.config(state="disabled")
             self.restart_btn.config(state="disabled")
             self.open_browser_btn.config(state="disabled")
+    
+    def copy_url_to_clipboard(self, url):
+        """Copy a URL to the clipboard"""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(url)
+            self.root.update()  # Keep clipboard after app closes
+            self.log_message(f"✓ Copied to clipboard: {url}")
+        except Exception as e:
+            self.log_message(f"Failed to copy URL: {str(e)}", "ERROR")
     
     def on_closing(self):
         """Handle application closing"""
