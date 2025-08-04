@@ -25,7 +25,7 @@ import contextlib
 class AttendanceSystemGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Offline Attendance System - Control Panel 1.0.0")
+        self.root.title("Offline Attendance System - Control Panel 1.1.0")
         self.root.geometry("800x600")
         self.root.resizable(True, True)
         
