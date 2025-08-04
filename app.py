@@ -186,10 +186,21 @@ if __name__ == '__main__':
         create_optimized_classes_schema()
         
         interfaces = get_all_network_interfaces()
-        print(f"Primary IP: {interfaces[0]}")
+        print(f"Primary IP (Hotspot/Network): {interfaces[0]}")
         print("\nAccess URLs:")
-        for ip in interfaces[:3]:  # Show top 3
-            print(f"  → http://{ip}:5000")
+        print(f"  → Primary: http://{interfaces[0]}:5000")
+        
+        # Show additional interfaces if available
+        if len(interfaces) > 1:
+            print("  → Additional interfaces:")
+            for ip in interfaces[1:4]:  # Show up to 3 additional
+                print(f"    - http://{ip}:5000")
+        
+        print("\nFor Mobile Hotspot:")
+        print("1. Enable Mobile Hotspot on this laptop")
+        print("2. Connect your phone to the hotspot")
+        print(f"3. Open http://{interfaces[0]}:5000 on your phone")
+        print("4. Generate QR code and scan with other devices")
         
         # Debug: Print all registered routes
         print("\n=== REGISTERED ROUTES ===")

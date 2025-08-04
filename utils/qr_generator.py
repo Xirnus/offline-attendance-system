@@ -41,6 +41,7 @@ Dependencies: qrcode library, BytesIO from standard library
 
 import qrcode
 from io import BytesIO
+from .network import get_hotspot_ip
 
 def generate_qr_code(data):
     """Generate QR code image for given data"""
@@ -52,6 +53,19 @@ def generate_qr_code(data):
 
 def build_qr_url(request, token):
     """Build QR code URL from request and token"""
-    host = request.headers.get('Host', 'localhost:5000')
+    # Get the actual network IP that other devices can access
+    network_ip = get_hotspot_ip()
+    
+    # If the request is coming from localhost/127.0.0.1, use the network IP
+    # Otherwise, use the host from the request (for cases where already accessing via network IP)
+    request_host = request.headers.get('Host', 'localhost:5000')
+    
+    if 'localhost' in request_host or '127.0.0.1' in request_host:
+        # Use network IP with port 5000
+        host = f"{network_ip}:5000"
+    else:
+        # Use the host from request (already accessing via network)
+        host = request_host
+    
     scheme = 'https' if request.is_secure else 'http'
     return f"{scheme}://{host}/scan/{token}"

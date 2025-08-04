@@ -51,21 +51,46 @@ def get_hotspot_ip():
         result = subprocess.run(['ipconfig'], capture_output=True, text=True)
         lines = result.stdout.split('\n')
         
-        # Look for Microsoft Wi-Fi Direct Virtual Adapter
+        # Look for Microsoft Wi-Fi Direct Virtual Adapter or Mobile Hotspot
         for i, line in enumerate(lines):
             if any(keyword in line for keyword in [
                 'Microsoft Wi-Fi Direct Virtual Adapter',
-                'Local Area Connection* 1'
+                'Local Area Connection* 1',
+                'Local Area Connection* 2',
+                'Mobile Hotspot'
             ]):
                 # Find IPv4 address in next few lines
                 for j in range(i, min(i+10, len(lines))):
-                    if 'IPv4 Address' in lines[j]:
-                        return lines[j].split(':')[1].strip()
+                    if 'IPv4 Address' in lines[j] and ':' in lines[j]:
+                        ip = lines[j].split(':')[1].strip()
+                        # Remove any trailing characters like (Preferred)
+                        ip = ip.split('(')[0].strip()
+                        if ip and not ip.startswith('169.254'):  # Ignore APIPA addresses
+                            return ip
         
-        # Fallback: look for Windows hotspot range
+        # Look for common Windows hotspot IP ranges
         for line in lines:
-            if 'IPv4 Address' in line and '192.168.137.' in line:
-                return line.split(':')[1].strip()
+            if 'IPv4 Address' in line and ':' in line:
+                ip = line.split(':')[1].strip().split('(')[0].strip()
+                # Check for common hotspot ranges
+                if any(ip.startswith(prefix) for prefix in [
+                    '192.168.137.',  # Windows hotspot default
+                    '192.168.173.',  # Alternative Windows hotspot
+                    '192.168.43.',   # Common mobile hotspot
+                    '10.0.0.',       # Alternative range
+                    '172.20.10.'     # iPhone hotspot range
+                ]):
+                    return ip
+        
+        # If no hotspot found, get the main network interface IP
+        for line in lines:
+            if 'IPv4 Address' in line and ':' in line:
+                ip = line.split(':')[1].strip().split('(')[0].strip()
+                # Skip localhost and APIPA addresses
+                if (ip and not ip.startswith('127.') and 
+                    not ip.startswith('169.254') and
+                    not ip == '0.0.0.0'):
+                    return ip
                 
     except Exception as e:
         print(f"Error getting hotspot IP: {e}")
@@ -84,13 +109,39 @@ def get_default_ip():
         return "127.0.0.1"
 
 def get_all_network_interfaces():
-    """Get all possible network interfaces"""
-    interfaces = [get_hotspot_ip()]
+    """Get all possible network interfaces with hotspot priority"""
+    interfaces = []
     
-    # Add common hotspot IPs if not already included
-    common_ips = ['192.168.137.1', '192.168.173.1', '192.168.43.1', '192.168.1.2']
+    # First, get the detected hotspot/primary IP
+    primary_ip = get_hotspot_ip()
+    if primary_ip:
+        interfaces.append(primary_ip)
+    
+    # Add other detected network interfaces on Windows
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(['ipconfig'], capture_output=True, text=True)
+            lines = result.stdout.split('\n')
+            
+            for line in lines:
+                if 'IPv4 Address' in line and ':' in line:
+                    ip = line.split(':')[1].strip().split('(')[0].strip()
+                    if (ip and ip not in interfaces and 
+                        not ip.startswith('127.') and 
+                        not ip.startswith('169.254') and
+                        ip != '0.0.0.0'):
+                        interfaces.append(ip)
+        except Exception as e:
+            print(f"Error getting additional interfaces: {e}")
+    
+    # Add common hotspot IPs if not already detected
+    common_ips = ['192.168.137.1', '192.168.173.1', '192.168.43.1', '10.0.0.1']
     for ip in common_ips:
         if ip not in interfaces:
             interfaces.append(ip)
+    
+    # Ensure we have at least one interface
+    if not interfaces:
+        interfaces.append('127.0.0.1')
     
     return interfaces
