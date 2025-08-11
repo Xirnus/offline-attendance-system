@@ -604,6 +604,252 @@ def unenroll_student_optimized(class_id, student_id):
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
+@class_bp.route('/api/classes/<int:class_id>/attendance-detail', methods=['GET'])
+def get_class_attendance_detail(class_id):
+    """Get detailed attendance data for a specific class showing student attendance across multiple sessions"""
+    try:
+        # Use the OptimizedClassManager to get students enrolled in this class
+        manager = OptimizedClassManager()
+        students = manager.get_class_students(class_id)
+        
+        if not students:
+            return jsonify({
+                'error': 'No students found in this class'
+            }), 404
+        
+        # Connect to attendance database to get session data
+        db_path = Config.DATABASE_PATH
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get all attendance sessions for this class:
+        # 1. Sessions where students from this class attended (via class_attendees)
+        # 2. Sessions created specifically for this class (via class_table field)
+        student_ids = [s['student_id'] for s in students]
+        placeholders = ','.join(['?' for _ in student_ids])
+        
+        # Query for sessions where students attended OR sessions created for this class
+        cursor.execute(f'''
+            SELECT DISTINCT s.id, s.session_name, s.start_time, s.end_time, s.created_at
+            FROM attendance_sessions s
+            LEFT JOIN class_attendees ca ON s.id = ca.session_id
+            WHERE (ca.student_id IN ({placeholders}) OR s.class_table = ?)
+            ORDER BY s.created_at ASC
+            LIMIT 50
+        ''', student_ids + [str(class_id)])
+        
+        rows = cursor.fetchall()
+        sessions = []
+        for row in rows:
+            sessions.append({
+                'id': row[0],
+                'session_name': row[1],
+                'start_time': row[2],
+                'end_time': row[3],
+                'created_at': row[4]
+            })
+        
+        # If no sessions found, return empty - don't show other classes' sessions
+        if not sessions:
+            conn.close()
+            
+            # Get class information
+            classes_conn = sqlite3.connect(Config.CLASSES_DATABASE_PATH)
+            classes_cursor = classes_conn.cursor()
+            classes_cursor.execute('SELECT class_name, professor_name FROM classes WHERE id = ?', (class_id,))
+            class_row = classes_cursor.fetchone()
+            classes_conn.close()
+            
+            class_details = {
+                'class_name': class_row[0] if class_row else 'Unknown',
+                'professor_name': class_row[1] if class_row else 'Unknown'
+            }
+            
+            return jsonify({
+                'status': 'success',
+                'class_id': class_id,
+                'class_details': class_details,
+                'students': {},
+                'sessions': [],
+                'total_students': len(students),
+                'total_sessions': 0,
+                'message': "No attendance sessions found for this class. Create a session and have students check in to see attendance data here."
+            })
+        
+        # Get attendance data for each student in each session
+        attendance_data = {}
+        for student in students:
+            student_id = student['student_id']
+            attendance_data[student_id] = {
+                'student_info': student,
+                'sessions': {}
+            }
+            
+            for session in sessions:
+                session_id = session['id']
+                
+                # Check if student attended this session
+                cursor.execute('''
+                    SELECT ca.checked_in_at, ca.id
+                    FROM class_attendees ca
+                    WHERE ca.student_id = ? AND ca.session_id = ?
+                ''', (student_id, session_id))
+                
+                attendance_record = cursor.fetchone()
+                
+                if attendance_record:
+                    attendance_data[student_id]['sessions'][session_id] = {
+                        'status': 'present',
+                        'checked_in_at': attendance_record[0],
+                        'attendance_id': attendance_record[1]
+                    }
+                else:
+                    attendance_data[student_id]['sessions'][session_id] = {
+                        'status': 'absent',
+                        'checked_in_at': None,
+                        'attendance_id': None
+                    }
+        
+        conn.close()
+        
+        # Get class information
+        classes_conn = sqlite3.connect(Config.CLASSES_DATABASE_PATH)
+        classes_cursor = classes_conn.cursor()
+        classes_cursor.execute('SELECT class_name, professor_name FROM classes WHERE id = ?', (class_id,))
+        class_row = classes_cursor.fetchone()
+        classes_conn.close()
+        
+        class_details = {
+            'class_name': class_row[0] if class_row else 'Unknown',
+            'professor_name': class_row[1] if class_row else 'Unknown'
+        }
+        
+        # Create a message for empty sessions
+        message = None
+        if not sessions:
+            message = "No attendance sessions found for this class. Create a session and have students check in to see attendance data here."
+        elif len([s for s in sessions if 'note' not in s]) == 0:
+            message = "Students from this class haven't attended any sessions yet. When they do, their attendance will appear here."
+        
+        return jsonify({
+            'status': 'success',
+            'class_id': class_id,
+            'class_details': class_details,
+            'students': attendance_data,
+            'sessions': sessions,
+            'total_students': len(students),
+            'total_sessions': len(sessions),
+            'message': message
+        })
+        
+    except Exception as e:
+        import traceback
+        print("=== ERROR IN ATTENDANCE DETAIL ENDPOINT ===")
+        traceback.print_exc()  # This will help us see the full error
+        print("=== END ERROR ===")
+        return jsonify({
+            'error': f'Failed to retrieve attendance details: {str(e)}'
+        }), 500
+
+@class_bp.route('/api/classes/<table_name>/attendance-detail-legacy', methods=['GET'])
+def get_class_attendance_detail_legacy(table_name):
+    """Get detailed attendance data for a legacy class table"""
+    try:
+        db_path = Config.DATABASE_PATH
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get all students from the legacy class table
+        classes_conn = sqlite3.connect(Config.CLASSES_DATABASE_PATH)
+        classes_cursor = classes_conn.cursor()
+        
+        # Check if table exists
+        classes_cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not classes_cursor.fetchone():
+            classes_conn.close()
+            conn.close()
+            return jsonify({'error': 'Class table not found'}), 404
+        
+        # Get students from legacy table
+        classes_cursor.execute(f'SELECT student_id, student_name, year_level, course FROM "{table_name}"')
+        students_data = [dict(row) for row in classes_cursor.fetchall()]
+        classes_conn.close()
+        
+        if not students_data:
+            conn.close()
+            return jsonify({
+                'error': 'No students found in this class'
+            }), 404
+        
+        # Get all attendance sessions where these students participated
+        student_ids = [s['student_id'] for s in students_data]
+        placeholders = ','.join(['?' for _ in student_ids])
+        
+        cursor.execute(f'''
+            SELECT DISTINCT s.id, s.session_name, s.start_time, s.end_time, s.created_at
+            FROM attendance_sessions s
+            INNER JOIN class_attendees ca ON s.id = ca.session_id
+            WHERE ca.student_id IN ({placeholders})
+            ORDER BY s.created_at DESC
+        ''', student_ids)
+        
+        sessions = [dict(row) for row in cursor.fetchall()]
+        
+        # Get attendance data for each student in each session
+        attendance_data = {}
+        for student in students_data:
+            student_id = student['student_id']
+            attendance_data[student_id] = {
+                'student_info': {
+                    'student_id': student['student_id'],
+                    'name': student['student_name'],
+                    'year': student['year_level'],
+                    'course': student['course']
+                },
+                'sessions': {}
+            }
+            
+            for session in sessions:
+                session_id = session['id']
+                
+                # Check if student attended this session
+                cursor.execute('''
+                    SELECT ca.checked_in_at, ca.id
+                    FROM class_attendees ca
+                    WHERE ca.student_id = ? AND ca.session_id = ?
+                ''', (student_id, session_id))
+                
+                attendance_record = cursor.fetchone()
+                
+                if attendance_record:
+                    attendance_data[student_id]['sessions'][session_id] = {
+                        'status': 'present',
+                        'checked_in_at': attendance_record[0],
+                        'attendance_id': attendance_record[1]
+                    }
+                else:
+                    attendance_data[student_id]['sessions'][session_id] = {
+                        'status': 'absent',
+                        'checked_in_at': None,
+                        'attendance_id': None
+                    }
+        
+        conn.close()
+        
+        return jsonify({
+            'status': 'success',
+            'table_name': table_name,
+            'students': attendance_data,
+            'sessions': sessions,
+            'total_students': len(students_data),
+            'total_sessions': len(sessions)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Failed to retrieve attendance details: {str(e)}'
+        }), 500
+
 @class_bp.route('/api/optimized/classes/<int:class_id>/unenroll', methods=['POST'])
 def unenroll_students_optimized(class_id):
     """Remove multiple students from a class using optimized schema (bulk operation)"""

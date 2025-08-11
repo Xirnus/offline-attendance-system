@@ -233,3 +233,6 @@ myenv/Scripts/ttx.exe
 myenv/Scripts/vba_extract.py
 myenv/share/man/man1/ttx.1
 test_gui.py
+database/db/attendance.db
+/database/db
+*.db

@@ -40,6 +40,84 @@
     display: none;
 }
 
+/* Attendance Detail Modal Styles */
+.attendance-detail-table {
+    font-size: 12px;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.attendance-detail-table th {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    padding: 8px;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.attendance-detail-table td {
+    border: 1px solid #dee2e6;
+    padding: 4px 8px;
+    text-align: center;
+}
+
+.attendance-cell {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 10px;
+}
+
+.attendance-cell.present {
+    background-color: #28a745;
+}
+
+.attendance-cell.absent {
+    background-color: #dc3545;
+}
+
+.attendance-percentage {
+    font-weight: 600;
+    text-align: center;
+}
+
+.attendance-percentage.high {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.attendance-percentage.medium {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.attendance-percentage.low {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.modal-content {
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Student table */
 .student-table-container {
     overflow-x: auto;

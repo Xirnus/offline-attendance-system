@@ -164,24 +164,41 @@ def record_attendance(data, conn=None):
             conn = get_db_connection_with_retry()
             close_conn = True
         cursor = conn.cursor()
-        current_time = datetime.utcnow().isoformat()
+        current_time = datetime.now().isoformat()  # Use local time instead of UTC
+        
+        # Debug: Check if token exists
+        token = data.get('token')
+        cursor.execute('SELECT id FROM tokens WHERE token = ?', (token,))
+        token_row = cursor.fetchone()
+        token_id = token_row[0] if token_row else None
+        
+        print(f"DEBUG record_attendance: token={token[:8] if token else 'None'}..., token_id={token_id}")
+        print(f"DEBUG record_attendance: student_id={data.get('student_id')}, session_id={data.get('session_id')}")
+        
         # First, create or get device fingerprint
         device_fingerprint_id = data.get('device_fingerprint_id')
+        
         # Record attendance
         cursor.execute('''
             INSERT INTO class_attendees 
             (student_id, session_id, token_id, device_fingerprint_id, checked_in_at)
-            VALUES (?, ?, (SELECT id FROM tokens WHERE token = ?), ?, ?)
+            VALUES (?, ?, ?, ?, ?)
         ''', (
             data.get('student_id'),
             data.get('session_id'),
-            data.get('token'),
+            token_id,
             device_fingerprint_id,
             current_time
         ))
+        
+        print(f"DEBUG record_attendance: Successfully inserted into class_attendees")
+        
         if close_conn:
             conn.commit()
     except Exception as e:
+        print(f"ERROR in record_attendance: {e}")
+        import traceback
+        traceback.print_exc()
         if conn and close_conn:
             conn.rollback()
         raise e
@@ -280,11 +297,23 @@ def get_all_data(table_name, limit=100):
     return [dict(row) for row in rows]
 
 def get_attendance_records_with_details(limit=100):
-    """Get attendance records with student details, device info, and token info"""
+    """Get attendance records with student details, device info, and token info - only for active session"""
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
+        # First, get the active session ID
+        cursor.execute('SELECT id FROM attendance_sessions WHERE is_active = 1 LIMIT 1')
+        active_session = cursor.fetchone()
+        
+        if not active_session:
+            # No active session, return empty list
+            conn.close()
+            return []
+        
+        active_session_id = active_session[0]
+        
+        # Get attendance records only for the active session
         cursor.execute('''
             SELECT 
                 ca.checked_in_at as timestamp,
@@ -299,9 +328,10 @@ def get_attendance_records_with_details(limit=100):
             LEFT JOIN students s ON ca.student_id = s.student_id
             LEFT JOIN device_fingerprints df ON ca.device_fingerprint_id = df.id
             LEFT JOIN tokens t ON ca.token_id = t.id
+            WHERE ca.session_id = ?
             ORDER BY ca.checked_in_at DESC
             LIMIT ?
-        ''', (limit,))
+        ''', (active_session_id, limit))
         
         rows = cursor.fetchall()
         conn.close()
@@ -385,11 +415,12 @@ def update_student_attendance(student_id, status, conn=None):
         session_id = session[0] if session else None
         if status == 'present' and session_id:
             # Record attendance in class_attendees table
+            current_time = datetime.now().isoformat()  # Use local time instead of UTC
             cursor.execute('''
                 INSERT OR IGNORE INTO class_attendees 
                 (student_id, session_id, checked_in_at)
                 VALUES (?, ?, ?)
-            ''', (student_id, session_id, datetime.utcnow().isoformat()))
+            ''', (student_id, session_id, current_time))
             # Update student attendance summary
             cursor.execute('''
                 INSERT OR REPLACE INTO student_attendance_summary 
@@ -404,15 +435,16 @@ def update_student_attendance(student_id, status, conn=None):
                     ?,
                     'present',
                     datetime('now')
-            ''', (student_id, student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
+            ''', (student_id, student_id, student_id, student_id, student_id, session_id, current_time))
             print(f"Updated {student_id} as present for session {session_id}")
         elif status == 'late' and session_id:
             # Record attendance in class_attendees table (same as present)
+            current_time = datetime.now().isoformat()  # Use local time instead of UTC
             cursor.execute('''
                 INSERT OR IGNORE INTO class_attendees 
                 (student_id, session_id, checked_in_at)
                 VALUES (?, ?, ?)
-            ''', (student_id, session_id, datetime.utcnow().isoformat()))
+            ''', (student_id, session_id, current_time))
             # Update student attendance summary for late
             cursor.execute('''
                 INSERT OR REPLACE INTO student_attendance_summary 
@@ -427,7 +459,7 @@ def update_student_attendance(student_id, status, conn=None):
                     ?,
                     'late',
                     datetime('now')
-            ''', (student_id, student_id, student_id, student_id, student_id, session_id, datetime.utcnow().isoformat()))
+            ''', (student_id, student_id, student_id, student_id, student_id, session_id, current_time))
             print(f"Updated {student_id} as late for session {session_id}")
         elif status == 'absent' and session_id:
             # Update student attendance summary for absent
@@ -666,8 +698,8 @@ def stop_active_session():
             cursor.execute('SELECT COUNT(*) FROM device_fingerprints')
             device_count = cursor.fetchone()[0]
             
-            # Clear session-specific data when session ends
-            cursor.execute('DELETE FROM class_attendees WHERE session_id = ?', (session_id,))
+            # Clear session-specific data when session ends (but preserve attendance records)
+            # Note: Keep class_attendees records for historical attendance data
             cursor.execute('DELETE FROM denied_attempts')
             cursor.execute('DELETE FROM tokens WHERE used = TRUE')
             

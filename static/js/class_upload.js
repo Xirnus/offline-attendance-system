@@ -158,6 +158,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         <h3 style="margin: 0; font-size: 16px; font-weight: 600;">${classInfo.display_name}</h3>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <span style="font-size: 12px; background: #ffc107; color: #333; padding: 2px 8px; border-radius: 12px; font-weight: 600;">${classInfo.students.length} students</span>
+                            <button class="view-attendance-btn" data-class-id="${classInfo.class_id}" title="View detailed attendance" style="
+                                background: transparent;
+                                border: none;
+                                color: #17a2b8;
+                                cursor: pointer;
+                                padding: 4px;
+                                border-radius: 4px;
+                                display: flex;
+                                align-items: center;
+                            ">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                                    <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+                                </svg>
+                            </button>
                             <button class="delete-class-btn" data-class-id="${classInfo.class_id}" title="Delete this class" style="
                                 background: transparent;
                                 border: none;
@@ -236,8 +251,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add toggle functionality
             document.querySelectorAll('.class-card-header').forEach(header => {
                 header.addEventListener('click', function(e) {
-                    // Don't toggle if clicking on delete button
-                    if (e.target.closest('.delete-class-btn')) {
+                    // Don't toggle if clicking on delete button or view attendance button
+                    if (e.target.closest('.delete-class-btn') || e.target.closest('.view-attendance-btn')) {
                         return;
                     }
                     
@@ -258,6 +273,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         const rowText = row.textContent.toLowerCase();
                         row.style.display = rowText.includes(searchTerm) ? '' : 'none';
                     });
+                });
+            });
+
+            // Add view attendance functionality
+            document.querySelectorAll('.view-attendance-btn').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent triggering the card header click
+                    const classId = this.dataset.classId;
+                    const displayName = this.closest('.class-card').querySelector('h3').textContent;
+                    
+                    showAttendanceDetail(classId, displayName);
                 });
             });
 
@@ -407,6 +433,308 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             alertDiv.remove();
         }, 5000);
+    }
+
+    // Attendance Detail Functions
+    function showAttendanceDetail(classId, className) {
+        showLoading(true);
+        
+        fetch(`/api/classes/${classId}/attendance-detail`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Failed to load attendance data: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                displayAttendanceDetailModal(data, className);
+            })
+            .catch(error => {
+                console.error('Error loading attendance detail:', error);
+                showAlert(`Failed to load attendance data: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                showLoading(false);
+            });
+    }
+
+    function displayAttendanceDetailModal(data, className) {
+        // Create modal HTML
+        const modalHTML = `
+            <div id="attendanceDetailModal" class="modal" style="display: block; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+                <div class="modal-content" style="
+                    background-color: #fefefe;
+                    margin: 0.5% auto;
+                    padding: 0;
+                    border: none;
+                    width: 95%;
+                    max-width: 1200px;
+                    border-radius: 8px;
+                    max-height: 90vh;
+                    overflow: hidden;
+                    display: flex;
+                    flex-direction: column;
+                ">
+                    <div class="modal-header" style="
+                        background: #28156E;
+                        color: white;
+                        padding: 15px 20px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    ">
+                        <h3 style="margin: 0; font-size: 18px;">${className} - Attendance Details</h3>
+                        <button id="closeAttendanceModal" style="
+                            background: none;
+                            border: none;
+                            color: white;
+                            font-size: 24px;
+                            cursor: pointer;
+                            padding: 0;
+                            width: 30px;
+                            height: 30px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            border-radius: 50%;
+                        ">×</button>
+                    </div>
+                    <div class="modal-body" style="
+                        flex: 1;
+                        overflow: auto;
+                        padding: 20px;
+                    ">
+                        ${generateAttendanceTable(data)}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('attendanceDetailModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // Add close functionality
+        document.getElementById('closeAttendanceModal').addEventListener('click', function() {
+            document.getElementById('attendanceDetailModal').remove();
+        });
+
+        // Close on click outside
+        document.getElementById('attendanceDetailModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.remove();
+            }
+        });
+    }
+
+    function generateAttendanceTable(data) {
+        const { students, sessions, total_students, total_sessions } = data;
+        
+        if (total_sessions === 0) {
+            return `
+                <div style="text-align: center; padding: 40px; color: #666;">
+                    <h4>No attendance sessions found for this class</h4>
+                    <p>Students in this class haven't participated in any attendance sessions yet.</p>
+                </div>
+            `;
+        }
+
+        // Generate table headers
+        const sessionHeaders = sessions.map(session => {
+            const date = new Date(session.created_at || session.start_time);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                month: '2-digit',
+                day: '2-digit',
+                year: 'numeric'
+            });
+            return `
+                <th style="
+                    padding: 8px 4px;
+                    text-align: center;
+                    border: 1px solid #dee2e6;
+                    background: #f8f9fa;
+                    font-weight: 600;
+                    font-size: 11px;
+                    min-width: 80px;
+                    vertical-align: middle;
+                    height: 40px;
+                    position: relative;
+                ">${formattedDate}</th>
+            `;
+        }).join('');
+
+        // Sort students by last name alphabetically
+        const sortedStudentIds = Object.keys(students).sort((a, b) => {
+            const studentA = students[a].student_info;
+            const studentB = students[b].student_info;
+            
+            // Extract last name (assumes format: "Last, First" or "First Last")
+            const getLastName = (name) => {
+                if (name.includes(',')) {
+                    // Format: "Last, First"
+                    return name.split(',')[0].trim();
+                } else {
+                    // Format: "First Last" - take the last word
+                    const parts = name.trim().split(' ');
+                    return parts[parts.length - 1];
+                }
+            };
+            
+            const lastNameA = getLastName(studentA.name).toLowerCase();
+            const lastNameB = getLastName(studentB.name).toLowerCase();
+            
+            return lastNameA.localeCompare(lastNameB);
+        });
+
+        // Generate table rows
+        const studentRows = sortedStudentIds.map(studentId => {
+            const studentData = students[studentId];
+            const studentInfo = studentData.student_info;
+            
+            const attendanceCells = sessions.map(session => {
+                const attendance = studentData.sessions[session.id];
+                const isPresent = attendance && attendance.status === 'present';
+                
+                return `
+                    <td style="
+                        padding: 4px;
+                        text-align: center;
+                        border: 1px solid #dee2e6;
+                        background: ${isPresent ? '#d4edda' : '#f8d7da'};
+                        min-width: 80px;
+                    ">
+                        <div style="
+                            width: 16px;
+                            height: 16px;
+                            margin: 0 auto;
+                            border-radius: 2px;
+                            background: ${isPresent ? '#28a745' : '#dc3545'};
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: white;
+                            font-size: 10px;
+                            font-weight: bold;
+                        ">
+                            ${isPresent ? '✓' : '✗'}
+                        </div>
+                    </td>
+                `;
+            }).join('');
+
+            // Calculate attendance percentage
+            const presentCount = sessions.filter(session => {
+                const attendance = studentData.sessions[session.id];
+                return attendance && attendance.status === 'present';
+            }).length;
+            const attendancePercentage = sessions.length > 0 ? ((presentCount / sessions.length) * 100).toFixed(1) : 0;
+
+            return `
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-weight: 600; background: #f8f9fa;">${studentInfo.student_id}</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${studentInfo.name}</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; text-align: center;">${studentInfo.year}</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">${studentInfo.course}</td>
+                    ${attendanceCells}
+                    <td style="
+                        padding: 8px;
+                        border: 1px solid #dee2e6;
+                        text-align: center;
+                        font-weight: 600;
+                        background: ${attendancePercentage >= 75 ? '#d4edda' : attendancePercentage >= 50 ? '#fff3cd' : '#f8d7da'};
+                    ">${attendancePercentage}%</td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <div style="margin-bottom: 20px;">
+                <div style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    padding: 10px 15px;
+                    background: #f8f9fa;
+                    border-radius: 6px;
+                    border: 1px solid #dee2e6;
+                ">
+                    <div>
+                        <strong>Total Students:</strong> ${total_students} | 
+                        <strong>Total Sessions:</strong> ${total_sessions}
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        ✓ = Present | ✗ = Absent
+                    </div>
+                </div>
+            </div>
+            <div style="overflow-x: auto; border: 1px solid #dee2e6; border-radius: 6px;">
+                <table style="
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 12px;
+                    min-width: ${600 + (sessions.length * 80)}px;
+                ">
+                    <thead>
+                        <tr>
+                            <th style="
+                                padding: 8px;
+                                text-align: left;
+                                border: 1px solid #dee2e6;
+                                background: #f8f9fa;
+                                font-weight: 600;
+                                position: sticky;
+                                left: 0;
+                                z-index: 10;
+                                min-width: 100px;
+                            ">Student ID</th>
+                            <th style="
+                                padding: 8px;
+                                text-align: left;
+                                border: 1px solid #dee2e6;
+                                background: #f8f9fa;
+                                font-weight: 600;
+                                min-width: 200px;
+                            ">Student Name</th>
+                            <th style="
+                                padding: 8px;
+                                text-align: center;
+                                border: 1px solid #dee2e6;
+                                background: #f8f9fa;
+                                font-weight: 600;
+                                min-width: 60px;
+                            ">Year</th>
+                            <th style="
+                                padding: 8px;
+                                text-align: left;
+                                border: 1px solid #dee2e6;
+                                background: #f8f9fa;
+                                font-weight: 600;
+                                min-width: 100px;
+                            ">Course</th>
+                            ${sessionHeaders}
+                            <th style="
+                                padding: 8px;
+                                text-align: center;
+                                border: 1px solid #dee2e6;
+                                background: #28156E;
+                                color: white;
+                                font-weight: 600;
+                                min-width: 80px;
+                            ">Overall %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${studentRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
     }
 
     // Modal functionality - define setupModalFormHandlers first
