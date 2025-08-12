@@ -749,37 +749,78 @@ def create_optimized_classes_schema(db_path=None):
         # Ensure database directory exists
         Config.ensure_database_directory()
         db_path = Config.CLASSES_DATABASE_PATH
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
     
     try:
+        print(f"🔧 Creating optimized classes schema at: {db_path}")
+        
+        # Ensure the directory exists
+        import os
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
         print("Creating optimized classes database schema...")
         
         # Create tables
         for table_name, table_sql in OPTIMIZED_CLASSES_TABLES.items():
-            cursor.execute(table_sql)
-            print(f"✅ Created table: {table_name}")
+            try:
+                cursor.execute(table_sql)
+                print(f"✅ Created table: {table_name}")
+            except Exception as e:
+                print(f"❌ Failed to create table {table_name}: {e}")
+                raise
         
         # Create indexes
         for index_name, index_sql in OPTIMIZED_CLASSES_INDEXES.items():
-            cursor.execute(index_sql)
-            print(f"✅ Created index: {index_name}")
+            try:
+                cursor.execute(index_sql)
+                print(f"✅ Created index: {index_name}")
+            except Exception as e:
+                print(f"❌ Failed to create index {index_name}: {e}")
+                raise
         
         # Create views
         for view_name, view_sql in OPTIMIZED_CLASSES_VIEWS.items():
-            cursor.execute(view_sql)
-            print(f"✅ Created view: {view_name}")
+            try:
+                cursor.execute(view_sql)
+                print(f"✅ Created view: {view_name}")
+            except Exception as e:
+                print(f"❌ Failed to create view {view_name}: {e}")
+                raise
         
         conn.commit()
+        
+        # Verify that the schema was created properly
+        print("🔍 Verifying schema creation...")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+        print(f"📋 Created tables: {tables}")
+        
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='view'")
+        views = [row[0] for row in cursor.fetchall()]
+        print(f"👁️  Created views: {views}")
+        
+        # Specifically check for class_summary view
+        if 'class_summary' in views:
+            print("✅ class_summary view verified")
+        else:
+            print("❌ class_summary view not found!")
+            return False
+        
         print("✅ Optimized classes schema created successfully!")
         return True
         
     except Exception as e:
         print(f"❌ Error creating optimized schema: {e}")
-        conn.rollback()
+        import traceback
+        print(f"❌ Full traceback: {traceback.format_exc()}")
+        if 'conn' in locals():
+            conn.rollback()
         return False
     finally:
-        conn.close()
+        if 'conn' in locals():
+            conn.close()
 
 def migrate_existing_classes_data(old_db_path=None, attendance_db_path=None):
     """
