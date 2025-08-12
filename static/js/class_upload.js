@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set up event listeners
         addEventListenerSafe(uploadBtn, 'click', handleFileUpload);
         
+        // Add file input change listener to show selected file name
+        addEventListenerSafe(fileInput, 'change', handleFileSelection);
+        
         // Load existing class data
         loadClassTables();
         
@@ -37,7 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function handleFileUpload() {
         const file = fileInput?.files[0];
         if (!file) {
-            showAlert('Please select an Excel file first', 'error');
+            showAlert('Please select an Excel or CSV file first', 'error');
             return;
         }
 
@@ -67,7 +70,58 @@ document.addEventListener('DOMContentLoaded', function() {
         } finally {
             setButtonLoading(uploadBtn, false);
             if (fileInput) fileInput.value = '';
+            // Reset file label and display when clearing input
+            const fileLabel = document.querySelector('.file-input-label');
+            const selectedFileDisplay = document.getElementById('selectedFileDisplay');
+            if (fileLabel) {
+                fileLabel.textContent = '📁 Choose Excel or CSV File';
+                fileLabel.style.color = '';
+                fileLabel.title = '';
+            }
+            if (selectedFileDisplay) {
+                selectedFileDisplay.style.display = 'none';
+            }
         }
+    }
+
+    function handleFileSelection(event) {
+        const file = event.target.files[0];
+        const fileLabel = document.querySelector('.file-input-label');
+        const selectedFileDisplay = document.getElementById('selectedFileDisplay');
+        const selectedFileName = document.querySelector('.selected-file-name');
+        const selectedFileSize = document.querySelector('.selected-file-size');
+        
+        if (file) {
+            // Update the label to show the selected file name
+            fileLabel.textContent = `📄 ${file.name}`;
+            fileLabel.style.color = 'white'; // White color to indicate selection
+            fileLabel.title = `Selected: ${file.name} (${formatFileSize(file.size)})`;
+            
+            // Show the detailed file display
+            if (selectedFileDisplay) {
+                selectedFileName.textContent = file.name;
+                selectedFileSize.textContent = formatFileSize(file.size);
+                selectedFileDisplay.style.display = 'flex';
+            }
+        } else {
+            // Reset to default text
+            fileLabel.textContent = '📁 Choose Excel or CSV File';
+            fileLabel.style.color = '';
+            fileLabel.title = '';
+            
+            // Hide the detailed file display
+            if (selectedFileDisplay) {
+                selectedFileDisplay.style.display = 'none';
+            }
+        }
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     function loadClassTables() {

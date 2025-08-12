@@ -61,19 +61,26 @@
                     
                     <div class="file-input-container">
                         <div class="file-input-wrapper">
-                            <input type="file" id="fileInput" accept=".xlsx, .xls" />
+                            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
                             <label for="fileInput" class="file-input-label">
-                                📁 Choose Excel File
+                                📁 Choose Excel or CSV File
                             </label>
                         </div>
                         
+                        <!-- Selected file display -->
+                        <div id="selectedFileDisplay" class="selected-file-display" style="display: none;">
+                            <span class="selected-file-icon">📄</span>
+                            <span class="selected-file-name"></span>
+                            <span class="selected-file-size"></span>
+                        </div>
+                        
                         <button id="uploadBtn" class="btn btn-primary">
-                            📤 Upload Excel File
+                            📤 Upload File
                         </button>
                         
                         <div class="file-requirements">
                             <strong>📋 File Requirements:</strong><br>
-                            Please upload an Excel file with the following columns:<br>
+                            Please upload an Excel file (.xlsx, .xls) or CSV file (.csv) with the following columns:<br>
                             <code>student_id</code>, <code>student_name</code>, <code>year_level</code>, <code>course</code><br>
                             <small>Optional metadata: Professor name in the first few rows</small>
                         </div>
