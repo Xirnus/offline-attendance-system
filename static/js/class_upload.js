@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (file) {
             // Update the label to show the selected file name
             fileLabel.textContent = `📄 ${file.name}`;
-            fileLabel.style.color = 'white'; // White color to indicate selection
+            fileLabel.classList.add('file-selected'); // Add class to indicate selection
             fileLabel.title = `Selected: ${file.name} (${formatFileSize(file.size)})`;
             
             // Show the detailed file display
