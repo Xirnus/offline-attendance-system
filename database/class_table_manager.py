@@ -1,4 +1,5 @@
 import sqlite3
+import os
 from config.config import Config
 
 def convert_year_to_integer(year_level):
@@ -385,6 +386,52 @@ class OptimizedClassManager:
     def __init__(self, classes_db_path=None, attendance_db_path=None):
         self.classes_db_path = classes_db_path or Config.CLASSES_DATABASE_PATH
         self.attendance_db_path = attendance_db_path or Config.DATABASE_PATH
+        
+        # Debug path information
+        print(f"🔍 OptimizedClassManager initialized:")
+        print(f"   Classes DB: {self.classes_db_path}")
+        print(f"   Attendance DB: {self.attendance_db_path}")
+        print(f"   Classes DB exists: {os.path.exists(self.classes_db_path)}")
+        print(f"   Attendance DB exists: {os.path.exists(self.attendance_db_path)}")
+        
+        # Ensure database directories exist
+        for db_path in [self.classes_db_path, self.attendance_db_path]:
+            db_dir = os.path.dirname(db_path)
+            if not os.path.exists(db_dir):
+                print(f"   Creating directory: {db_dir}")
+                os.makedirs(db_dir, exist_ok=True)
+        
+        # Verify and create optimized schema if needed
+        self._ensure_optimized_schema()
+    
+    def _ensure_optimized_schema(self):
+        """Ensure the optimized classes schema exists, create if it doesn't"""
+        import sqlite3
+        
+        try:
+            conn = sqlite3.connect(self.classes_db_path)
+            cursor = conn.cursor()
+            
+            # Check if the classes table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='classes'")
+            classes_table_exists = cursor.fetchone() is not None
+            
+            conn.close()
+            
+            if not classes_table_exists:
+                print("🔧 Optimized classes schema not found, creating it...")
+                from database.models import create_optimized_classes_schema
+                if create_optimized_classes_schema(self.classes_db_path):
+                    print("✅ Optimized classes schema created successfully")
+                else:
+                    print("❌ Failed to create optimized classes schema")
+                    raise Exception("Failed to create optimized classes schema")
+            else:
+                print("✅ Optimized classes schema verified")
+                
+        except Exception as e:
+            print(f"❌ Error verifying optimized schema: {e}")
+            raise
     
     def create_class(self, class_name, professor_name, course_code=None, 
                     semester=None, academic_year=None):
@@ -393,8 +440,20 @@ class OptimizedClassManager:
         Returns the class ID
         """
         import sqlite3
-        conn = sqlite3.connect(self.classes_db_path)
-        cursor = conn.cursor()
+        
+        try:
+            print(f"🔧 Attempting to create class: {class_name}")
+            print(f"   Professor: {professor_name}")
+            print(f"   Database path: {self.classes_db_path}")
+            
+            conn = sqlite3.connect(self.classes_db_path)
+            cursor = conn.cursor()
+        except Exception as e:
+            print(f"❌ Failed to connect to classes database: {e}")
+            print(f"   Database path: {self.classes_db_path}")
+            print(f"   Path exists: {os.path.exists(self.classes_db_path)}")
+            print(f"   Directory exists: {os.path.exists(os.path.dirname(self.classes_db_path))}")
+            return None
         
         try:
             # Set defaults

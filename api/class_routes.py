@@ -60,19 +60,29 @@ def convert_year_to_integer(year_level):
 @class_bp.route('/upload_class_record', methods=['POST'])
 def upload_class_record():
     try:
+        print("🔍 Class upload started...")
+        print(f"   Request method: {request.method}")
+        print(f"   Content type: {request.content_type}")
+        
         if 'file' not in request.files:
+            print("❌ No file part in request")
             return jsonify({'error': 'No file part in the request'}), 400
             
         file = request.files['file']
         file_name = file.filename  # <-- Move this up before using it
         
+        print(f"   File name: {file_name}")
+        
         if file.filename == '':
+            print("❌ No file selected")
             return jsonify({'error': 'No file selected'}), 400
             
         if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+            print(f"❌ Invalid file type: {file.filename}")
             return jsonify({'error': 'Only Excel files (.xlsx, .xls) and CSV files (.csv) are allowed'}), 400
 
         filename_lower = file.filename.lower()
+        print(f"   Processing file type: {filename_lower}")
         
         # Process based on file type
         if filename_lower.endswith(('.xlsx', '.xls')):
@@ -392,19 +402,33 @@ def upload_class_record():
         
         if use_optimized:
             # NEW OPTIMIZED METHOD - eliminates data redundancy
-            print("Using optimized classes database schema...")
-            manager = OptimizedClassManager()
-            
-            class_id = manager.import_from_excel_data(
-                class_name=class_name,  # Use extracted class name
-                professor_name=professor_name,
-                student_data=student_data
-            )
-            
-            if class_id:
-                success_message = f'Successfully imported {len(student_data)} students using optimized schema'
-            else:
-                return jsonify({'error': 'Failed to create class with optimized schema'}), 500
+            print("🔧 Using optimized classes database schema...")
+            try:
+                manager = OptimizedClassManager()
+                print(f"   Manager initialized successfully")
+                
+                class_id = manager.import_from_excel_data(
+                    class_name=class_name,  # Use extracted class name
+                    professor_name=professor_name,
+                    student_data=student_data
+                )
+                
+                print(f"   Import result: class_id = {class_id}")
+                
+                if class_id:
+                    success_message = f'Successfully imported {len(student_data)} students using optimized schema'
+                    print(f"✅ {success_message}")
+                else:
+                    error_msg = 'Failed to create class with optimized schema - class_id is None'
+                    print(f"❌ {error_msg}")
+                    return jsonify({'error': error_msg}), 500
+                    
+            except Exception as e:
+                error_msg = f'Failed to create class with optimized schema: {str(e)}'
+                print(f"❌ Exception in optimized schema: {e}")
+                import traceback
+                print(f"   Traceback: {traceback.format_exc()}")
+                return jsonify({'error': error_msg}), 500
         else:
             # OLD METHOD - creates redundant table per class (for backward compatibility)
             print("Using legacy table-per-class method...")

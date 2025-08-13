@@ -45,13 +45,24 @@ Dependencies: Standard library (os for environment variables)
 
 import os
 import secrets
+import sys
 
 class Config:
     """Main application configuration"""
-    # Get the project root directory (parent of config folder)
-    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'attendance.db')
-    CLASSES_DATABASE_PATH = os.path.join(PROJECT_ROOT, 'database', 'db', 'classes.db')
+    # Handle PyInstaller bundled environment
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        PROJECT_ROOT = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Ensure database directory exists
+    DATABASE_DIR = os.path.join(PROJECT_ROOT, 'database', 'db')
+    os.makedirs(DATABASE_DIR, exist_ok=True)
+    
+    DATABASE_PATH = os.path.join(DATABASE_DIR, 'attendance.db')
+    CLASSES_DATABASE_PATH = os.path.join(DATABASE_DIR, 'classes.db')
     
     # Generate secure secret key if not provided via environment
     _DEFAULT_SECRET = 'dev-key-change-in-production'
