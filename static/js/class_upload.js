@@ -1698,7 +1698,8 @@ document.addEventListener('DOMContentLoaded', function() {
             professor: document.getElementById('previewProfessor').value.trim(),
             room_type: document.getElementById('previewRoomType').value.trim(),
             venue: document.getElementById('previewVenue').value.trim(),
-            building: document.getElementById('previewVenue').value.trim(), // Use venue as building for now
+            // TODO: Replace with actual building field when available
+            building: document.getElementById('previewBuilding') ? document.getElementById('previewBuilding').value.trim() : '', // See TODO above
             display_name: `${document.getElementById('previewClassName').value.trim()} - ${document.getElementById('previewProfessor').value.trim()}`
         };
         
