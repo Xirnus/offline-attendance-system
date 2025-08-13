@@ -51,10 +51,20 @@
             <div class="content">
                 <!-- Actions Bar -->
                 <div class="actions-bar" style="padding: 0 30px;">
-                    <button id="import-csv" class="btn btn-primary">Import CSV/Excel</button>
-                    <button id="clear-table" class="btn btn-danger">Clear All Students</button>
-                    <button id="add-student" class="btn btn-primary">Add Students</button>
-                    <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
+                    <div class="actions-left">
+                        <button id="import-csv" class="btn btn-primary">Import CSV/Excel</button>
+                        <button id="clear-table" class="btn btn-danger">Clear All Students</button>
+                        <button id="add-student" class="btn btn-primary">Add Students</button>
+                        <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="display: none;">
+                    </div>
+                    <div class="actions-right">
+                        <div class="filter-group">
+                            <label for="class-filter" class="filter-label">Filter by Class:</label>
+                            <select id="class-filter" class="filter-select">
+                                <option value="">All Classes</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Students Table -->

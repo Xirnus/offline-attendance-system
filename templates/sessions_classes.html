@@ -61,6 +61,142 @@
             color: #666;
             margin: 0;
         }
+
+        /* Ensure classes modals use the same styling as sessions modals */
+        /* Override class upload modal styles to match sessions styling */
+        #manualStudentEntryModal .modal-content,
+        #filePreviewModal .modal-content {
+            background-color: white;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+        }
+
+        #filePreviewModal.modal-large .modal-content {
+            width: 95%;
+            max-width: 1200px;
+            height: 85vh;
+            max-height: 700px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #manualStudentEntryModal .modal-header,
+        #filePreviewModal .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        #manualStudentEntryModal .modal-title,
+        #filePreviewModal .modal-title {
+            color: #28156E;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        #manualStudentEntryModal .close,
+        #filePreviewModal .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+            padding: 5px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            user-select: none;
+            z-index: 9999;
+            position: relative;
+        }
+
+        #manualStudentEntryModal .close:hover,
+        #filePreviewModal .close:hover {
+            color: #000;
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        #manualStudentEntryModal .modal-footer,
+        #filePreviewModal .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding-top: 20px;
+            margin-top: auto;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        #manualStudentEntryModal .modal-footer .btn,
+        #filePreviewModal .modal-footer .btn {
+            margin-left: 10px;
+        }
+
+        #manualStudentEntryModal .modal-body,
+        #filePreviewModal .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        /* Form styling consistency */
+        #manualStudentEntryModal .form-group,
+        #filePreviewModal .form-group {
+            margin-bottom: 20px;
+        }
+
+        #manualStudentEntryModal .form-group label,
+        #filePreviewModal .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        #manualStudentEntryModal .form-control,
+        #filePreviewModal .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+
+        #manualStudentEntryModal .form-control:focus,
+        #filePreviewModal .form-control:focus {
+            outline: none;
+            border-color: #28156E;
+        }
+
+        /* New class form styling */
+        #manualStudentEntryModal .new-class-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            margin: 15px 0;
+        }
+
+        #manualStudentEntryModal .new-class-form h4 {
+            color: #28156E;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        #manualStudentEntryModal .student-form h4 {
+            color: #28156E;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -483,12 +619,17 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('manualStudentEntryModal')">Close</button>
+            </div>
         </div>
     </div>
 
     <!-- File Preview Modal -->
-    <div id="filePreviewModal" class="modal">
-        <div class="modal-content" style="max-width: 1000px; width: 90%;">
+    <div id="filePreviewModal" class="modal modal-large">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">📋 Review Class Data</h3>
                 <span class="close" id="closePreviewModal">&times;</span>
@@ -583,12 +724,12 @@
                         <button id="cancelNewStudentBtn" class="btn btn-secondary">Cancel</button>
                     </div>
                 </div>
+            </div>
 
-                <!-- Modal Actions -->
-                <div class="modal-actions">
-                    <button id="saveClassBtn" class="btn btn-primary">💾 Save Class</button>
-                    <button id="cancelPreviewBtn" class="btn btn-secondary">❌ Cancel</button>
-                </div>
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button id="saveClassBtn" class="btn btn-primary">💾 Save Class</button>
+                <button id="cancelPreviewBtn" class="btn btn-secondary" onclick="closeModal('filePreviewModal')">❌ Cancel</button>
             </div>
         </div>
     </div>
@@ -618,6 +759,36 @@
                     document.getElementById(targetTab + '-tab').classList.add('active');
                 });
             });
+
+            // Modal close functionality to match sessions style
+            function closeModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            }
+
+            // Add close functionality to all modal close buttons
+            document.querySelectorAll('.close').forEach(closeBtn => {
+                closeBtn.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+
+            // Close modal when clicking outside of it
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+
+            // Make closeModal function globally available
+            window.closeModal = closeModal;
             
             // Load classes JavaScript functionality
             console.log('Page loaded');

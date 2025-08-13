@@ -4,8 +4,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const csvInput = getElement('csv-input');
     const tableBody = getElement('table-body');
 
-    // Load students on page load
+    // Load students and classes on page load
     loadStudents();
+    loadClasses();
 
     // Check for active session and adjust refresh rate accordingly
     checkSessionAndSetRefresh();
@@ -77,6 +78,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (csvInput) csvInput.value = '';
         }
     });
+
+    // Class filter change - use direct DOM query
+    const classFilterElement = document.getElementById('class-filter');
+    if (classFilterElement) {
+        classFilterElement.addEventListener('change', function() {
+            loadStudents();
+        });
+    }
 
     // Add to DOMContentLoaded function
     const addStudentBtn = document.getElementById('add-student');
@@ -153,11 +162,56 @@ document.addEventListener('DOMContentLoaded', function() {
         return yearMap[yearNumber] || `${yearNumber}th Year`;
     }
 
+    // Load available classes for the filter
+    function loadClasses() {
+        fetch('/api/optimized/classes')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.classes) {
+                const classFilter = document.getElementById('class-filter');
+                
+                if (!classFilter) {
+                    console.error('Class filter element not found');
+                    return;
+                }
+                
+                // Clear existing options except "All Classes"
+                classFilter.innerHTML = '<option value="">All Classes</option>';
+                
+                // Add class options
+                data.classes.forEach(classItem => {
+                    const option = document.createElement('option');
+                    // Use class_id instead of id
+                    if (classItem.class_id !== undefined && classItem.class_id !== null) {
+                        option.value = classItem.class_id;
+                        option.textContent = classItem.class_name || `Class ${classItem.class_id}`;
+                        classFilter.appendChild(option);
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes:', error);
+        });
+    }
+
     function loadStudents() {
         // Show loading state
         tableBody.innerHTML = '<tr><td colspan="9" class="table-loading">Loading students...</td></tr>';
         
-        fetch('/api/students_with_attendance?' + Date.now(), {
+        // Get selected class filter
+        const classFilterElement = document.getElementById('class-filter');
+        const selectedClassId = classFilterElement ? classFilterElement.value : '';
+        
+        // Choose endpoint based on filter
+        let endpoint;
+        if (selectedClassId && selectedClassId !== '' && selectedClassId !== 'undefined' && selectedClassId !== undefined) {
+            endpoint = `/api/optimized/classes/${selectedClassId}/students`;
+        } else {
+            endpoint = '/api/students_with_attendance?' + Date.now();
+        }
+        
+        fetch(endpoint, {
             headers: {
                 'Cache-Control': 'no-cache',
                 'Pragma': 'no-cache'
@@ -171,7 +225,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             tableBody.innerHTML = '';
-            data.students.forEach(student => {
+            
+            // Handle different response formats
+            let students;
+            if (selectedClassId && selectedClassId !== '' && selectedClassId !== 'undefined' && selectedClassId !== undefined) {
+                // Response from class students endpoint
+                students = data.status === 'success' ? data.students : [];
+            } else {
+                // Response from all students endpoint
+                students = data.students || [];
+            }
+            
+            students.forEach(student => {
                 const tr = document.createElement('tr');
                 
                 tr.innerHTML = `
@@ -190,7 +255,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tableBody.appendChild(tr);
             });
             
-            updateSummaryStats(data.students);
+            updateSummaryStats(students);
         })
         .catch(error => {
             console.error('Error loading students:', error);

@@ -127,9 +127,52 @@ body {
 
 .actions-bar {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
     gap: 15px;
     margin-bottom: 30px;
     flex-wrap: wrap;
+}
+
+.actions-left {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.actions-right {
+    display: flex;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+}
+
+.filter-select {
+    padding: 8px 16px;
+    border: 2px solid #28156E;
+    border-radius: 20px;
+    font-size: 14px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
+    min-width: 150px;
+}
+
+.filter-select:focus {
+    border-color: #ffc107;
+    box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.2);
 }
 
 /* Buttons */
@@ -566,6 +609,22 @@ tr:hover td {
     .actions-bar {
         flex-direction: column;
         padding: 0 15px !important;
+        gap: 10px;
+    }
+    
+    .actions-left, .actions-right {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .filter-group {
+        flex-direction: column;
+        gap: 5px;
+        align-items: stretch;
+    }
+    
+    .filter-select {
+        min-width: 100%;
     }
     
     .content {
