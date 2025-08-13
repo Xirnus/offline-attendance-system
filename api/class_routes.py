@@ -16,6 +16,9 @@ Class Management Features:
 
 import sqlite3
 import openpyxl
+import csv
+from io import StringIO
+import re
 from flask import Blueprint, request, jsonify
 from config.config import Config
 from database.class_table_manager import (
@@ -66,39 +69,295 @@ def upload_class_record():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
             
-        if not file.filename.lower().endswith(('.xlsx', '.xls')):
-            return jsonify({'error': 'Only Excel files (.xlsx, .xls) are allowed'}), 400
+        if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+            return jsonify({'error': 'Only Excel files (.xlsx, .xls) and CSV files (.csv) are allowed'}), 400
 
-        # Read the Excel file
-        wb = openpyxl.load_workbook(file)
-        ws = wb.active
-        rows = list(ws.iter_rows(values_only=True))
+        filename_lower = file.filename.lower()
         
-        if len(rows) < 5:  # At least metadata + headers + 1 student
-            return jsonify({'error': 'Invalid file format - not enough rows'}), 400
+        # Process based on file type
+        if filename_lower.endswith(('.xlsx', '.xls')):
+            # Excel file processing
+            wb = openpyxl.load_workbook(file)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            
+            if len(rows) < 5:  # At least metadata + headers + 1 student
+                return jsonify({'error': 'Invalid file format - not enough rows'}), 400
 
-        # Extract metadata (first few rows)
-        metadata = {}
-        
-        for i, row in enumerate(rows[:8]):  # Check first 8 rows for metadata
-            if not any(row):  # Skip empty rows
-                continue
+            # Extract metadata (first few rows)
+            metadata = {}
+            
+            for i, row in enumerate(rows[:8]):  # Check first 8 rows for metadata
+                if not any(row):  # Skip empty rows
+                    continue
+                    
+                # Look for specific metadata patterns
+                if row[0] and len(row) > 1:
+                    key = str(row[0]).lower().strip()
+                    value = str(row[1]).strip() if row[1] else None
+                    
+                    if 'professor' in key and value:
+                        metadata['professor'] = value
+                    elif 'class' in key and 'name' in key and value:
+                        metadata['class_name'] = value
+                    elif 'room' in key and 'type' in key and value:
+                        metadata['room_type'] = value
+                    elif 'building' in key and value:
+                        metadata['building'] = value
+                    elif 'venue' in key and value:
+                        metadata['venue'] = value
+
+            # Find the row with student headers
+            student_data_start = None
+            for i, row in enumerate(rows):
+                if row and row[0] and 'student id' in str(row[0]).lower():
+                    student_data_start = i
+                    break
+                    
+            if student_data_start is None:
+                return jsonify({'error': 'Could not find student data headers'}), 400
+
+            # Process headers
+            headers = [str(h).strip().lower().replace(' ', '_') for h in rows[student_data_start]]
+            required_columns = {'student_id', 'student_name', 'year_level', 'course'}
+            
+            # Validate headers
+            missing_columns = required_columns - set(headers)
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {", ".join(missing_columns)}. Found columns: {", ".join(headers)}'
+                }), 400
+
+            # Process student data (rows after headers)
+            student_data = []
+
+            for row in rows[student_data_start+1:]:
+                # Skip empty rows or rows with empty student_id
+                if not row or not row[0] or not str(row[0]).strip():
+                    continue
+                    
+                student = dict(zip(headers, row))
+                student_id = str(student.get('student_id', '')).strip()
                 
-            # Look for specific metadata patterns
-            if row[0] and len(row) > 1:
-                key = str(row[0]).lower().strip()
-                value = str(row[1]).strip() if row[1] else None
+                student_data.append({
+                    'studentId': student_id,
+                    'studentName': str(student.get('student_name', '')).strip(),
+                    'yearLevel': str(student.get('year_level', '')).strip(),
+                    'course': str(student.get('course', '')).strip()
+                })
+
+        elif filename_lower.endswith('.csv'):
+            # CSV file processing
+            try:
+                # Try different encodings to handle various CSV file formats
+                raw_content = file.read()
                 
-                if 'professor' in key and value:
-                    metadata['professor'] = value
-                elif 'class' in key and 'name' in key and value:
-                    metadata['class_name'] = value
-                elif 'room' in key and 'type' in key and value:
-                    metadata['room_type'] = value
-                elif 'building' in key and value:
-                    metadata['building'] = value
-                elif 'venue' in key and value:
-                    metadata['venue'] = value
+                # Try UTF-8 first (most common)
+                try:
+                    content = raw_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Try UTF-8 with BOM
+                    try:
+                        content = raw_content.decode('utf-8-sig')
+                    except UnicodeDecodeError:
+                        # Try Windows-1252 (common for Excel-generated CSV)
+                        try:
+                            content = raw_content.decode('windows-1252')
+                        except UnicodeDecodeError:
+                            # Try ISO-8859-1 / Latin-1 (fallback)
+                            try:
+                                content = raw_content.decode('latin-1')
+                            except UnicodeDecodeError:
+                                # Last resort: CP1252
+                                try:
+                                    content = raw_content.decode('cp1252')
+                                except UnicodeDecodeError:
+                                    # If all fail, try to decode with error handling
+                                    content = raw_content.decode('utf-8', errors='replace')
+                                    
+            except Exception as e:
+                return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
+
+            # Parse CSV content
+            reader = csv.reader(StringIO(content))
+            rows = list(reader)
+            
+            if len(rows) < 2:  # At least headers + 1 student row
+                return jsonify({'error': 'CSV must have at least header and one data row'}), 400
+
+            # For CSV, we'll look for metadata in the first few rows, similar to Excel
+            metadata = {}
+            student_data_start = None
+            
+            # Look for metadata patterns in first few rows
+            for i, row in enumerate(rows[:10]):  # Check more rows
+                if not row or not any(str(cell).strip() for cell in row if cell is not None):  # Skip empty rows
+                    continue
+                
+                # Check for the specific format from your Excel (metadata keys in first row, values in second)
+                if i < len(rows) - 1:  # Ensure there's a next row
+                    next_row = rows[i + 1] if i + 1 < len(rows) else []
+                    
+                    # Check if current row contains metadata headers and next row has values
+                    if row and len(row) >= 2 and next_row and len(next_row) >= 2:
+                        current_row_text = ' '.join(str(cell).lower() for cell in row if cell).strip()
+                        
+                        # Look for metadata pattern: "professor", "room type", "venue" etc in current row
+                        if any(keyword in current_row_text for keyword in ['professor', 'instructor', 'teacher', 'room', 'venue', 'building']):
+                            # Extract metadata from paired rows
+                            for j, header_cell in enumerate(row):
+                                if j < len(next_row) and header_cell and next_row[j]:
+                                    key = str(header_cell).lower().strip()
+                                    value = str(next_row[j]).strip()
+                                    
+                                    if any(word in key for word in ['professor', 'instructor', 'teacher']):
+                                        metadata['professor'] = value
+                                    elif any(word in key for word in ['room', 'venue', 'building']):
+                                        if 'type' in key:
+                                            metadata['room_type'] = value
+                                        elif 'building' in key or 'venue' in key:
+                                            metadata['venue'] = value
+                                            metadata['building'] = value
+                                    elif any(word in key for word in ['class', 'course', 'subject']):
+                                        metadata['class_name'] = value
+                    
+                # Handle single column metadata (like "Professor: John Doe")
+                if len(row) >= 1 and row[0]:
+                    first_cell = str(row[0]).strip()
+                    
+                    # Check for colon-separated metadata in single cell
+                    if ':' in first_cell:
+                        parts = first_cell.split(':', 1)
+                        if len(parts) == 2:
+                            key = parts[0].lower().strip()
+                            value = parts[1].strip()
+                            
+                            # More flexible professor name detection
+                            if any(word in key for word in ['professor', 'instructor', 'teacher', 'prof']):
+                                if value:
+                                    metadata['professor'] = value
+                            elif any(word in key for word in ['class', 'course', 'subject']):
+                                if 'name' in key and value:
+                                    metadata['class_name'] = value
+                            elif 'room' in key and value:
+                                metadata['room_type'] = value
+                            elif 'building' in key and value:
+                                metadata['building'] = value
+                            elif 'venue' in key and value:
+                                metadata['venue'] = value
+                
+                # Handle two-column metadata (key in col 1, value in col 2)
+                if len(row) >= 2 and row[0] and row[1]:
+                    key = str(row[0]).lower().strip()
+                    value = str(row[1]).strip()
+                    
+                    # More flexible professor name detection
+                    if any(word in key for word in ['professor', 'instructor', 'teacher', 'prof']):
+                        if value:
+                            metadata['professor'] = value
+                    elif any(word in key for word in ['class', 'course', 'subject']):
+                        if 'name' in key and value:
+                            metadata['class_name'] = value
+                        elif not 'name' in key and value:  # Just "class" or "course"
+                            metadata['class_name'] = value
+                    elif 'room' in key and 'type' in key and value:
+                        metadata['room_type'] = value
+                    elif 'building' in key and value:
+                        metadata['building'] = value
+                    elif 'venue' in key and value:
+                        metadata['venue'] = value
+                
+                # Check if this row contains student headers (but don't break yet, continue looking for metadata)
+                if row and len(row) > 0:
+                    row_text = ' '.join(str(cell).lower() for cell in row if cell).strip()
+                    if any(pattern in row_text for pattern in ['student id', 'student_id', 'studentid']):
+                        if student_data_start is None:  # Only set if not already found
+                            student_data_start = i
+
+            # If no explicit student data start found, look for headers more broadly
+            if student_data_start is None:
+                for i, row in enumerate(rows):
+                    if row and len(row) > 2:  # Must have at least 3 columns for student data
+                        row_text = ' '.join(str(cell).lower() for cell in row if cell).strip()
+                        # Look for typical student data headers
+                        if any(pattern in row_text for pattern in ['name', 'course', 'year', 'id']):
+                            student_data_start = i
+                            break
+                
+                # Last resort: assume first non-empty row is headers
+                if student_data_start is None:
+                    for i, row in enumerate(rows):
+                        if row and any(str(cell).strip() for cell in row if cell is not None):
+                            student_data_start = i
+                            break
+
+            # Normalize headers for matching
+            def normalize_header(header):
+                return str(header).lower().strip().replace(' ', '_').replace('-', '_')
+
+            headers = [normalize_header(h) for h in rows[student_data_start]]
+            
+            # Build header mapping
+            header_map = {}
+            for idx, header in enumerate(headers):
+                header_map[header] = idx
+            
+            # Check for required columns (flexible matching)
+            required_mappings = {
+                'student_id': ['student_id', 'studentid', 'id', 'student_number', 'studentnumber'],
+                'student_name': ['student_name', 'studentname', 'name', 'student', 'full_name', 'fullname'],
+                'year_level': ['year_level', 'yearlevel', 'year', 'level', 'grade'],
+                'course': ['course', 'program', 'major', 'subject']
+            }
+            
+            column_indices = {}
+            missing_columns = []
+            
+            for required_key, possible_headers in required_mappings.items():
+                found = False
+                for possible in possible_headers:
+                    if possible in header_map:
+                        column_indices[required_key] = header_map[possible]
+                        found = True
+                        break
+                if not found:
+                    missing_columns.append(required_key)
+            
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {", ".join(missing_columns)}. Found columns: {", ".join([rows[student_data_start][i] for i in range(len(rows[student_data_start]))])}'
+                }), 400
+
+            # Process student data
+            student_data = []
+            for row in rows[student_data_start+1:]:
+                # Skip empty rows
+                if not row or not any(cell.strip() for cell in row if cell):
+                    continue
+                
+                # Extract values using column indices
+                try:
+                    student_id = str(row[column_indices['student_id']]).strip() if column_indices['student_id'] < len(row) else ''
+                    if not student_id:
+                        continue
+                        
+                    student_name = str(row[column_indices['student_name']]).strip() if column_indices['student_name'] < len(row) else ''
+                    year_level = str(row[column_indices['year_level']]).strip() if column_indices['year_level'] < len(row) else ''
+                    course = str(row[column_indices['course']]).strip() if column_indices['course'] < len(row) else ''
+                    
+                    student_data.append({
+                        'studentId': student_id,
+                        'studentName': student_name,
+                        'yearLevel': year_level,
+                        'course': course
+                    })
+                except IndexError:
+                    continue  # Skip rows with missing data
+
+            # Set defaults if metadata not found
+            metadata = {}
+        else:
+            return jsonify({'error': 'Unsupported file type'}), 400
 
         # Set defaults if not found
         professor_name = metadata.get('professor', 'Unknown Professor')
@@ -106,45 +365,6 @@ def upload_class_record():
         room_type = metadata.get('room_type', 'Classroom')
         venue = metadata.get('venue', 'Main Building')
         building = metadata.get('building', 'Main Building')
-
-        # Find the row with student headers
-        student_data_start = None
-        for i, row in enumerate(rows):
-            if row and row[0] and 'student id' in str(row[0]).lower():
-                student_data_start = i
-                break
-                
-        if student_data_start is None:
-            return jsonify({'error': 'Could not find student data headers'}), 400
-
-        # Process headers
-        headers = [str(h).strip().lower().replace(' ', '_') for h in rows[student_data_start]]
-        required_columns = {'student_id', 'student_name', 'year_level', 'course'}
-        
-        # Validate headers
-        missing_columns = required_columns - set(headers)
-        if missing_columns:
-            return jsonify({
-                'error': f'Missing required columns: {", ".join(missing_columns)}. Found columns: {", ".join(headers)}'
-            }), 400
-
-        # Process student data (rows after headers)
-        student_data = []
-
-        for row in rows[student_data_start+1:]:
-            # Skip empty rows or rows with empty student_id
-            if not row or not row[0] or not str(row[0]).strip():
-                continue
-                
-            student = dict(zip(headers, row))
-            student_id = str(student.get('student_id', '')).strip()
-            
-            student_data.append({
-                'studentId': student_id,
-                'studentName': str(student.get('student_name', '')).strip(),
-                'yearLevel': str(student.get('year_level', '')).strip(),
-                'course': str(student.get('course', '')).strip()
-            })
 
         if not student_data:
             return jsonify({'error': 'No valid student data found in the file'}), 400
@@ -211,6 +431,299 @@ def upload_class_record():
             'venue': venue,
             'optimized': use_optimized,
             'student_data': student_data
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Server error: {str(e)}'
+        }), 500
+
+@class_bp.route('/preview_class_record', methods=['POST'])
+def preview_class_record():
+    """Preview class record data before saving"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part in the request'}), 400
+            
+        file = request.files['file']
+        file_name = file.filename
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+            return jsonify({'error': 'Only Excel files (.xlsx, .xls) and CSV files (.csv) are allowed'}), 400
+
+        filename_lower = file.filename.lower()
+        
+        # Use the same parsing logic as upload_class_record but don't save to database
+        student_data = []
+        metadata = {}
+        
+        # Process based on file type (same logic as upload_class_record)
+        if filename_lower.endswith(('.xlsx', '.xls')):
+            wb = openpyxl.load_workbook(file)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+            
+            if len(rows) < 5:
+                return jsonify({'error': 'Invalid file format - not enough rows'}), 400
+
+            # Extract metadata (first few rows)
+            for i, row in enumerate(rows[:8]):
+                if not any(row):
+                    continue
+                    
+                if row[0] and len(row) > 1:
+                    key = str(row[0]).lower().strip()
+                    value = str(row[1]).strip() if row[1] else None
+                    
+                    if 'professor' in key and value:
+                        metadata['professor'] = value
+                    elif 'class' in key and 'name' in key and value:
+                        metadata['class_name'] = value
+                    elif 'room' in key and 'type' in key and value:
+                        metadata['room_type'] = value
+                    elif 'building' in key and value:
+                        metadata['building'] = value
+                    elif 'venue' in key and value:
+                        metadata['venue'] = value
+
+            # Find student data headers
+            student_data_start = None
+            for i, row in enumerate(rows):
+                if row and row[0] and 'student id' in str(row[0]).lower():
+                    student_data_start = i
+                    break
+                    
+            if student_data_start is None:
+                return jsonify({'error': 'Could not find student data headers'}), 400
+
+            headers = [str(h).strip().lower().replace(' ', '_') for h in rows[student_data_start]]
+            required_columns = {'student_id', 'student_name', 'year_level', 'course'}
+            
+            missing_columns = required_columns - set(headers)
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {", ".join(missing_columns)}'
+                }), 400
+
+            # Process student data
+            for row in rows[student_data_start+1:]:
+                if not row or not row[0] or not str(row[0]).strip():
+                    continue
+                    
+                student = dict(zip(headers, row))
+                student_id = str(student.get('student_id', '')).strip()
+                
+                student_data.append({
+                    'studentId': student_id,
+                    'studentName': str(student.get('student_name', '')).strip(),
+                    'yearLevel': str(student.get('year_level', '')).strip(),
+                    'course': str(student.get('course', '')).strip()
+                })
+
+        elif filename_lower.endswith('.csv'):
+            # CSV processing (similar to upload_class_record)
+            try:
+                raw_content = file.read()
+                
+                try:
+                    content = raw_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        content = raw_content.decode('utf-8-sig')
+                    except UnicodeDecodeError:
+                        try:
+                            content = raw_content.decode('windows-1252')
+                        except UnicodeDecodeError:
+                            try:
+                                content = raw_content.decode('latin-1')
+                            except UnicodeDecodeError:
+                                content = raw_content.decode('utf-8', errors='replace')
+                                    
+            except Exception as e:
+                return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
+
+            import csv
+            reader = csv.reader(StringIO(content))
+            rows = list(reader)
+            
+            if len(rows) < 2:
+                return jsonify({'error': 'CSV must have at least header and one data row'}), 400
+
+            # Extract metadata from CSV (similar logic)
+            student_data_start = None
+            for i, row in enumerate(rows[:10]):
+                if not row or not any(str(cell).strip() for cell in row if cell is not None):
+                    continue
+                
+                # Check for metadata patterns
+                if len(row) >= 2 and row[0] and row[1]:
+                    key = str(row[0]).lower().strip()
+                    value = str(row[1]).strip()
+                    
+                    if any(word in key for word in ['professor', 'instructor', 'teacher', 'prof']):
+                        if value:
+                            metadata['professor'] = value
+                
+                # Check for student headers
+                if row and len(row) > 0:
+                    row_text = ' '.join(str(cell).lower() for cell in row if cell).strip()
+                    if any(pattern in row_text for pattern in ['student id', 'student_id', 'studentid']):
+                        if student_data_start is None:
+                            student_data_start = i
+
+            if student_data_start is None:
+                for i, row in enumerate(rows):
+                    if row and len(row) > 2:
+                        row_text = ' '.join(str(cell).lower() for cell in row if cell).strip()
+                        if any(pattern in row_text for pattern in ['name', 'course', 'year', 'id']):
+                            student_data_start = i
+                            break
+
+            def normalize_header(header):
+                return str(header).lower().strip().replace(' ', '_').replace('-', '_')
+
+            headers = [normalize_header(h) for h in rows[student_data_start]]
+            
+            # Build header mapping
+            header_map = {}
+            for idx, header in enumerate(headers):
+                header_map[header] = idx
+            
+            required_mappings = {
+                'student_id': ['student_id', 'studentid', 'id', 'student_number', 'studentnumber'],
+                'student_name': ['student_name', 'studentname', 'name', 'student', 'full_name', 'fullname'],
+                'year_level': ['year_level', 'yearlevel', 'year', 'level', 'grade'],
+                'course': ['course', 'program', 'major', 'subject']
+            }
+            
+            column_indices = {}
+            missing_columns = []
+            
+            for required_key, possible_headers in required_mappings.items():
+                found = False
+                for possible in possible_headers:
+                    if possible in header_map:
+                        column_indices[required_key] = header_map[possible]
+                        found = True
+                        break
+                if not found:
+                    missing_columns.append(required_key)
+            
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {", ".join(missing_columns)}'
+                }), 400
+
+            # Process student data
+            for row in rows[student_data_start+1:]:
+                if not row or not any(cell.strip() for cell in row if cell):
+                    continue
+                
+                try:
+                    student_id = str(row[column_indices['student_id']]).strip() if column_indices['student_id'] < len(row) else ''
+                    if not student_id:
+                        continue
+                        
+                    student_name = str(row[column_indices['student_name']]).strip() if column_indices['student_name'] < len(row) else ''
+                    year_level = str(row[column_indices['year_level']]).strip() if column_indices['year_level'] < len(row) else ''
+                    course = str(row[column_indices['course']]).strip() if column_indices['course'] < len(row) else ''
+                    
+                    student_data.append({
+                        'studentId': student_id,
+                        'studentName': student_name,
+                        'yearLevel': year_level,
+                        'course': course
+                    })
+                except IndexError:
+                    continue
+
+        # Set defaults if not found
+        professor_name = metadata.get('professor', 'Unknown Professor')
+        class_name = metadata.get('class_name', file_name)
+        room_type = metadata.get('room_type', 'Classroom')
+        venue = metadata.get('venue', 'Main Building')
+        building = metadata.get('building', 'Main Building')
+
+        if not student_data:
+            return jsonify({'error': 'No valid student data found in the file'}), 400
+
+        # Create display name
+        if file_name.lower().endswith('.xlsx'):
+            file_name = file_name[:-5]
+        elif file_name.lower().endswith('.xls'):
+            file_name = file_name[:-4]
+        elif file_name.lower().endswith('.csv'):
+            file_name = file_name[:-4]
+            
+        file_name = file_name.rstrip(' -')
+        professor_name = professor_name.lstrip(' -')
+        display_name = f"{file_name} - {professor_name}"
+
+        return jsonify({
+            'status': 'preview',
+            'message': 'File processed successfully - ready for review',
+            'class_data': {
+                'display_name': display_name,
+                'class_name': class_name,
+                'professor': professor_name,
+                'room_type': room_type,
+                'venue': venue,
+                'building': building,
+                'student_count': len(student_data)
+            },
+            'student_data': student_data
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Server error: {str(e)}'
+        }), 500
+
+@class_bp.route('/save_class_record', methods=['POST'])
+def save_class_record():
+    """Save the reviewed class record data"""
+    try:
+        data = request.json or {}
+        
+        if not data.get('class_data') or not data.get('student_data'):
+            return jsonify({'error': 'Missing class or student data'}), 400
+        
+        class_data = data['class_data']
+        student_data = data['student_data']
+        
+        # Use optimized schema
+        from database.class_table_manager import OptimizedClassManager
+        manager = OptimizedClassManager()
+        
+        # Prepare metadata with room and venue info
+        metadata = {
+            'room_type': class_data.get('room_type'),
+            'venue': class_data.get('venue'),
+            'building': class_data.get('building')
+        }
+        
+        class_id = manager.import_from_excel_data(
+            class_name=class_data.get('class_name'),
+            professor_name=class_data.get('professor'),
+            student_data=student_data,
+            metadata=metadata
+        )
+        
+        success_message = f"Class '{class_data.get('display_name')}' created successfully with {len(student_data)} students!"
+        
+        return jsonify({
+            'message': success_message,
+            'class_id': class_id,
+            'display_name': class_data.get('display_name'),
+            'professor': class_data.get('professor'),
+            'student_count': len(student_data)
         })
         
     except Exception as e:
@@ -534,11 +1047,18 @@ def create_optimized_class():
             academic_year=data.get('academic_year')
         )
         
+        # Note: room_type and venue are accepted but not yet stored in the optimized schema
+        # These could be stored in a separate metadata table if needed in the future
+        room_type = data.get('room_type', 'Classroom')
+        venue = data.get('venue', 'Main Building')
+        
         if class_id:
             return jsonify({
                 'status': 'success',
-                'message': 'Class created successfully',
-                'class_id': class_id
+                'message': f'Class created successfully in {room_type} at {venue}',
+                'class_id': class_id,
+                'room_type': room_type,
+                'venue': venue
             })
         else:
             return jsonify({'error': 'Failed to create class'}), 500

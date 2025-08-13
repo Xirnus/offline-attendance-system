@@ -137,7 +137,32 @@ def upload_students():
         # --- CSV files ---
         elif filename_lower.endswith('.csv'):
             try:
-                content = file.read().decode('utf-8')
+                # Try different encodings to handle various CSV file formats
+                raw_content = file.read()
+                
+                # Try UTF-8 first (most common)
+                try:
+                    content = raw_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Try UTF-8 with BOM
+                    try:
+                        content = raw_content.decode('utf-8-sig')
+                    except UnicodeDecodeError:
+                        # Try Windows-1252 (common for Excel-generated CSV)
+                        try:
+                            content = raw_content.decode('windows-1252')
+                        except UnicodeDecodeError:
+                            # Try ISO-8859-1 / Latin-1 (fallback)
+                            try:
+                                content = raw_content.decode('latin-1')
+                            except UnicodeDecodeError:
+                                # Last resort: CP1252
+                                try:
+                                    content = raw_content.decode('cp1252')
+                                except UnicodeDecodeError:
+                                    # If all fail, try to decode with error handling
+                                    content = raw_content.decode('utf-8', errors='replace')
+                                    
             except Exception as e:
                 return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
 
