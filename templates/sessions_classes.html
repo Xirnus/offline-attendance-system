@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions & Classes - ComSci Attendance System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/common.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sessions.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/class_upload.css') }}">
+    <!-- Load XLSX library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <style>
+        /* Tab Navigation Styles */
+        .tab-navigation {
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            gap: 0;
+        }
+        
+        .tab-button {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button:hover {
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .tab-button.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            background: #fff;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Update header to reflect combined functionality */
+        .combined-header h1 {
+            margin-bottom: 5px;
+        }
+        
+        .combined-header p {
+            color: #666;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='images/perps.png') }}" alt="Logo" />
+                <h3>ComSci Attendance System</h3>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/students" class="nav-link">Students</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/sessions-classes" class="nav-link active">Sessions & Classes</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/analytics" class="nav-link">Analytics</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/reports" class="nav-link">Reports</a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header combined-header">
+                <div>
+                    <h1>Sessions & Classes Management</h1>
+                    <p>Manage attendance sessions, session profiles, and class records</p>
+                </div>
+                <div class="header-actions">
+                    <button>🔔</button>
+                    <button>⚙️</button>
+                    <button>❌</button>
+                </div>
+            </header>
+
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+                <div class="tab-buttons">
+                    <button class="tab-button active" data-tab="sessions">📋 Sessions</button>
+                    <button class="tab-button" data-tab="classes">📚 Classes</button>
+                </div>
+            </div>
+
+            <!-- Content -->
+            <div class="content">
+                <!-- Sessions Tab Content -->
+                <div id="sessions-tab" class="tab-content active">
+                    <!-- Active Session Status -->
+                    <div id="activeSessionSection" class="active-session-section no-session">
+                        <div class="active-session-header">
+                            <h2 class="active-session-title">No Active Session</h2>
+                            <span class="session-status-badge">INACTIVE</span>
+                        </div>
+                        <p>Start a new session or use a session profile to begin attendance tracking.</p>
+                    </div>
+
+                    <!-- Sessions Grid -->
+                    <div class="sessions-grid">
+                        <!-- Session Profiles -->
+                        <div class="profiles-section">
+                            <div class="profiles-header">
+                                <h2 class="profiles-title">📋 Session Profiles</h2>
+                            </div>
+                            
+                            <!-- Search Bar -->
+                            <div class="search-section">
+                                <div class="search-container">
+                                    <span class="search-icon">🔍</span>
+                                    <input type="text" id="searchProfiles" placeholder="Search session profiles..." class="search-input">
+                                </div>
+                            </div>
+
+                            <!-- Profiles List -->
+                            <div id="profilesList" class="loading">
+                                Loading profiles...
+                            </div>
+                        </div>
+
+                        <!-- Create Profile Form -->
+                        <div class="create-profile-section">
+                            <h3>✨ Create New Session Profile</h3>
+                            <form id="profileForm">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="profileName">Profile Name *</label>
+                                        <input type="text" id="profileName" name="profile_name" required 
+                                               placeholder="e.g., CS101 Lecture">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="professorName">Professor / Organizer / Speaker *</label>
+                                        <input type="text" id="professorName" name="organizer" required
+                                               placeholder="e.g., Dr. John Smith">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="buildingRoom">Building & Room No. *</label>
+                                        <input type="text" id="buildingRoom" name="building" required
+                                               placeholder="e.g., Science Building Room 101">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="roomType">Room Type *</label>
+                                        <select id="roomType" name="room_type" required>
+                                            <option value="">Select room type</option>
+                                            <option value="Lecture Hall">Lecture Hall</option>
+                                            <option value="Laboratory">Laboratory</option>
+                                            <option value="Conference Room">Conference Room</option>
+                                            <option value="Classroom">Classroom</option>
+                                            <option value="Auditorium">Auditorium</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="roomCapacity">Room Capacity *</label>
+                                        <input type="number" id="roomCapacity" name="capacity" required min="1" max="1000"
+                                               placeholder="e.g., 50">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-create">Create Profile</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Classes Tab Content -->
+                <div id="classes-tab" class="tab-content">
+                    <!-- Upload Section -->
+                    <div class="upload-section">
+                        <h2>📚 Upload Class Record</h2>
+                        
+                        <div class="file-input-container">
+                            <div class="file-upload-row">
+                                <div class="file-input-wrapper">
+                                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+                                    <label for="fileInput" class="file-input-label">
+                                        📁 Choose Excel or CSV File
+                                    </label>
+                                </div>
+                                
+                                <button id="uploadBtn" class="btn btn-primary">
+                                    📤 Upload File
+                                </button>
+                            </div>
+                            
+                            <!-- Selected file display -->
+                            <div id="selectedFileDisplay" class="selected-file-display" style="display: none;">
+                                <span class="selected-file-icon">📄</span>
+                                <span class="selected-file-name"></span>
+                                <span class="selected-file-size"></span>
+                            </div>
+                            
+                            <div class="file-requirements">
+                                <strong>📋 File Requirements:</strong><br>
+                                Please upload an Excel file (.xlsx, .xls) or CSV file (.csv) with the following columns:<br>
+                                <code>student_id</code>, <code>student_name</code>, <code>year_level</code>, <code>course</code><br>
+                                <small>Optional metadata: Professor name in the first few rows</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Manual Entry Button -->
+                    <div class="manual-entry-section">
+                        <button id="openManualEntryBtn" class="btn btn-secondary">
+                            👥 Add Student to Class
+                        </button>
+                    </div>
+
+                    <!-- Class Info Container -->
+                    <div id="classInfoContainer"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Sessions Modals -->
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Session Profile</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="editProfileForm">
+                <input type="hidden" id="editProfileId" name="profile_id">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="editProfileName">Profile Name *</label>
+                        <input type="text" id="editProfileName" name="profile_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editProfessorName">Professor / Organizer *</label>
+                        <input type="text" id="editProfessorName" name="organizer" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editBuildingRoom">Building & Room *</label>
+                        <input type="text" id="editBuildingRoom" name="building" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRoomType">Room Type *</label>
+                        <select id="editRoomType" name="room_type" required>
+                            <option value="Lecture Hall">Lecture Hall</option>
+                            <option value="Laboratory">Laboratory</option>
+                            <option value="Conference Room">Conference Room</option>
+                            <option value="Classroom">Classroom</option>
+                            <option value="Auditorium">Auditorium</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRoomCapacity">Room Capacity *</label>
+                        <input type="number" id="editRoomCapacity" name="capacity" required min="1" max="1000">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-create">Update Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Manage Students Modal -->
+    <div id="manageStudentsModal" class="modal modal-large">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Manage Students - <span id="modalProfileName"></span></h3>
+                <span class="close" onclick="closeManageStudentsModal()">&times;</span>
+            </div>
+            
+            <div class="students-management">
+                <input type="hidden" id="manageProfileId">
+                
+                <!-- Enrolled Students Section -->
+                <div class="students-section">
+                    <div class="section-header">
+                        <h4>👥 Enrolled Students (<span id="enrolledCount">0</span>)</h4>
+                        <button type="button" class="btn btn-secondary" onclick="refreshEnrolledStudents()">🔄 Refresh</button>
+                    </div>
+                    
+                    <div class="search-container">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchEnrolledStudents" placeholder="Search enrolled students..." class="search-input">
+                    </div>
+                    
+                    <div id="enrolledStudentsList" class="students-list">
+                        <div class="loading">Loading enrolled students...</div>
+                    </div>
+                </div>
+                
+                <!-- Available Students Section -->
+                <div class="students-section">
+                    <div class="section-header">
+                        <h4>➕ Available Students (<span id="availableCount">0</span>)</h4>
+                        <div class="section-actions">
+                            <button type="button" class="btn btn-primary" onclick="enrollSelectedStudents()">📝 Enroll Selected</button>
+                            <button type="button" class="btn btn-secondary" onclick="refreshAvailableStudents()">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    
+                    <div class="search-container">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchAvailableStudents" placeholder="Search available students..." class="search-input">
+                    </div>
+                    
+                    <div class="bulk-actions">
+                        <label>
+                            <input type="checkbox" id="selectAllAvailable" onchange="toggleSelectAllAvailable()">
+                            Select All Visible
+                        </label>
+                    </div>
+                    
+                    <div id="availableStudentsList" class="students-list">
+                        <div class="loading">Loading available students...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeManageStudentsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Classes Modals -->
+    <!-- Manual Student Entry Modal -->
+    <div id="manualStudentEntryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Add Student to Class</h3>
+                <span class="close">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Class Selection -->
+                <div class="form-group">
+                    <label for="modalClassSelect">Select Class:</label>
+                    <select id="modalClassSelect" class="form-control">
+                        <option value="">-- Select a Class --</option>
+                    </select>
+                </div>
+                
+                <!-- Create New Class Button -->
+                <div class="form-group">
+                    <button id="modalCreateNewClassBtn" class="btn btn-outline">
+                        ✨ Create New Class
+                    </button>
+                </div>
+                
+                <!-- New Class Form (hidden by default) -->
+                <div id="modalNewClassForm" class="new-class-form" style="display: none;">
+                    <h4>Create New Class</h4>
+                    <div class="form-group">
+                        <label for="modalNewClassName">Class Name:</label>
+                        <input type="text" id="modalNewClassName" class="form-control" placeholder="e.g., Computer Science 101">
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassProfessor">Professor:</label>
+                        <input type="text" id="modalNewClassProfessor" class="form-control" placeholder="Professor Name">
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassRoomType">Room Type:</label>
+                        <select id="modalNewClassRoomType" class="form-control">
+                            <option value="Classroom">Classroom</option>
+                            <option value="Laboratory">Laboratory</option>
+                            <option value="Conference Room">Conference Room</option>
+                            <option value="Auditorium">Auditorium</option>
+                            <option value="Workshop">Workshop</option>
+                            <option value="Studio">Studio</option>
+                            <option value="Library">Library</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassVenue">Venue:</label>
+                        <input type="text" id="modalNewClassVenue" class="form-control" placeholder="e.g., Main Building">
+                    </div>
+                    <div class="form-actions">
+                        <button id="modalSaveNewClassBtn" class="btn btn-primary">Create Class</button>
+                        <button id="modalCancelNewClassBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+                
+                <!-- Student Selection Form -->
+                <div id="modalStudentForm" class="student-form" style="display: none;">
+                    <h4>Add Students to Class</h4>
+                    
+                    <!-- Bulk Selection Options -->
+                    <div class="form-group">
+                        <div class="bulk-selection-tabs">
+                            <button type="button" id="singleSelectTab" class="tab-button active">Single Student</button>
+                            <button type="button" id="bulkSelectTab" class="tab-button">Bulk Select</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Single Student Selection -->
+                    <div id="singleStudentSelection" class="selection-mode">
+                        <div class="form-group">
+                            <label for="modalStudentSelect">Select Student:</label>
+                            <select id="modalStudentSelect" class="form-control">
+                                <option value="">-- Select a Student --</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Selected Student Info -->
+                        <div id="modalSelectedStudentInfo" class="selected-student-info" style="display: none;">
+                            <div class="student-info-card">
+                                <h5>Selected Student</h5>
+                                <div class="student-details">
+                                    <div><strong>ID:</strong> <span id="modalSelectedStudentId"></span></div>
+                                    <div><strong>Name:</strong> <span id="modalSelectedStudentName"></span></div>
+                                    <div><strong>Course:</strong> <span id="modalSelectedStudentCourse"></span></div>
+                                    <div><strong>Year:</strong> <span id="modalSelectedStudentYear"></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bulk Student Selection -->
+                    <div id="bulkStudentSelection" class="selection-mode" style="display: none;">
+                        <div class="form-group">
+                            <label>Select Multiple Students:</label>
+                            <div class="bulk-controls">
+                                <button type="button" id="selectAllStudentsBtn" class="btn btn-outline">Select All</button>
+                                <button type="button" id="clearAllStudentsBtn" class="btn btn-outline">Clear All</button>
+                                <input type="text" id="studentSearchInput" class="form-control" placeholder="Search students..." style="margin-top: 10px;">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div id="bulkStudentList" class="bulk-student-list">
+                                <!-- Students will be populated here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Selected Students Summary -->
+                        <div id="selectedStudentsSummary" class="selected-summary" style="display: none;">
+                            <h5>Selected Students (<span id="selectedCount">0</span>):</h5>
+                            <div id="selectedStudentsList" class="selected-students-list">
+                                <!-- Selected students will be shown here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <button id="modalAddStudentBtn" class="btn btn-primary" disabled>
+                            <span id="addButtonText">Add Student</span>
+                        </button>
+                        <button id="modalClearSelectionBtn" class="btn btn-secondary">Clear Selection</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Preview Modal -->
+    <div id="filePreviewModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px; width: 90%;">
+            <div class="modal-header">
+                <h3 class="modal-title">📋 Review Class Data</h3>
+                <span class="close" id="closePreviewModal">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Class Information Section -->
+                <div class="preview-section">
+                    <h4>📚 Class Information</h4>
+                    <div class="class-info-grid">
+                        <div class="form-group">
+                            <label for="previewClassName">Class Name:</label>
+                            <input type="text" id="previewClassName" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="previewProfessor">Professor:</label>
+                            <input type="text" id="previewProfessor" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="previewRoomType">Room Type:</label>
+                            <select id="previewRoomType" class="form-control">
+                                <option value="Classroom">Classroom</option>
+                                <option value="Laboratory">Laboratory</option>
+                                <option value="Conference Room">Conference Room</option>
+                                <option value="Auditorium">Auditorium</option>
+                                <option value="Workshop">Workshop</option>
+                                <option value="Studio">Studio</option>
+                                <option value="Library">Library</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="previewVenue">Venue:</label>
+                            <input type="text" id="previewVenue" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Student Data Section -->
+                <div class="preview-section">
+                    <div class="section-header">
+                        <h4>👥 Student Data (<span id="studentCount">0</span> students)</h4>
+                        <div class="section-actions">
+                            <button id="addStudentBtn" class="btn btn-outline">➕ Add Student</button>
+                            <button id="removeSelectedBtn" class="btn btn-outline">🗑️ Remove Selected</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Student Table -->
+                    <div class="student-table-wrapper">
+                        <table id="previewStudentTable" class="preview-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllStudents"></th>
+                                    <th>Student ID</th>
+                                    <th>Student Name</th>
+                                    <th>Year Level</th>
+                                    <th>Course</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewStudentTableBody">
+                                <!-- Student rows will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Add Student Form (Hidden by default) -->
+                <div id="addStudentForm" class="preview-section" style="display: none;">
+                    <h4>➕ Add New Student</h4>
+                    <div class="add-student-grid">
+                        <div class="form-group">
+                            <label for="newStudentId">Student ID:</label>
+                            <input type="text" id="newStudentId" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentName">Student Name:</label>
+                            <input type="text" id="newStudentName" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentYear">Year Level:</label>
+                            <input type="text" id="newStudentYear" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentCourse">Course:</label>
+                            <input type="text" id="newStudentCourse" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button id="saveNewStudentBtn" class="btn btn-primary">Save Student</button>
+                        <button id="cancelNewStudentBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="modal-actions">
+                    <button id="saveClassBtn" class="btn btn-primary">💾 Save Class</button>
+                    <button id="cancelPreviewBtn" class="btn btn-secondary">❌ Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sessions.js') }}"></script>
+    <script src="static/js/class_upload.js"></script>
+    
+    <!-- Tab switching functionality -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Tab switching functionality
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const targetTab = this.dataset.tab;
+                    
+                    // Remove active class from all buttons and contents
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    
+                    // Add active class to clicked button and corresponding content
+                    this.classList.add('active');
+                    document.getElementById(targetTab + '-tab').classList.add('active');
+                });
+            });
+            
+            // Load classes JavaScript functionality
+            console.log('Page loaded');
+            console.log('XLSX library:', typeof XLSX !== 'undefined' ? 'Loaded' : 'Not loaded');
+            
+            // Test if elements exist
+            const fileInput = document.getElementById('fileInput');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            console.log('File input:', fileInput);
+            console.log('Upload button:', uploadBtn);
+            
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    console.log('File selected:', e.target.files[0]);
+                });
+            }
+            
+            if (uploadBtn) {
+                uploadBtn.addEventListener('click', function() {
+                    console.log('Upload button clicked');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -91,6 +91,10 @@ def dashboard():
 def sessions():
     return render_template('sessions.html')
 
+@app.route('/sessions-classes')
+def sessions_classes():
+    return render_template('sessions_classes.html')
+
 @app.route('/reports')
 def reports():
     return render_template('reports.html')
