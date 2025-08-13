@@ -44,43 +44,28 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        setButtonLoading(uploadBtn, true, 'Uploading...');
+        setButtonLoading(uploadBtn, true, 'Processing...');
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('use_optimized', 'true'); // Use optimized schema
 
         try {
-            const data = await fetchWithLoading('/upload_class_record', {
+            const data = await fetchWithLoading('/preview_class_record', {
                 method: 'POST',
                 body: formData,
-                // Do NOT set Content-Type header when sending FormData!
-                headers: {} // Ensure no Content-Type is set
+                headers: {}
             });
             
-            console.log('Upload successful:', data);
-            showAlert(
-                `${data.message}<br>Professor: ${data.professor || 'N/A'}`,
-                'success'
-            );
-            loadClassTables();
+            console.log('Preview successful:', data);
+            
+            // Show preview modal with the data
+            showPreviewModal(data);
+            
         } catch (error) {
-            console.error('Upload error:', error);
-            showAlert(`Upload failed: ${error.message}`, 'error');
+            console.error('Preview error:', error);
+            showAlert(`File processing failed: ${error.message}`, 'error');
         } finally {
             setButtonLoading(uploadBtn, false);
-            if (fileInput) fileInput.value = '';
-            // Reset file label and display when clearing input
-            const fileLabel = document.querySelector('.file-input-label');
-            const selectedFileDisplay = document.getElementById('selectedFileDisplay');
-            if (fileLabel) {
-                fileLabel.textContent = '📁 Choose Excel or CSV File';
-                fileLabel.style.color = '';
-                fileLabel.title = '';
-            }
-            if (selectedFileDisplay) {
-                selectedFileDisplay.style.display = 'none';
-            }
         }
     }
 
@@ -449,44 +434,73 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showAlert(message, type = 'info') {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type}`;
-        alertDiv.innerHTML = message;
-        
-        // Position the alert
-        alertDiv.style.position = 'fixed';
-        alertDiv.style.top = '20px';
-        alertDiv.style.right = '20px';
-        alertDiv.style.padding = '15px';
-        alertDiv.style.borderRadius = '5px';
-        alertDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
-        alertDiv.style.zIndex = '1000';
-        
-        // Style based on type
-        if (type === 'error') {
-            alertDiv.style.backgroundColor = '#ffebee';
-            alertDiv.style.color = '#c62828';
-            alertDiv.style.border = '1px solid #ef9a9a';
-        } else if (type === 'success') {
-            alertDiv.style.backgroundColor = '#e8f5e9';
-            alertDiv.style.color = '#2e7d32';
-            alertDiv.style.border = '1px solid #a5d6a7';
-        } else if (type === 'warning') {
-            alertDiv.style.backgroundColor = '#fff3e0';
-            alertDiv.style.color = '#ef6c00';
-            alertDiv.style.border = '1px solid #ffcc02';
+        // Use the common notification system from common.js
+        if (typeof showNotification === 'function') {
+            showNotification(message, type);
         } else {
-            alertDiv.style.backgroundColor = '#e3f2fd';
-            alertDiv.style.color = '#1565c0';
-            alertDiv.style.border = '1px solid #90caf9';
+            // Fallback if common.js is not loaded
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.innerHTML = message;
+            
+            // Style based on type
+            if (type === 'error') {
+                alertDiv.style.backgroundColor = '#ffebee';
+                alertDiv.style.color = '#c62828';
+                alertDiv.style.border = '1px solid #ef9a9a';
+            } else if (type === 'success') {
+                alertDiv.style.backgroundColor = '#e8f5e9';
+                alertDiv.style.color = '#2e7d32';
+                alertDiv.style.border = '1px solid #a5d6a7';
+            } else if (type === 'warning') {
+                alertDiv.style.backgroundColor = '#fff3e0';
+                alertDiv.style.color = '#ef6c00';
+                alertDiv.style.border = '1px solid #ffcc02';
+            } else {
+                alertDiv.style.backgroundColor = '#e3f2fd';
+                alertDiv.style.color = '#1565c0';
+                alertDiv.style.border = '1px solid #90caf9';
+            }
+            
+            alertDiv.style.position = 'relative';
+            alertDiv.style.padding = '15px';
+            alertDiv.style.borderRadius = '5px';
+            alertDiv.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+            alertDiv.style.maxWidth = '400px';
+            alertDiv.style.animation = 'slideIn 0.3s ease-in-out';
+            
+            // Get or create notification container
+            let container = document.getElementById('notification-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'notification-container';
+                container.style.cssText = `
+                  position: fixed; 
+                  top: 20px; 
+                  right: 20px; 
+                  z-index: 1000; 
+                  display: flex; 
+                  flex-direction: column; 
+                  gap: 10px;
+                  pointer-events: none;
+                `;
+                document.body.appendChild(container);
+            }
+            
+            container.appendChild(alertDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (container.contains(alertDiv)) {
+                    alertDiv.style.animation = 'slideOut 0.3s ease-in-out';
+                    setTimeout(() => {
+                        if (container.contains(alertDiv)) {
+                            container.removeChild(alertDiv);
+                        }
+                    }, 300);
+                }
+            }, 5000);
         }
-        
-        document.body.appendChild(alertDiv);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            alertDiv.remove();
-        }, 5000);
     }
 
     // Attendance Detail Functions
@@ -1296,6 +1310,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function handleModalCreateClass() {
         const className = document.getElementById('modalNewClassName').value.trim();
         const professorName = document.getElementById('modalNewClassProfessor').value.trim();
+        const roomType = document.getElementById('modalNewClassRoomType').value;
+        const venue = document.getElementById('modalNewClassVenue').value.trim();
         
         if (!className || !professorName) {
             showAlert('Please fill in both class name and professor name', 'error');
@@ -1312,7 +1328,9 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({
                 class_name: className,
-                professor_name: professorName
+                professor_name: professorName,
+                room_type: roomType,
+                venue: venue
             })
         })
         .then(response => {
@@ -1450,4 +1468,285 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Make removeSelectedStudent available globally for onclick handlers
     window.removeSelectedStudent = removeSelectedStudent;
+    
+    // Preview Modal Functions
+    let previewData = null;
+    
+    function showPreviewModal(data) {
+        previewData = data;
+        const modal = document.getElementById('filePreviewModal');
+        
+        // Populate class information
+        document.getElementById('previewClassName').value = data.class_data.class_name || '';
+        document.getElementById('previewProfessor').value = data.class_data.professor || '';
+        document.getElementById('previewRoomType').value = data.class_data.room_type || '';
+        document.getElementById('previewVenue').value = data.class_data.venue || '';
+        
+        // Populate student table
+        populatePreviewStudentTable(data.student_data);
+        
+        // Show modal
+        modal.style.display = 'block';
+        
+        // Set up event listeners
+        setupPreviewModalEventListeners();
+    }
+    
+    function populatePreviewStudentTable(students) {
+        const tbody = document.getElementById('previewStudentTableBody');
+        const studentCount = document.getElementById('studentCount');
+        
+        tbody.innerHTML = '';
+        studentCount.textContent = students.length;
+        
+        students.forEach((student, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="checkbox" class="student-checkbox" data-index="${index}"></td>
+                <td class="editable-cell" data-field="studentId">${student.studentId}</td>
+                <td class="editable-cell" data-field="studentName">${student.studentName}</td>
+                <td class="editable-cell" data-field="yearLevel">${student.yearLevel}</td>
+                <td class="editable-cell" data-field="course">${student.course}</td>
+                <td class="student-row-actions">
+                    <button class="edit-student-btn" onclick="editStudentRow(${index})">✏️</button>
+                    <button class="delete-student-btn" onclick="deleteStudentRow(${index})">🗑️</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Make cells editable
+        setupEditableCells();
+    }
+    
+    function setupEditableCells() {
+        document.querySelectorAll('.editable-cell').forEach(cell => {
+            cell.addEventListener('click', function() {
+                if (this.querySelector('input')) return; // Already editing
+                
+                const currentValue = this.textContent;
+                const field = this.dataset.field;
+                
+                this.innerHTML = `<input type="text" value="${currentValue}" data-field="${field}">`;
+                const input = this.querySelector('input');
+                input.focus();
+                input.select();
+                
+                input.addEventListener('blur', function() {
+                    const newValue = this.value;
+                    const cell = this.parentNode;
+                    cell.textContent = newValue;
+                    
+                    // Update the data
+                    const row = cell.closest('tr');
+                    const index = row.querySelector('.student-checkbox').dataset.index;
+                    previewData.student_data[index][field] = newValue;
+                });
+                
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        this.blur();
+                    }
+                });
+            });
+        });
+    }
+    
+    function setupPreviewModalEventListeners() {
+        // Close modal
+        document.getElementById('closePreviewModal').onclick = closePreviewModal;
+        document.getElementById('cancelPreviewBtn').onclick = closePreviewModal;
+        
+        // Save class
+        document.getElementById('saveClassBtn').onclick = saveClassRecord;
+        
+        // Add student
+        document.getElementById('addStudentBtn').onclick = showAddStudentForm;
+        document.getElementById('saveNewStudentBtn').onclick = saveNewStudent;
+        document.getElementById('cancelNewStudentBtn').onclick = hideAddStudentForm;
+        
+        // Remove selected students
+        document.getElementById('removeSelectedBtn').onclick = removeSelectedStudents;
+        
+        // Select all checkbox
+        document.getElementById('selectAllStudents').onchange = function() {
+            const checkboxes = document.querySelectorAll('.student-checkbox');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+        };
+    }
+    
+    function closePreviewModal() {
+        document.getElementById('filePreviewModal').style.display = 'none';
+        previewData = null;
+        
+        // Reset file input
+        if (fileInput) fileInput.value = '';
+        const fileLabel = document.querySelector('.file-input-label');
+        const selectedFileDisplay = document.getElementById('selectedFileDisplay');
+        if (fileLabel) {
+            fileLabel.textContent = '📁 Choose Excel or CSV File';
+            fileLabel.style.color = '';
+            fileLabel.title = '';
+        }
+        if (selectedFileDisplay) {
+            selectedFileDisplay.style.display = 'none';
+        }
+    }
+    
+    function showAddStudentForm() {
+        document.getElementById('addStudentForm').style.display = 'block';
+        document.getElementById('newStudentId').focus();
+    }
+    
+    function hideAddStudentForm() {
+        document.getElementById('addStudentForm').style.display = 'none';
+        // Clear form
+        document.getElementById('newStudentId').value = '';
+        document.getElementById('newStudentName').value = '';
+        document.getElementById('newStudentYear').value = '';
+        document.getElementById('newStudentCourse').value = '';
+    }
+    
+    function saveNewStudent() {
+        const studentId = document.getElementById('newStudentId').value.trim();
+        const studentName = document.getElementById('newStudentName').value.trim();
+        const yearLevel = document.getElementById('newStudentYear').value.trim();
+        const course = document.getElementById('newStudentCourse').value.trim();
+        
+        // Validation
+        if (!studentId || !studentName || !yearLevel || !course) {
+            showAlert('Please fill in all student fields', 'error');
+            return;
+        }
+        
+        // Check for duplicate student ID
+        const existingIds = previewData.student_data.map(s => s.studentId.toLowerCase());
+        if (existingIds.includes(studentId.toLowerCase())) {
+            showAlert('Student ID already exists', 'error');
+            return;
+        }
+        
+        // Add student to data
+        const newStudent = {
+            studentId: studentId,
+            studentName: studentName,
+            yearLevel: yearLevel,
+            course: course
+        };
+        
+        previewData.student_data.push(newStudent);
+        
+        // Refresh table
+        populatePreviewStudentTable(previewData.student_data);
+        
+        // Hide form
+        hideAddStudentForm();
+        
+        showAlert('Student added successfully', 'success');
+    }
+    
+    function removeSelectedStudents() {
+        const selectedIndices = [];
+        document.querySelectorAll('.student-checkbox:checked').forEach(checkbox => {
+            selectedIndices.push(parseInt(checkbox.dataset.index));
+        });
+        
+        if (selectedIndices.length === 0) {
+            showAlert('Please select students to remove', 'error');
+            return;
+        }
+        
+        // Remove students (in reverse order to maintain indices)
+        selectedIndices.sort((a, b) => b - a).forEach(index => {
+            previewData.student_data.splice(index, 1);
+        });
+        
+        // Refresh table
+        populatePreviewStudentTable(previewData.student_data);
+        
+        showAlert(`${selectedIndices.length} student(s) removed`, 'success');
+    }
+    
+    function editStudentRow(index) {
+        const row = document.querySelector(`[data-index="${index}"]`).closest('tr');
+        const cells = row.querySelectorAll('.editable-cell');
+        
+        cells.forEach(cell => {
+            if (!cell.querySelector('input')) {
+                cell.click(); // Trigger edit mode
+            }
+        });
+    }
+    
+    function deleteStudentRow(index) {
+        if (confirm('Are you sure you want to delete this student?')) {
+            previewData.student_data.splice(index, 1);
+            populatePreviewStudentTable(previewData.student_data);
+            showAlert('Student deleted successfully', 'success');
+        }
+    }
+    
+    async function saveClassRecord() {
+        if (!previewData) {
+            showAlert('No data to save', 'error');
+            return;
+        }
+        
+        // Update class data with form values
+        const classData = {
+            class_name: document.getElementById('previewClassName').value.trim(),
+            professor: document.getElementById('previewProfessor').value.trim(),
+            room_type: document.getElementById('previewRoomType').value.trim(),
+            venue: document.getElementById('previewVenue').value.trim(),
+            building: document.getElementById('previewVenue').value.trim(), // Use venue as building for now
+            display_name: `${document.getElementById('previewClassName').value.trim()} - ${document.getElementById('previewProfessor').value.trim()}`
+        };
+        
+        // Validation
+        if (!classData.class_name || !classData.professor) {
+            showAlert('Class name and professor are required', 'error');
+            return;
+        }
+        
+        if (previewData.student_data.length === 0) {
+            showAlert('At least one student is required', 'error');
+            return;
+        }
+        
+        const saveBtn = document.getElementById('saveClassBtn');
+        setButtonLoading(saveBtn, true, 'Saving...');
+        
+        try {
+            const response = await fetch('/save_class_record', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    class_data: classData,
+                    student_data: previewData.student_data
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to save class record');
+            }
+            
+            showAlert(`${data.message}`, 'success');
+            closePreviewModal();
+            loadClassTables();
+            
+        } catch (error) {
+            console.error('Save error:', error);
+            showAlert(`Failed to save class: ${error.message}`, 'error');
+        } finally {
+            setButtonLoading(saveBtn, false, '💾 Save Class');
+        }
+    }
+    
+    // Make functions globally available
+    window.editStudentRow = editStudentRow;
+    window.deleteStudentRow = deleteStudentRow;
 });

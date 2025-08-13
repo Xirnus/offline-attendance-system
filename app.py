@@ -103,6 +103,10 @@ def analytics():
 def class_upload():
     return render_template('class_upload.html')
 
+@app.route('/notification_test')
+def notification_test():
+    return render_template('notification_test.html')
+
 @app.route('/api/session_profiles/<int:profile_id>', methods=['PUT'])
 def update_session_profile(profile_id):
     try:

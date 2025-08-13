@@ -60,11 +60,17 @@
                     <h2>📚 Upload Class Record</h2>
                     
                     <div class="file-input-container">
-                        <div class="file-input-wrapper">
-                            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
-                            <label for="fileInput" class="file-input-label">
-                                📁 Choose Excel or CSV File
-                            </label>
+                        <div class="file-upload-row">
+                            <div class="file-input-wrapper">
+                                <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" />
+                                <label for="fileInput" class="file-input-label">
+                                    📁 Choose Excel or CSV File
+                                </label>
+                            </div>
+                            
+                            <button id="uploadBtn" class="btn btn-primary">
+                                📤 Upload File
+                            </button>
                         </div>
                         
                         <!-- Selected file display -->
@@ -73,10 +79,6 @@
                             <span class="selected-file-name"></span>
                             <span class="selected-file-size"></span>
                         </div>
-                        
-                        <button id="uploadBtn" class="btn btn-primary">
-                            📤 Upload File
-                        </button>
                         
                         <div class="file-requirements">
                             <strong>📋 File Requirements:</strong><br>
@@ -134,6 +136,23 @@
                     <div class="form-group">
                         <label for="modalNewClassProfessor">Professor:</label>
                         <input type="text" id="modalNewClassProfessor" class="form-control" placeholder="Professor Name">
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassRoomType">Room Type:</label>
+                        <select id="modalNewClassRoomType" class="form-control">
+                            <option value="Classroom">Classroom</option>
+                            <option value="Laboratory">Laboratory</option>
+                            <option value="Conference Room">Conference Room</option>
+                            <option value="Auditorium">Auditorium</option>
+                            <option value="Workshop">Workshop</option>
+                            <option value="Studio">Studio</option>
+                            <option value="Library">Library</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="modalNewClassVenue">Venue:</label>
+                        <input type="text" id="modalNewClassVenue" class="form-control" placeholder="e.g., Main Building">
                     </div>
                     <div class="form-actions">
                         <button id="modalSaveNewClassBtn" class="btn btn-primary">Create Class</button>
@@ -240,6 +259,114 @@
             }
         });
     </script>
+    
+    <!-- File Preview Modal -->
+    <div id="filePreviewModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px; width: 90%;">
+            <div class="modal-header">
+                <h3 class="modal-title">📋 Review Class Data</h3>
+                <span class="close" id="closePreviewModal">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Class Information Section -->
+                <div class="preview-section">
+                    <h4>📚 Class Information</h4>
+                    <div class="class-info-grid">
+                        <div class="form-group">
+                            <label for="previewClassName">Class Name:</label>
+                            <input type="text" id="previewClassName" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="previewProfessor">Professor:</label>
+                            <input type="text" id="previewProfessor" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="previewRoomType">Room Type:</label>
+                            <select id="previewRoomType" class="form-control">
+                                <option value="Classroom">Classroom</option>
+                                <option value="Laboratory">Laboratory</option>
+                                <option value="Conference Room">Conference Room</option>
+                                <option value="Auditorium">Auditorium</option>
+                                <option value="Workshop">Workshop</option>
+                                <option value="Studio">Studio</option>
+                                <option value="Library">Library</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="previewVenue">Venue:</label>
+                            <input type="text" id="previewVenue" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Student Data Section -->
+                <div class="preview-section">
+                    <div class="section-header">
+                        <h4>👥 Student Data (<span id="studentCount">0</span> students)</h4>
+                        <div class="section-actions">
+                            <button id="addStudentBtn" class="btn btn-outline">➕ Add Student</button>
+                            <button id="removeSelectedBtn" class="btn btn-outline">🗑️ Remove Selected</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Student Table -->
+                    <div class="student-table-wrapper">
+                        <table id="previewStudentTable" class="preview-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllStudents"></th>
+                                    <th>Student ID</th>
+                                    <th>Student Name</th>
+                                    <th>Year Level</th>
+                                    <th>Course</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewStudentTableBody">
+                                <!-- Student rows will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Add Student Form (Hidden by default) -->
+                <div id="addStudentForm" class="preview-section" style="display: none;">
+                    <h4>➕ Add New Student</h4>
+                    <div class="add-student-grid">
+                        <div class="form-group">
+                            <label for="newStudentId">Student ID:</label>
+                            <input type="text" id="newStudentId" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentName">Student Name:</label>
+                            <input type="text" id="newStudentName" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentYear">Year Level:</label>
+                            <input type="text" id="newStudentYear" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="newStudentCourse">Course:</label>
+                            <input type="text" id="newStudentCourse" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button id="saveNewStudentBtn" class="btn btn-primary">Save Student</button>
+                        <button id="cancelNewStudentBtn" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="modal-actions">
+                    <button id="saveClassBtn" class="btn btn-primary">💾 Save Class</button>
+                    <button id="cancelPreviewBtn" class="btn btn-secondary">❌ Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <script src="static/js/common.js"></script>
     <script src="static/js/class_upload.js"></script>
 </body>

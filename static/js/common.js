@@ -18,6 +18,27 @@
 const notificationHistory = new Map();
 const NOTIFICATION_THROTTLE_TIME = 3000; // 3 seconds
 
+// Create or get notification container
+function getNotificationContainer() {
+  let container = document.getElementById('notification-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'notification-container';
+    container.style.cssText = `
+      position: fixed; 
+      top: 20px; 
+      right: 20px; 
+      z-index: 1000; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 10px;
+      pointer-events: none;
+    `;
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
 function showNotification(message, type = 'info', duration = 3000) {
   // Create a key for this specific message + type combination
   const notificationKey = `${message}_${type}`;
@@ -53,20 +74,30 @@ function showNotification(message, type = 'info', duration = 3000) {
   };
   
   notification.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 15px 20px;
-    border-radius: 8px; color: white; z-index: 1000; font-weight: bold;
+    position: relative; 
+    padding: 15px 20px;
+    border-radius: 8px; 
+    color: white; 
+    font-weight: bold;
     background-color: ${colors[type] || colors.default};
-    max-width: 400px; line-height: 1.4; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 400px; 
+    line-height: 1.4; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     border: 2px solid ${colors[type] || colors.default};
     animation: slideIn 0.3s ease-in-out;
+    pointer-events: auto;
   `;
   
-  // Add slide-in animation
+  // Add slide-in animation and slide-out animation
   const style = document.createElement('style');
   style.textContent = `
     @keyframes slideIn {
       from { transform: translateX(100%); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
     }
   `;
   if (!document.querySelector('style[data-notification-styles]')) {
@@ -74,14 +105,16 @@ function showNotification(message, type = 'info', duration = 3000) {
     document.head.appendChild(style);
   }
   
-  document.body.appendChild(notification);
+  // Get container and append notification
+  const container = getNotificationContainer();
+  container.appendChild(notification);
   
   setTimeout(() => {
-    if (document.body.contains(notification)) {
+    if (container.contains(notification)) {
       notification.style.animation = 'slideOut 0.3s ease-in-out';
       setTimeout(() => {
-        if (document.body.contains(notification)) {
-          document.body.removeChild(notification);
+        if (container.contains(notification)) {
+          container.removeChild(notification);
         }
       }, 300);
     }
@@ -107,10 +140,6 @@ function showAlert(message, type = 'info', duration = 3000) {
  * @param {number} duration - Duration in milliseconds (default: 5000)
  */
 function showMessage(message, type = 'info', duration = 5000) {
-  // Remove existing messages first
-  const existingMessages = document.querySelectorAll('.error-message, .success-message, .info-message, .warning-message, .danger-message');
-  existingMessages.forEach(msg => msg.remove());
-  
   // Map types to CSS classes and colors
   const typeMapping = {
     'success': { class: 'success-message', color: '#28a745' },
@@ -129,28 +158,31 @@ function showMessage(message, type = 'info', duration = 5000) {
   
   // Style the message
   messageDiv.style.cssText = `
-    position: fixed; top: 20px; right: 20px; padding: 15px 20px;
-    border-radius: 8px; color: white; z-index: 1000; font-weight: bold;
-    background-color: ${config.color}; max-width: 400px; line-height: 1.4;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 2px solid ${config.color};
+    position: relative; 
+    padding: 15px 20px;
+    border-radius: 8px; 
+    color: white; 
+    font-weight: bold;
+    background-color: ${config.color}; 
+    max-width: 400px; 
+    line-height: 1.4;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+    border: 2px solid ${config.color};
     animation: slideIn 0.3s ease-in-out;
+    pointer-events: auto;
   `;
   
-  // Try to insert at the top of content, fallback to body
-  const content = document.querySelector('.content') || document.body;
-  if (content === document.body) {
-    content.appendChild(messageDiv);
-  } else {
-    content.insertBefore(messageDiv, content.firstChild);
-  }
+  // Get container and append message
+  const container = getNotificationContainer();
+  container.appendChild(messageDiv);
   
   // Auto-remove after specified duration
   setTimeout(() => {
-    if (messageDiv.parentNode) {
+    if (container.contains(messageDiv)) {
       messageDiv.style.animation = 'slideOut 0.3s ease-in-out';
       setTimeout(() => {
-        if (messageDiv.parentNode) {
-          messageDiv.remove();
+        if (container.contains(messageDiv)) {
+          container.removeChild(messageDiv);
         }
       }, 300);
     }
