@@ -175,6 +175,13 @@ body {
     box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.2);
 }
 
+.form-text {
+    font-size: 12px;
+    color: #666;
+    margin-top: 5px;
+    display: block;
+}
+
 /* Buttons */
 .btn {
     padding: 12px 24px;

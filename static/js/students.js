@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add Student Button Event
     addStudentBtn.addEventListener('click', () => {
         addStudentModal.style.display = 'flex';
+        populateClassDropdownForModal();
     });
 
     // Close Modal Events
@@ -116,12 +117,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const name = document.getElementById('newStudentName').value.trim();
         const course = document.getElementById('newStudentCourse').value.trim();
         const year = document.getElementById('newStudentYear').value;
+        const classId = document.getElementById('newStudentClass').value;
     
         if (!studentId || !name || !course || !year) {
             alert('Please fill all required fields');
             return;
         }
     
+        // First, add the student
         fetch('/api/add_student', {
             method: 'POST',
             headers: {
@@ -139,14 +142,48 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.error) {
                 alert('Error: ' + data.error);
             } else {
-                alert('Student added successfully!');
-                closeAddModal();
-                loadStudents();
+                // If student was added successfully and a class was selected, enroll them
+                if (classId && classId !== '') {
+                    enrollStudentInClass(studentId, classId);
+                } else {
+                    alert('Student added successfully!');
+                    closeAddModal();
+                    loadStudents();
+                }
             }
         })
         .catch(error => {
             console.error('Error adding student:', error);
             alert('Error adding student: ' + error.message);
+        });
+    }
+
+    // Function to enroll a student in a class
+    function enrollStudentInClass(studentId, classId) {
+        fetch(`/api/optimized/classes/${classId}/enroll`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                student_ids: [studentId]
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Student added but failed to enroll in class: ' + data.error);
+            } else {
+                alert('Student added and enrolled in class successfully!');
+            }
+            closeAddModal();
+            loadStudents();
+        })
+        .catch(error => {
+            console.error('Error enrolling student in class:', error);
+            alert('Student added but failed to enroll in class: ' + error.message);
+            closeAddModal();
+            loadStudents();
         });
     }
 
@@ -192,6 +229,35 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .catch(error => {
             console.error('Error loading classes:', error);
+        });
+    }
+
+    // Populate class dropdown for Add Student modal
+    function populateClassDropdownForModal() {
+        fetch('/api/optimized/classes')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success' && data.classes) {
+                const classSelect = document.getElementById('newStudentClass');
+                
+                if (!classSelect) return;
+                
+                // Clear existing options except default
+                classSelect.innerHTML = '<option value="">No class assignment</option>';
+                
+                // Add class options
+                data.classes.forEach(classItem => {
+                    if (classItem.class_id !== undefined && classItem.class_id !== null) {
+                        const option = document.createElement('option');
+                        option.value = classItem.class_id;
+                        option.textContent = classItem.class_name || `Class ${classItem.class_id}`;
+                        classSelect.appendChild(option);
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading classes for modal:', error);
         });
     }
 
