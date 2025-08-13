@@ -548,7 +548,6 @@ def preview_class_record():
                 return jsonify({'error': f'Error reading CSV file: {str(e)}'}), 400
 
             import csv
-            from io import StringIO
             reader = csv.reader(StringIO(content))
             rows = list(reader)
             
