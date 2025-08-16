@@ -51,14 +51,15 @@ class Config:
     """Main application configuration"""
     # Handle PyInstaller bundled environment
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
+        # Running as PyInstaller bundle - use directory beside the exe
         PROJECT_ROOT = os.path.dirname(sys.executable)
+        DATABASE_DIR = os.path.join(PROJECT_ROOT, 'data')
     else:
-        # Running as script
+        # Running as script - use project directory
         PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        DATABASE_DIR = os.path.join(PROJECT_ROOT, 'database', 'db')
     
     # Ensure database directory exists
-    DATABASE_DIR = os.path.join(PROJECT_ROOT, 'database', 'db')
     os.makedirs(DATABASE_DIR, exist_ok=True)
     
     DATABASE_PATH = os.path.join(DATABASE_DIR, 'attendance.db')

@@ -236,4 +236,5 @@ test_gui.py
 database/db/attendance.db
 /database/db
 *.db
-BUILD_FIX_GUIDE.md
+database/db/classes.db
+database/db/attendance.db

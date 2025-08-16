@@ -189,6 +189,16 @@ if __name__ == '__main__':
     print("=" * 40)
     
     try:
+        # Perform user data migration if needed
+        from database.user_data_migration import migrate_user_data, get_migration_info
+        
+        # Check and perform migration
+        migrate_user_data()
+        
+        # Show current data location
+        migration_info = get_migration_info()
+        print(f"📁 User data location: {migration_info['user_data_dir']}")
+        
         init_db()
         migrate_database()
         create_optimized_classes_schema()

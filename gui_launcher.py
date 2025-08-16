@@ -18,6 +18,8 @@ import webbrowser
 import sys
 import os
 import time
+import shutil
+import json
 from datetime import datetime
 import io
 import contextlib
@@ -25,8 +27,8 @@ import contextlib
 class AttendanceSystemGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Offline Attendance System - Control Panel 1.1.2")
-        self.root.geometry("800x600")
+        self.root.title("Offline Attendance System - Control Panel 1.2.0 (Data-Safe)")
+        self.root.geometry("800x700")  # Increased height to accommodate backup section
         self.root.resizable(True, True)
         
         # Server process and monitoring
@@ -130,7 +132,7 @@ class AttendanceSystemGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(3, weight=1)
+        main_frame.rowconfigure(4, weight=1)  # Updated to row 4 for log frame
         
         # Title
         title_label = ttk.Label(main_frame, text="Offline Attendance System", 
@@ -197,14 +199,37 @@ class AttendanceSystemGUI:
                                       command=self.copy_primary_url, width=20)
         self.copy_url_btn.grid(row=2, column=0, pady=(5, 0))
         
-        # Log frame
+        # Backup Management Frame
+        backup_frame = ttk.LabelFrame(main_frame, text="Data Backup", padding="10")
+        backup_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        # Backup buttons
+        self.create_backup_btn = ttk.Button(backup_frame, text="Create Backup", 
+                                           command=self.create_backup, width=15)
+        self.create_backup_btn.grid(row=0, column=0, padx=(0, 5))
+        
+        self.restore_backup_btn = ttk.Button(backup_frame, text="Restore Backup", 
+                                            command=self.restore_backup, width=15)
+        self.restore_backup_btn.grid(row=0, column=1, padx=5)
+        
+        self.open_data_folder_btn = ttk.Button(backup_frame, text="Open Data Folder", 
+                                              command=self.open_data_folder, width=15)
+        self.open_data_folder_btn.grid(row=0, column=2, padx=(5, 0))
+        
+        # Backup status label
+        self.backup_status_label = ttk.Label(backup_frame, text="Ready to backup", 
+                                            font=("Arial", 9), foreground="gray")
+        self.backup_status_label.grid(row=1, column=0, columnspan=3, pady=(5, 0))
+        
+        # Log frame (moved down to accommodate backup frame)
         log_frame = ttk.LabelFrame(main_frame, text="Server Logs", padding="10")
-        log_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        log_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
+        main_frame.rowconfigure(4, weight=1)  # Update weight for new log frame position
         
         # Log text area
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, width=70,
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=12, width=70,
                                                  font=("Consolas", 9))
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
@@ -258,6 +283,22 @@ class AttendanceSystemGUI:
         
         try:
             self.log_message("Starting Flask server...")
+            
+            # Perform user data migration before starting server
+            try:
+                from database.user_data_migration import migrate_user_data, get_migration_info
+                migrate_user_data()
+                
+                # Log user data location
+                migration_info = get_migration_info()
+                self.log_message(f"📁 User data: {migration_info['user_data_dir']}")
+                if migration_info['exists']['attendance'] or migration_info['exists']['classes']:
+                    self.log_message("✓ Found existing databases")
+                else:
+                    self.log_message("ℹ New installation - databases will be created")
+            except Exception as e:
+                self.log_message(f"Migration warning: {str(e)}", "WARNING")
+            
             self.stop_event.clear()
             
             # Re-detect network interfaces before starting
@@ -417,12 +458,276 @@ class AttendanceSystemGUI:
                 self.root.destroy()
         else:
             self.root.destroy()
+    
+    def create_backup(self):
+        """Create a manual backup of databases"""
+        try:
+            self.backup_status_label.config(text="Creating backup...", foreground="blue")
+            self.root.update()
+            
+            from database.user_data_migration import UserDataMigration
+            migration = UserDataMigration()
+            
+            # Check if databases exist
+            from config.config import Config
+            if not os.path.exists(Config.DATABASE_PATH) and not os.path.exists(Config.CLASSES_DATABASE_PATH):
+                self.backup_status_label.config(text="No databases found to backup", foreground="orange")
+                self.log_message("No databases found to backup", "WARNING")
+                return
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"manual_backup_{timestamp}"
+            backup_path = os.path.join(migration.backup_dir, backup_name)
+            
+            os.makedirs(backup_path, exist_ok=True)
+            
+            backed_up_files = []
+            total_size = 0
+            
+            # Backup attendance database
+            if os.path.exists(Config.DATABASE_PATH):
+                filename = os.path.basename(Config.DATABASE_PATH)
+                backup_file = os.path.join(backup_path, filename)
+                shutil.copy2(Config.DATABASE_PATH, backup_file)
+                backed_up_files.append(filename)
+                total_size += os.path.getsize(backup_file)
+            
+            # Backup classes database
+            if os.path.exists(Config.CLASSES_DATABASE_PATH):
+                filename = os.path.basename(Config.CLASSES_DATABASE_PATH)
+                backup_file = os.path.join(backup_path, filename)
+                shutil.copy2(Config.CLASSES_DATABASE_PATH, backup_file)
+                backed_up_files.append(filename)
+                total_size += os.path.getsize(backup_file)
+            
+            if backed_up_files:
+                # Create backup info
+                backup_info = {
+                    "timestamp": timestamp,
+                    "reason": "manual_gui_backup",
+                    "source_dir": Config.DATABASE_DIR,
+                    "backed_up_files": backed_up_files,
+                    "total_size": total_size,
+                    "backup_size_mb": round(total_size / (1024 * 1024), 2)
+                }
+                
+                info_file = os.path.join(backup_path, "backup_info.json")
+                with open(info_file, 'w') as f:
+                    json.dump(backup_info, f, indent=2)
+                
+                self.backup_status_label.config(text=f"✓ Backup created: {backup_name}", foreground="green")
+                self.log_message(f"✓ Backup created successfully: {backup_name}")
+                self.log_message(f"📁 Location: {backup_path}")
+                self.log_message(f"📊 Size: {backup_info['backup_size_mb']} MB")
+            else:
+                self.backup_status_label.config(text="No files backed up", foreground="orange")
+                self.log_message("No database files found to backup", "WARNING")
+                
+        except Exception as e:
+            self.backup_status_label.config(text="Backup failed", foreground="red")
+            self.log_message(f"❌ Backup failed: {str(e)}", "ERROR")
+    
+    def restore_backup(self):
+        """Show restore backup dialog"""
+        try:
+            from database.user_data_migration import UserDataMigration
+            migration = UserDataMigration()
+            
+            if not os.path.exists(migration.backup_dir):
+                messagebox.showinfo("No Backups", "No backups directory found.")
+                return
+            
+            # Get list of backups
+            backup_dirs = []
+            for item in os.listdir(migration.backup_dir):
+                backup_path = os.path.join(migration.backup_dir, item)
+                if os.path.isdir(backup_path):
+                    info_file = os.path.join(backup_path, "backup_info.json")
+                    if os.path.exists(info_file):
+                        try:
+                            with open(info_file, 'r') as f:
+                                backup_info = json.load(f)
+                            backup_info['path'] = backup_path
+                            backup_info['name'] = item
+                            backup_dirs.append(backup_info)
+                        except:
+                            pass
+            
+            if not backup_dirs:
+                messagebox.showinfo("No Backups", "No valid backups found.")
+                return
+            
+            # Sort by timestamp (newest first)
+            backup_dirs.sort(key=lambda x: x['timestamp'], reverse=True)
+            
+            # Create selection dialog
+            self.show_backup_selection_dialog(backup_dirs)
+            
+        except Exception as e:
+            self.log_message(f"❌ Error accessing backups: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Failed to access backups: {str(e)}")
+    
+    def show_backup_selection_dialog(self, backup_dirs):
+        """Show dialog to select and restore backup"""
+        restore_window = tk.Toplevel(self.root)
+        restore_window.title("Restore from Backup")
+        restore_window.geometry("600x400")
+        restore_window.resizable(True, True)
+        
+        # Make it modal
+        restore_window.transient(self.root)
+        restore_window.grab_set()
+        
+        # Main frame
+        main_frame = ttk.Frame(restore_window, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Instructions
+        ttk.Label(main_frame, text="Select a backup to restore:", 
+                 font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        
+        # Warning
+        warning_label = ttk.Label(main_frame, 
+                                 text="⚠️ Warning: This will overwrite your current databases!", 
+                                 foreground="red", font=("Arial", 10))
+        warning_label.pack(pady=(0, 10))
+        
+        # Listbox frame
+        list_frame = ttk.Frame(main_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Listbox with scrollbar
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Consolas", 9))
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+        
+        # Populate listbox
+        for backup in backup_dirs:
+            timestamp = backup['timestamp']
+            reason = backup.get('reason', 'unknown')
+            size_mb = backup.get('backup_size_mb', 0)
+            files = backup.get('backed_up_files', [])
+            
+            # Format timestamp for display
+            try:
+                dt = datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+                date_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                date_str = timestamp
+            
+            display_text = f"{date_str} | {reason} | {size_mb}MB | {', '.join(files)}"
+            listbox.insert(tk.END, display_text)
+        
+        # Button frame
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+        
+        def restore_selected():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a backup to restore.")
+                return
+            
+            selected_backup = backup_dirs[selection[0]]
+            
+            # Confirm restore
+            result = messagebox.askyesno("Confirm Restore", 
+                                       f"Are you sure you want to restore from:\n\n"
+                                       f"Date: {selected_backup['timestamp']}\n"
+                                       f"Type: {selected_backup.get('reason', 'unknown')}\n"
+                                       f"Files: {', '.join(selected_backup.get('backed_up_files', []))}\n\n"
+                                       f"This will overwrite your current databases!")
+            
+            if result:
+                self.perform_restore(selected_backup, restore_window)
+        
+        def cancel_restore():
+            restore_window.destroy()
+        
+        ttk.Button(button_frame, text="Restore Selected", command=restore_selected).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="Cancel", command=cancel_restore).pack(side=tk.LEFT)
+    
+    def perform_restore(self, selected_backup, restore_window):
+        """Perform the actual restore operation"""
+        try:
+            self.backup_status_label.config(text="Restoring backup...", foreground="blue")
+            self.root.update()
+            
+            # First create a backup of current state
+            self.log_message("Creating backup of current state before restore...")
+            self.create_backup()
+            
+            # Restore files
+            from config.config import Config
+            backup_path = selected_backup['path']
+            restored_files = []
+            
+            for filename in selected_backup.get('backed_up_files', []):
+                source_file = os.path.join(backup_path, filename)
+                
+                if filename == 'attendance.db':
+                    dest_file = Config.DATABASE_PATH
+                elif filename == 'classes.db':
+                    dest_file = Config.CLASSES_DATABASE_PATH
+                else:
+                    continue
+                
+                if os.path.exists(source_file):
+                    shutil.copy2(source_file, dest_file)
+                    restored_files.append(filename)
+                    self.log_message(f"✓ Restored: {filename}")
+            
+            if restored_files:
+                self.backup_status_label.config(text="✓ Restore completed successfully", foreground="green")
+                self.log_message(f"✅ Restore completed! Files: {', '.join(restored_files)}")
+                self.log_message("🔄 Please restart the server to use restored data")
+                
+                # Show success message
+                messagebox.showinfo("Restore Complete", 
+                                  f"Successfully restored {len(restored_files)} database file(s).\n\n"
+                                  f"Please restart the server to use the restored data.")
+            else:
+                self.backup_status_label.config(text="No files were restored", foreground="orange")
+                self.log_message("❌ No files were restored")
+                messagebox.showwarning("Restore Warning", "No files were restored.")
+            
+            restore_window.destroy()
+            
+        except Exception as e:
+            self.backup_status_label.config(text="Restore failed", foreground="red")
+            self.log_message(f"❌ Restore failed: {str(e)}", "ERROR")
+            messagebox.showerror("Restore Error", f"Failed to restore backup:\n{str(e)}")
+    
+    def open_data_folder(self):
+        """Open the data folder in file explorer"""
+        try:
+            from config.config import Config
+            data_path = Config.DATABASE_DIR
+            
+            if os.path.exists(data_path):
+                import subprocess
+                subprocess.run(['explorer', data_path], check=True)
+                self.log_message(f"📁 Opened data folder: {data_path}")
+            else:
+                # Create the folder first
+                os.makedirs(data_path, exist_ok=True)
+                subprocess.run(['explorer', data_path], check=True)
+                self.log_message(f"📁 Created and opened data folder: {data_path}")
+                
+        except Exception as e:
+            self.log_message(f"❌ Failed to open data folder: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Failed to open data folder:\n{str(e)}")
+
 
 def main():
     """Main entry point"""
     root = tk.Tk()
     app = AttendanceSystemGUI(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
