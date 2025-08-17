@@ -43,7 +43,7 @@ Used by: Direct execution for running the attendance system
 Dependencies: Flask, database modules, network utilities, API blueprints
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import current_app as app
 from database import init_db, migrate_database
 from utils.network import get_all_network_interfaces
@@ -95,13 +95,19 @@ def sessions():
 def sessions_classes():
     return render_template('sessions_classes.html')
 
+@app.route('/analytics-reports')
+def analytics_reports():
+    return render_template('analytics_reports.html')
+
 @app.route('/reports')
 def reports():
-    return render_template('reports.html')
+    # Redirect to combined page
+    return redirect(url_for('analytics_reports'))
 
 @app.route('/analytics')
 def analytics():
-    return render_template('analytics.html')
+    # Redirect to combined page
+    return redirect(url_for('analytics_reports'))
 
 @app.route('/class_upload')
 def class_upload():
